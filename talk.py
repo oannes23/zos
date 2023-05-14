@@ -37,8 +37,8 @@ async def craft_message(memory, channel):
             "Keep in mind your PERSPECTIVE and all your CONTEXT as background factors " \
             "influencing what you say but primarily respond to the MESSAGES. " \
             "It is very important to stay in character as your PERSPECTIVE. " \
-            "Your response length should be roughly around the length of the average " \
-            "message in your MESSAGES." \
+            "Your response length should be longer the longer MESSAGES is, but " \
+            "not longer than a few sentences as would be appropriate in a chat room. " \
             "When I tell you SYNTHESIZE, generate the chat message the character you " \
             "are playing would respond with, keeping in mind everything else I've said. " \
             "Only return plain text, no quotes or Zos: prepended to your message."])
@@ -46,8 +46,11 @@ async def craft_message(memory, channel):
     personal_context = memory.read_memory("self")
     context = bot_utils.add_context_instruction(context, [f"PERSPECTIVE: {personal_context}"])
 
+    channel_subjects = bot_utils.get_channel_description(f"{channel}")
+    context = bot_utils.add_context_instruction(context, [f"EXPERTISE CONTEXT: You are a professional level expert in {channel_subjects}"])
+
     channel_context = memory.read_memory(f"channel-{channel}")
-    context = bot_utils.add_context_instruction(context, [f"CHANNEL CONTEXT: {channel_context}"])
+    context = bot_utils.add_context_instruction(context, [f"RECENT DISCUSSION CONTEXT: {channel_context}"])
 
     short_term_memory = memory.get_short_term_memory()
     recent_messages = bot_utils.extract_information(f"channel-{channel}", short_term_memory)
@@ -87,20 +90,26 @@ async def process_messages(bot, memory):
     # Process each channel's messages
     for channel_name, messages in channel_messages.items():
         # Get the channel probability, default to 1 if not found
-        channel_probability = channel_probabilities.get(channel_name, 1)
+        channel_probability = bot_utils.get_channel_chattiness(channel_name)
 
-        # Triple the channel probability if "Zos" is mentioned in any of the messages
+        # Double the channel probability if "Zos" is mentioned in any of the messages
         for msg in messages:
-            if 'Zos' in msg.content.lower():
-                channel_probability *= 3
-                break  # Once we've found one occurrence, we can stop checking the rest
+            # Check if the bot was mentioned in the message
+            # Direct pings almost always respond
+            if bot.user.mentioned_in(msg):
+                channel_probability += 100
+
+            # Just mentioning the name of the bot makes it twice as likely to respond
+            if 'zos' in msg.content.lower():
+                channel_probability *= 2
 
         # Calculate the probability of sending the message based on chattiness and channel_probability
         dice_roll = random.randint(1, 1000)
         talk_chance = chattiness_level * channel_probability
+        print(f"{channel_name} Talk Target: {talk_chance} Roll: {dice_roll}")
+
         if dice_roll > talk_chance:
             print(f"No message sent to channel '{channel_name}':")
-            print(f" Talk Target: {talk_chance} Roll: {dice_roll}")
             continue
 
         # Get the channel object based on the channel name
@@ -111,11 +120,9 @@ async def process_messages(bot, memory):
             print(f"Channel '{channel_name}' not found.")
             continue
 
-        # Process the messages for this channel
-        for msg in messages:
-            # Prepare the message
-            message_content = await craft_message(memory, channel)
+        # Prepare the message
+        message_content = await craft_message(memory, channel)
 
-            # Send the message to the channel
-            await channel.send(message_content)
+        # Send the message to the channel
+        await channel.send(message_content)
 

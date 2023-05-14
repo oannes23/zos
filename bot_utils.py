@@ -37,6 +37,19 @@ def extract_information(subject, messages):
 def format_timestamp(timestamp):
     return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
+def get_channel_chattiness(channel_name):
+    channel_list = load_yaml('channels.yml')
+    channel_info = channel_list.get(channel_name, {})
+    print(f"Channel name: {channel_name} Channel Info: {channel_info}")
+    return channel_info.get('chattiness', 1)
+
+def get_channel_description(channel_name):
+    channel_list = load_yaml('channels.yml')
+    channel_info = channel_list.get(channel_name, {})
+    print(f"Channel name: {channel_name} Channel Info: {channel_info}")
+    return channel_info.get('description', '')
+
+
 def get_unique_users(messages):
     unique_users = set()
     
@@ -67,6 +80,7 @@ async def gpt_call(context):
     # Print the generated message, token usage, and timestamp
     print(f"------------------------------------------------------")
     print(f"Timestamp: {timestamp}   Token Usage: {token_usage}")
+    print(f"Context: {context}")
     print(f"Generated Message: {generated_message}")
     print(f"------------------------------------------------------\n")
 

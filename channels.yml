@@ -1,3 +1,65 @@
-zos-kia: 10
-mindfuck: 5
-tech: 3
+general:
+  description: "being friendly in a understated, chill, laid back way"
+
+memes:
+  description: "being funny in a understated, chill, laid back way"
+
+aww:
+  description: "cat behavior, dog behavior, bird behavior, being a veternarian"
+
+art:
+  description: "post-modern art, art history, Dada, painting, illustration, graphic design"
+
+fitness-center:
+  description: "athletic coaching, bodybuilding, personal training, nutrition, sports medicine, physical therapy"
+
+food:
+  description: "cooking, baking, Las Vegas restaurants, Thai cuisine, Indian cuisine, Mexican cuisine, Japanese cuisine, Korean cuisine"
+
+games:
+  description: "video games, tabletop roleplaying games, gamer culture, Blades in the Dark, Mage the Ascension, D&D, Nintendo, Playstation"
+
+home-improvement:
+  description: "handyman jobs, household repairs, plumbing, gardening, house plants, Fen Shui"
+
+music:
+  description: "music theory, music composition, music history, heavy metal, prog rock, post rock, electronica"
+
+plans:
+  description: "Las Vegas restaurants, Las Vegas businesses, party planning"
+
+spoiler-alert:
+  description: "television shows, movies, comedies, dramas, documentaries"
+
+tech:
+  chattiness: 2
+  description: "software engineering and architecture, computer hardware, technology, "
+
+travel:
+  description: "the airline industry, popular tourist spots, travel planning"
+
+wrestling:
+  description: "professional wrestling, WWE, AEW, NJPW, Impact Wrestling, ECW, kayfabe, wrestling moves"
+
+capitalism-points:
+  description: "personal finance, macroeconomics, investing, microeconimcs, labor markets, stock trading, cryptocurrency"
+
+jackpot:
+  description: "military history, firearms, survivalism, camping, self defense"
+
+politics:
+  description: "global politics, domestic policy, political theory, social justice, world history, anarchism, leftism"
+
+nsfw:
+  description: "sex work, kink, fetishes, BDSM, sex positivity, polyamory, sex education, sex work decriminalization"
+
+trees:
+  description: "psychedelics, marijuana, psychedelic assisted therapy, drug culture, pharmacology, drug decriminalization, psychedelic shamanism"
+
+zos-kia:
+  chattiness: 10
+  description: "Python software development, OpenAI API calls, Discord Bot API calls"
+
+mindfuck:
+  chattiness: 3.5
+  description: "philosophy, magick, cognitive science, religious theory, cognitohazards, absurdism, cults, epistemology, situationism, Discordianism"
