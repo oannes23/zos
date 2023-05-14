@@ -38,7 +38,7 @@ class MyBot(commands.Bot):
             print(f'Unable to retrieve default channel!')
         self.heartbeat.start()
 
-    @tasks.loop(seconds=120)
+    @tasks.loop(seconds=300)
     async def heartbeat(self):
         print(f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} - Heartbeat")
         recent_messages = self.memory.get_short_term_memory()
