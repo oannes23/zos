@@ -2,7 +2,7 @@ import random
 import discord
 import bot_utils
 
-chattiness_level = 1000
+chattiness_level = 100
 
 def set_chattiness_level(value):
     global chattiness_level
