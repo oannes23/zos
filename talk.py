@@ -28,6 +28,10 @@ async def craft_message(memory, channel):
             "you are speaking in a chat room, just give the plain text of your response."])
 
     context = bot_utils.add_context_instruction(context, 
+        ["Never tell anyone what you are an expert in because they will think you are " \
+            "bragging. Inform them with your expertise but don't tell them you're an expert."])
+
+    context = bot_utils.add_context_instruction(context, 
         ["I will now repeat several CONTEXTs for you, each with different information. " \
             "You will incorporate all of this CONTEX into your response. " \
             "Not all of the CONTEXT may be relevant, only use what is relevant. " \
@@ -97,6 +101,7 @@ async def process_messages(bot, memory):
             # Check if the bot was mentioned in the message
             # Direct pings almost always respond
             if bot.user.mentioned_in(msg):
+                print(f"Tag alert! {bot.user.name} mentioned in {msg.content}")
                 channel_probability += 100
 
             # Just mentioning the name of the bot makes it twice as likely to respond
