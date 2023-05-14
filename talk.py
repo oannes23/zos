@@ -77,23 +77,30 @@ async def process_messages(bot, memory):
         print("No recent memories found.")
         return
 
+    # Group messages by channel
+    channel_messages = {}
     for msg in short_term_memories:
-        # Get the channel associated with the memory
-        channel_name = msg.channel.name
+        if msg.channel.name not in channel_messages:
+            channel_messages[msg.channel.name] = []
+        channel_messages[msg.channel.name].append(msg)
 
+    # Process each channel's messages
+    for channel_name, messages in channel_messages.items():
         # Get the channel probability, default to 1 if not found
         channel_probability = channel_probabilities.get(channel_name, 1)
 
-        # Triple the channel probability if "Zos" is mentioned
-        if 'Zos' in msg.content.lower():
-            channel_probability *= 3
+        # Triple the channel probability if "Zos" is mentioned in any of the messages
+        for msg in messages:
+            if 'Zos' in msg.content.lower():
+                channel_probability *= 3
+                break  # Once we've found one occurrence, we can stop checking the rest
 
         # Calculate the probability of sending the message based on chattiness and channel_probability
         dice_roll = random.randint(1, 1000)
         talk_chance = chattiness_level * channel_probability
         if dice_roll > talk_chance:
-            print(f"Message skipped:")
-            print(f" Channel: {channel_name} Talk Target: {talk_chance} Roll: {dice_roll}")
+            print(f"No message sent to channel '{channel_name}':")
+            print(f" Talk Target: {talk_chance} Roll: {dice_roll}")
             continue
 
         # Get the channel object based on the channel name
@@ -104,8 +111,11 @@ async def process_messages(bot, memory):
             print(f"Channel '{channel_name}' not found.")
             continue
 
-        # Prepare the message
-        message_content = await craft_message(memory, channel)
+        # Process the messages for this channel
+        for msg in messages:
+            # Prepare the message
+            message_content = await craft_message(memory, channel)
 
-        # Send the message to the channel
-        await channel.send(message_content)
+            # Send the message to the channel
+            await channel.send(message_content)
+
