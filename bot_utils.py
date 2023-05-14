@@ -17,7 +17,7 @@ def add_context_instruction(context, instructions, include_assistant=True):
             context.append({"role": "assistant", "content": "UNDERSTOOD"})
     return context
 
-def extract_information(self, subject, messages):
+def extract_information(subject, messages):
     prefix, value = subject.split("-", 1)
     relevant_messages = []
 
