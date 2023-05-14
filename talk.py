@@ -78,7 +78,7 @@ async def process_messages(bot, memory):
         return
 
     # Calculate the probability of sending the message based on chattiness
-    if random.randint(1, 1000) > chattiness:
+    if random.randint(1, 1000) > chattiness_level:
         print("Message not sent based on chattiness probability.")
         return
 

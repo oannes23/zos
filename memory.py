@@ -1,5 +1,5 @@
 import os
-from bot_utils import format_timestamp, gpt_call
+import bot_utils
 from itertools import combinations
 from collections import defaultdict
 
@@ -20,7 +20,7 @@ class Memory:
         self.memory_subjects = self.categorize_memories(self.short_term_memory)
 
         for message in self.short_term_memory:
-            formatted_timestamp = format_timestamp(message.created_at)
+            formatted_timestamp = bot_utils.format_timestamp(message.created_at)
             print(f"{formatted_timestamp} #{message.channel.name} @{message.author.name}: {message.content}")
             this_message = f"#{message.channel.name} @{message.author.name}: {message.content}\n"
             self.recent_messages += this_message
