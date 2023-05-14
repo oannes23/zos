@@ -89,8 +89,11 @@ async def process_messages(bot, memory):
             channel_probability *= 3
 
         # Calculate the probability of sending the message based on chattiness and channel_probability
-        if random.randint(1, 1000) > chattiness_level * channel_probability:
-            print(f"Message not sent to channel '{channel_name}' based on chattiness probability of {channel_probability}.")
+        dice_roll = random.randint(1, 1000)
+        talk_chance = chattiness_level * channel_probability
+        if dice_roll > talk_chance:
+            print(f"Message skipped:")
+            print(f" Channel: {channel_name} Talk Target: {talk_chance} Roll: {dice_roll}")
             continue
 
         # Get the channel object based on the channel name
