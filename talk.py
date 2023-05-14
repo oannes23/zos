@@ -2,7 +2,7 @@ import random
 import discord
 import bot_utils
 
-chattiness_level = 100
+chattiness_level = 50
 
 def set_chattiness_level(value):
     global chattiness_level
@@ -77,15 +77,15 @@ async def process_messages(bot, memory):
         print("No recent memories found.")
         return
 
-    for memory in short_term_memories:
+    for msg in short_term_memories:
         # Get the channel associated with the memory
-        channel_name = memory.channel.name
+        channel_name = msg.channel.name
 
         # Get the channel probability, default to 1 if not found
         channel_probability = channel_probabilities.get(channel_name, 1)
 
         # Triple the channel probability if "Zos" is mentioned
-        if 'Zos' in memory.content.lower():
+        if 'Zos' in msg.content.lower():
             channel_probability *= 3
 
         # Calculate the probability of sending the message based on chattiness and channel_probability
@@ -106,5 +106,3 @@ async def process_messages(bot, memory):
 
         # Send the message to the channel
         await channel.send(message_content)
-
-

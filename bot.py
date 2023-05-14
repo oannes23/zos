@@ -91,7 +91,7 @@ async def set_chattiness(ctx, value: int=None):
         await ctx.send("The chattiness value must be between 0 and 1000.")
         return
 
-    talk.set_chattiness(value)
+    talk.set_chattiness_level(value)
     await ctx.send(f"Chattiness set to {value}")
 
 bot.run(discord_token)
