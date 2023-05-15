@@ -61,17 +61,17 @@ class Memory:
 
         for message in messages:
             categories.add(f"channel-{message.channel.name}")
-            categories.add(f"person-{message.author.name}")
+            # categories.add(f"person-{message.author.name}")
 
             # Add the author to the set of users for the channel
-            channel_users[message.channel.name].add(message.author.name)
+            # channel_users[message.channel.name].add(message.author.name)
 
         # Add interactions for each pair of users in each channel
-        categories.update(
-            f"interaction-{'-'.join(sorted([user1, user2]))}"
-            for users in channel_users.values()
-            for user1, user2 in combinations(users, 2)
-        )
+        # categories.update(
+        #    f"interaction-{'-'.join(sorted([user1, user2]))}"
+        #    for users in channel_users.values()
+        #    for user1, user2 in combinations(users, 2)
+        # )
 
 
         return list(categories)

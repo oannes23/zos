@@ -60,9 +60,9 @@ async def craft_message(memory, channel):
     recent_messages = bot_utils.extract_information(f"channel-{channel}", short_term_memory)
     context = bot_utils.add_context_instruction(context, [f"MESSAGES: {recent_messages}"])
 
-    for each_user in bot_utils.get_unique_users(short_term_memory):
-        person_context = memory.read_memory(f"person-{each_user}")
-        context = bot_utils.add_context_instruction(context, [f"{each_user.capitalize()} CONTEXT: {person_context}"])
+    # for each_user in bot_utils.get_unique_users(short_term_memory):
+    #    person_context = memory.read_memory(f"person-{each_user}")
+    #    context = bot_utils.add_context_instruction(context, [f"{each_user.capitalize()} CONTEXT: {person_context}"])
 
     context = bot_utils.add_context_instruction(context, ["SYNTHESIZE"])
 
