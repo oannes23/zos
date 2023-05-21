@@ -44,7 +44,7 @@ class MyBot(commands.Bot):
         recent_messages = self.memory.get_short_term_memory()
         print(f"Recent messages: {recent_messages}")
         if recent_messages and self.default_channel:
-            asyncio.create_task(self.memory.process_messages())
+            asyncio.create_task(self.memory.process_messages(self))
             asyncio.create_task(talk.process_messages(self, self.memory))
 
     async def on_message(self, message):

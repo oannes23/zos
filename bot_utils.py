@@ -1,5 +1,6 @@
 import openai
 import asyncio
+import discord
 import concurrent.futures
 import time
 import yaml
@@ -17,25 +18,61 @@ def add_context_instruction(context, instructions, include_assistant=True):
             context.append({"role": "assistant", "content": "UNDERSTOOD"})
     return context
 
-def extract_information(subject, messages):
+async def convert_names_to_ids(bot, guild_id, message):
+    bot_buddies = await get_bot_buddies(bot, guild_id)
+
+    for member in bot_buddies:
+        if member.name in message:
+            print("convert_names_to_id:")
+            print(f"   MESSAGE BEFORE: {message}")
+            message = message.replace(member.name, f"<@{member.id}>")
+            print(f"   MESSAGE AFTER: {message}")
+    return message
+
+
+async def convert_ids_to_names(bot, guild_id, message):
+    bot_buddies = await get_bot_buddies(bot, guild_id)
+
+    for member in bot_buddies:
+        if str(member.id) in message:
+            print("convert_ids_to_names:")
+            print(f"   MESSAGE BEFORE: {message}")
+            message = message.replace(f"<@{member.id}>", member.name)
+            print(f"   MESSAGE AFTER: {message}")
+    return message
+
+
+async def extract_information(bot, subject, messages):
     prefix, value = subject.split("-", 1)
     relevant_messages = []
+    guild_id = None
 
-    if prefix == 'interaction':
-        person1_name, person2_name = value.split("-")
-        for message in messages:
-            if message.author.name in [person1_name, person2_name]:
-                relevant_messages.append(f"@{message.author.name}: {message.content}")
+    for message in messages:
+        # Extract the guild ID from the message
+        if guild_id is None:
+            guild_id = message.guild.id
 
-    else:
-        for message in messages:
-            if getattr(message.author if prefix == 'person' else message.channel, 'name') == value:
-                relevant_messages.append(f"@{message.author.name}: {message.content}")
+        # Get the message content and convert IDs to names
+        content = await convert_ids_to_names(bot, guild_id, message.content)
+
+        # Add the converted message content to relevant_messages
+        if getattr(message.author if prefix == 'person' else message.channel, 'name') == value:
+            relevant_messages.append(f"@{message.author.name}: {content}")
 
     return "\n".join(relevant_messages)
 
+
 def format_timestamp(timestamp):
     return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+async def get_bot_buddies(bot, guild_id):
+    guild = bot.get_guild(guild_id)
+    bot_buddy_role = discord.utils.get(guild.roles, name="Bot Buddy")
+
+    if bot_buddy_role:
+        return bot_buddy_role.members
+
+    return []
 
 def get_channel_chattiness(channel_name):
     channel_list = load_yaml('channels.yml')
@@ -92,3 +129,12 @@ def load_yaml(file_path):
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             print(exc)
+
+def sanitize_message(text):
+    if text.startswith("Zos: "):
+        return text[5:]
+    if text.startswith("<@1106699215607971972>: "):
+        return text[24:]
+    text = text.replace("@@", "@")
+    text = text.replace("@<@", "<@")
+    return text

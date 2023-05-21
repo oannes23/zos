@@ -6,7 +6,6 @@ from collections import defaultdict
 class Memory:
     def __init__(self):
         self.short_term_memory = []
-        self.recent_messages = "";
         self.memories_dir = 'memories'
 
     def add_message(self, message):
@@ -15,20 +14,18 @@ class Memory:
     def get_short_term_memory(self):
         return self.short_term_memory
 
-    async def process_messages(self):
-        self.recent_messages = ""
+    async def process_messages(self, bot):
         self.memory_subjects = self.categorize_memories(self.short_term_memory)
 
         for message in self.short_term_memory:
             formatted_timestamp = bot_utils.format_timestamp(message.created_at)
             print(f"{formatted_timestamp} #{message.channel.name} @{message.author.name}: {message.content}")
             this_message = f"#{message.channel.name} @{message.author.name}: {message.content}\n"
-            self.recent_messages += this_message
 
         for subject in self.memory_subjects:
             print(f"Processing subject: {subject}")
             perspective = self.set_perspective(subject)
-            information = bot_utils.extract_information(subject, self.short_term_memory)
+            information = await bot_utils.extract_information(bot, subject, self.short_term_memory)
             await self.process_memory(subject, perspective, information)
 
         self.short_term_memory.clear()
@@ -47,11 +44,6 @@ class Memory:
             "Instead, first write a one sentence summary of the speaker's name (starts with an @), " \
             "and infer their personality, and social and mental traits. Then add a biographical section after " \
             "that summarizes and incorporates anything you have learned about them that they said in their messages."
-        elif subject.startswith("interaction-"):
-            perspective = "Pretend you are an empathic, insightful person paying close attention to the " \
-            "interaction between these two people. Keep in mind their word choice, vocabulary, verbal exchanges, " \
-            "and the subject of their communication. Summarize what a neutral outside observer might think their " \
-            "interpersonal relationship is like."
 
         return perspective
 

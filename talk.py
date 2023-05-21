@@ -9,7 +9,7 @@ def set_chattiness_level(value):
     chattiness_level = value
     print(f"Chattiness set to: {chattiness}")
 
-async def craft_message(memory, channel):
+async def craft_message(bot, memory, channel):
     context = []
 
     context = bot_utils.add_context_instruction(context, 
@@ -45,24 +45,20 @@ async def craft_message(memory, channel):
             "not longer than a few sentences as would be appropriate in a chat room. " \
             "When I tell you SYNTHESIZE, generate the chat message the character you " \
             "are playing would respond with, keeping in mind everything else I've said. " \
-            "Only return plain text, no quotes or Zos: prepended to your message."])
+            "Begin your message with Zos: to show it is you talking."])
 
     personal_context = memory.read_memory("self")
     context = bot_utils.add_context_instruction(context, [f"PERSPECTIVE: {personal_context}"])
 
     channel_subjects = bot_utils.get_channel_description(f"{channel}")
-    context = bot_utils.add_context_instruction(context, [f"EXPERTISE CONTEXT: You are a professional level expert in {channel_subjects}"])
+    context = bot_utils.add_context_instruction(context, [f"EXPERTISE CONTEXT: You are a professional level expert in {channel_subjects}. Assume your audience already knows this, do you don't need to repeat it to them."])
 
     channel_context = memory.read_memory(f"channel-{channel}")
     context = bot_utils.add_context_instruction(context, [f"RECENT DISCUSSION CONTEXT: {channel_context}"])
 
     short_term_memory = memory.get_short_term_memory()
-    recent_messages = bot_utils.extract_information(f"channel-{channel}", short_term_memory)
+    recent_messages = await bot_utils.extract_information(bot, f"channel-{channel}", short_term_memory)
     context = bot_utils.add_context_instruction(context, [f"MESSAGES: {recent_messages}"])
-
-    # for each_user in bot_utils.get_unique_users(short_term_memory):
-    #    person_context = memory.read_memory(f"person-{each_user}")
-    #    context = bot_utils.add_context_instruction(context, [f"{each_user.capitalize()} CONTEXT: {person_context}"])
 
     context = bot_utils.add_context_instruction(context, ["SYNTHESIZE"])
 
@@ -84,6 +80,9 @@ async def process_messages(bot, memory):
         print("No recent memories found.")
         return
 
+    # Set Guild ID
+    guild_id = short_term_memories[0].guild.id
+
     # Group messages by channel
     channel_messages = {}
     for msg in short_term_memories:
@@ -100,7 +99,7 @@ async def process_messages(bot, memory):
         for msg in messages:
             # Check if the bot was mentioned in the message
             # Direct pings almost always respond
-            if bot.user.mentioned_in(msg):
+            if bot.user.mentioned_in(msg) or '1106699215607971972' in msg.content:
                 print(f"Tag alert! {bot.user.name} mentioned in {msg.content}")
                 channel_probability += 100
 
@@ -126,7 +125,9 @@ async def process_messages(bot, memory):
             continue
 
         # Prepare the message
-        message_content = await craft_message(memory, channel)
+        message_content = await craft_message(bot, memory, channel)
+        message_content = bot_utils.sanitize_message(message_content)
+        message_content = await bot_utils.convert_names_to_ids(bot, guild_id, message_content)
 
         # Send the message to the channel
         await channel.send(message_content)
