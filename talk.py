@@ -24,12 +24,12 @@ async def craft_message(bot, memory, channel):
             "reference between a language model or you will ruin the player's experience."])
 
     context = bot_utils.add_context_instruction(context, 
-        ["Do not enclose your responses in quotes, or put your name at the beginning like " \
-            "you are speaking in a chat room, just give the plain text of your response."])
-
-    context = bot_utils.add_context_instruction(context, 
         ["Never tell anyone what you are an expert in because they will think you are " \
             "bragging. Inform them with your expertise but don't tell them you're an expert."])
+
+    context = bot_utils.add_context_instruction(context, 
+        ["Do not just repeat or rephrase what someone said in MESSAGES, all of your responses " \
+            "should be original and interesting relevant things."])
 
     context = bot_utils.add_context_instruction(context, 
         ["I will now repeat several CONTEXTs for you, each with different information. " \
@@ -128,6 +128,7 @@ async def process_messages(bot, memory):
         message_content = await craft_message(bot, memory, channel)
         message_content = bot_utils.sanitize_message(message_content)
         message_content = await bot_utils.convert_names_to_ids(bot, guild_id, message_content)
+        message_content = bot_utils.sanitize_message(message_content)
 
         # Send the message to the channel
         await channel.send(message_content)

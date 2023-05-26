@@ -18,6 +18,7 @@ def add_context_instruction(context, instructions, include_assistant=True):
             context.append({"role": "assistant", "content": "UNDERSTOOD"})
     return context
 
+
 async def convert_names_to_ids(bot, guild_id, message):
     bot_buddies = await get_bot_buddies(bot, guild_id)
 
@@ -55,15 +56,21 @@ async def extract_information(bot, subject, messages):
         # Get the message content and convert IDs to names
         content = await convert_ids_to_names(bot, guild_id, message.content)
 
-        # Add the converted message content to relevant_messages
-        if getattr(message.author if prefix == 'person' else message.channel, 'name') == value:
+        # If the prefix is 'channel', we check if the channel name matches the value
+        if prefix == 'channel' and message.channel.name == value:
             relevant_messages.append(f"@{message.author.name}: {content}")
+
+        # If the prefix is 'personality' or 'biography', we check if the author's name matches the value
+        elif prefix in ['personality', 'biography'] and message.author.name == value:
+            relevant_messages.append(f"@{message.author.name}: {content}")
+
 
     return "\n".join(relevant_messages)
 
 
 def format_timestamp(timestamp):
     return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
 
 async def get_bot_buddies(bot, guild_id):
     guild = bot.get_guild(guild_id)
@@ -74,11 +81,13 @@ async def get_bot_buddies(bot, guild_id):
 
     return []
 
+
 def get_channel_chattiness(channel_name):
     channel_list = load_yaml('channels.yml')
     channel_info = channel_list.get(channel_name, {})
     print(f"Channel name: {channel_name} Channel Info: {channel_info}")
     return channel_info.get('chattiness', 1)
+
 
 def get_channel_description(channel_name):
     channel_list = load_yaml('channels.yml')
@@ -98,6 +107,7 @@ def gpt3_call_sync(context):
         model="gpt-3.5-turbo",
         messages=context
     )
+
 
 async def gpt_call(context):
     loop = asyncio.get_event_loop()
@@ -122,6 +132,7 @@ async def gpt_call(context):
     print(f"------------------------------------------------------\n")
 
     return generated_message
+
 
 def load_yaml(file_path):
     with open(file_path, 'r') as stream:
