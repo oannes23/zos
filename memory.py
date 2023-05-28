@@ -20,7 +20,7 @@ class Memory:
         for message in self.short_term_memory:
             formatted_timestamp = bot_utils.format_timestamp(message.created_at)
             print(f"{formatted_timestamp} #{message.channel.name} @{message.author.name}: {message.content}")
-            this_message = f"#{message.channel.name} @{message.author.name}: {message.content}\n"
+            this_message = f"In channel #{message.channel.name} the user @{message.author.name} said: {message.content}\n"
 
         for subject in self.memory_subjects:
             print(f"Processing subject: {subject}")

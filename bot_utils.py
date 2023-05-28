@@ -58,11 +58,11 @@ async def extract_information(bot, subject, messages):
 
         # If the prefix is 'channel', we check if the channel name matches the value
         if prefix == 'channel' and message.channel.name == value:
-            relevant_messages.append(f"@{message.author.name}: {content}")
+            relevant_messages.append(f"@{message.author.name} said: {content}")
 
         # If the prefix is 'personality' or 'biography', we check if the author's name matches the value
         elif prefix in ['personality', 'biography'] and message.author.name == value:
-            relevant_messages.append(f"@{message.author.name}: {content}")
+            relevant_messages.append(f"@{message.author.name} said: {content}")
 
 
     return "\n".join(relevant_messages)
@@ -127,7 +127,9 @@ async def gpt_call(context):
     # Print the generated message, token usage, and timestamp
     print(f"------------------------------------------------------")
     print(f"Timestamp: {timestamp}   Token Usage: {token_usage}")
-    print(f"Context: {context}")
+    print(f"Context:")
+    for line in context:
+        print(line)
     print(f"Generated Message: {generated_message}")
     print(f"------------------------------------------------------\n")
 
