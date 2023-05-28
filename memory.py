@@ -39,15 +39,93 @@ class Memory:
             "the subject of conversation in the chat you are analyzing. You want to retain as much of this info as possible. " \
             "Make it as succint as possible while retaining as much info as possible."
         elif subject.startswith("personality-"):
-            perspective = "Analyze the CONTEXT I have given above. Provide a list of 3 - 5 words that best describe " \
-            "the CONTEXT from the following options: Joyful, Sad, Excited, Angry, Anxious, Calm, Pessimistic, Optimistic, " \
-            "Introverted, Extroverted, Empathetic, Indifferent, Confident, Insecure, Aggressive, Passive, Humorous, " \
-            "Serious, Impatient, Patient. For example, you might return the following: Humorous, Confident, Optimistic. " \
-            "Remember, only return 3 - 5 words off of that list that describe the CONTEXT I gave above."
+            perspective = "Analyze the LEARNED CONTEXT I have given above. Decide on a list of 3 - 5 words that best describe " \
+            "the emotional state and conversational tone of the user that stated the LEARNED CONTEXT from the following options: " \
+            "Active, Alert, Amused, Angry, Anxious, Apathetic, Caring, Casual, " \
+            "Cautious, Challenging, Comical, Concerned, Confident, Confused, Considerate, Constructive, Critical, Dismissive, " \
+            "Dramatic, Excited, Focused, Formal, Friendly, Frustrated, Guilty, Injured, Insecure, Inquisitive, Introverted, " \
+            "Ironic, Light-hearted, Lonesome, Lucid, Mysterious, Open-minded, Pessimistic, Recovering, Relaxed, Responsible, " \
+            "Retrospective, Serious, Shocked, Suspicious, Thoughtful, Time-sensitive, Transitioning, Useful.\n" \
+            "Once you have done that, look at the KNOWN CONTEXT. For each word you decided describes the LEARNED CONTEXT, " \
+            "if the word is not on the KNOWN CONTEXT list add it to the bottom with the number 1 next to it. " \
+            "If the word is already on the KNOWN CONTEXT list add +1 to the number next to the word on the list. " \
+            "Then return the KNOWN CONTEXT list, with the changes you have made above. You should only return a list " \
+            "of some of the above words with numbers next to each one, on a new line. Remove anything else from your " \
+            "response.\n" \
+            "Follow this example.\n " \
+            "Example KNOWN CONTEXT input: \n" \
+            "```\n" \
+            "Caring 10\n" \
+            "Friendly 8\n" \
+            "Amused 5\n" \
+            "Active 2\n " \
+            "Lucid 2\n" \
+            "Relaxed 1\n" \
+            "```\n" \
+            "Example LEARNED CONTEXT input: \n" \
+            "```\n" \
+            "Example_User said: I like cats. I had a cat named Joey when I was five. It was my favorite " \
+            "color, orange.\n " \
+            "Example_User said: That was thirty years ago now!\n" \
+            "Example_User said: By the way, I use she/her pronouns\n" \
+            "Example_User said: I'm going to breakfast now\n" \
+            "Example_user said: I will be back later!\n" \
+            "```\n" \
+            "From this you may decide the user sounds Casual, Open-minded, Friendly, Retrospective, Relaxed. \n" \
+            "You would not actually return that as a response. \n" \
+            "Instead you would then update the KNOWN CONTEXT as follows:\n"
+            "```\n" \
+            "Caring 10\n" \
+            "Friendly 9\n" \
+            "Amused 5\n" \
+            "Active 2\n " \
+            "Lucid 2\n" \
+            "Relaxed 2\n" \
+            "Casual 1\n" \
+            "Retrospective 1\n" \
+            "```\n" \
+            "Notice how in the example nothing was returned that was not on the list of options given. Notice that the " \
+            "options already existing on the KNOWN CONTEXT list had their number increased by 1. Notice that the ones " \
+            "not already appearing on the list were added with the number 1 next to them.\n" \
+            "Now, following this example, analyze the LEARNED CONTEXT and combine it with the KNOWN CONTEXT " \
+            "and return the list you have updated. Order the list first by the number next to each word with the  " \
+            "highest number at the top, and second in alphabetical order for any ties. " \
+            "Return no other text except the list of words and numbers."
         elif subject.startswith("biography-"):
-            perspective = "Analyze the CONTEXT and compile a list of biographical information they've " \
-            "mentioned, including their background, preferences, interests, education, beliefs, and other factual " \
-            "self-descriptions. Summarize each piece of information in the most concise way possible."
+            perspective = "Analyze the LEARNED CONTEXT and compile a list of facts about the speaker they've " \
+            "mentioned about themselves such as preferences, backgrounds, and beliefs. " \
+            "Join this with the KNOWN CONTEXT to create a unified list of bullet points. " \
+            "Be as concise in these bullet points as possible, including not using complete sentences. " \
+            "If the user does not state anything about themselves, do not include information just about " \
+            "anything they say. Only include information the user says about their prefernces, traits, and history. " \
+            "Follow this example.\n " \
+            "Example input: \n" \
+            "```\n" \
+            "Example_User said: I like cats. I had a cat named Joey when I was five. It was my favorite " \
+            "color, orange.\n " \
+            "Example_User said: That was thirty years ago now!\n" \
+            "Example_User said: By the way, I use she/her pronouns\n" \
+            "Example_User said: I'm going to breakfast now\n" \
+            "Example_user said: I will be back later!\n" \
+            "```\n" \
+            "Your example output: \n" \
+            "```\n" \
+            "- Name is Example_User \n" \
+            "- she/her pronouns \n" \
+            "- likes cats \n" \
+            "- had a cat named Joey \n" \
+            "- favorite color orange \n" \
+            "- 35 years old \n" \
+            "```\n" \
+            "Notice how in the example nothing about going to breakfast and being back later was included, " \
+            "because that information is not about the Example_User's preferences, personal traits or history.\n" \
+            "Now, following this example, analyze the LEARNED CONTEXT and combine it with the KNOWN CONTEXT " \
+            "and return the list of bullet points you have learned. If anything in the LEARNED CONTEXT contradicts " \
+            "anything in the KNOWN CONTEXT, update it to the LEARNED CONTEXT. If there are any redundant points, " \
+            "consolidate them into a single point. If there is no new information about the user themselves, then " \
+            "just return the KNOWN CONTEXT unchanged. If there is too much information to fit within the token limit, " \
+            "keep prioritize information that is more general such as pronouns, name, age, and broad preferences. " \
+            "Return no other text except the bullet point list."
 
         return perspective
 

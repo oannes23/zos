@@ -13,7 +13,7 @@ openai.api_key = keys["openai_api_key"]
 
 def add_context_instruction(context, instructions, include_assistant=True):
     for instruction in instructions:
-        context.append({"role": "user", "content": instruction})
+        context.append({"role": "user", "content": f"{instruction}"})
         if include_assistant and instruction != "SYNTHESIZE":
             context.append({"role": "assistant", "content": "UNDERSTOOD"})
     return context
@@ -62,7 +62,7 @@ async def extract_information(bot, subject, messages):
 
         # If the prefix is 'personality' or 'biography', we check if the author's name matches the value
         elif prefix in ['personality', 'biography'] and message.author.name == value:
-            relevant_messages.append(f"@{message.author.name} said: {content}")
+            relevant_messages.append(f"@{message.author.name} said: {content}\n")
 
 
     return "\n".join(relevant_messages)
