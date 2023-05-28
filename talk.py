@@ -51,7 +51,8 @@ async def craft_message(bot, memory, channel):
     context = bot_utils.add_context_instruction(context, [f"PERSPECTIVE: {personal_context}"])
 
     channel_subjects = bot_utils.get_channel_description(f"{channel}")
-    context = bot_utils.add_context_instruction(context, [f"EXPERTISE CONTEXT: You are a professional level expert in {channel_subjects}. Assume your audience already knows this, do you don't need to repeat it to them."])
+    context = bot_utils.add_context_instruction(context, [f"EXPERTISE CONTEXT: You are a professional " \
+        "level expert in {channel_subjects}. Assume your audience already knows this, do you don't need to repeat it to them."])
 
     channel_context = memory.read_memory(f"channel-{channel}")
     context = bot_utils.add_context_instruction(context, [f"RECENT DISCUSSION CONTEXT: {channel_context}"])

@@ -39,58 +39,36 @@ class Memory:
             "the subject of conversation in the chat you are analyzing. You want to retain as much of this info as possible. " \
             "Make it as succint as possible while retaining as much info as possible."
         elif subject.startswith("personality-"):
-            perspective = "Analyze the LEARNED CONTEXT I have given above. Decide on a list of 3 - 5 words that best describe " \
+            perspective = "Analyze the LEARNED CONTEXT section given above. Decide on a bullet point list of 3 - 5 words that best describe " \
             "the emotional state and conversational tone of the user that stated the LEARNED CONTEXT from the following options: " \
             "Active, Alert, Amused, Angry, Anxious, Apathetic, Caring, Casual, " \
             "Cautious, Challenging, Comical, Concerned, Confident, Confused, Considerate, Constructive, Critical, Dismissive, " \
             "Dramatic, Excited, Focused, Formal, Friendly, Frustrated, Guilty, Injured, Insecure, Inquisitive, Introverted, " \
             "Ironic, Light-hearted, Lonesome, Lucid, Mysterious, Open-minded, Pessimistic, Recovering, Relaxed, Responsible, " \
             "Retrospective, Serious, Shocked, Suspicious, Thoughtful, Time-sensitive, Transitioning, Useful.\n" \
-            "Once you have done that, look at the KNOWN CONTEXT. For each word you decided describes the LEARNED CONTEXT, " \
-            "if the word is not on the KNOWN CONTEXT list add it to the bottom with the number 1 next to it. " \
-            "If the word is already on the KNOWN CONTEXT list add +1 to the number next to the word on the list. " \
-            "Then return the KNOWN CONTEXT list, with the changes you have made above. You should only return a list " \
-            "of some of the above words with numbers next to each one, on a new line. Remove anything else from your " \
-            "response.\n" \
             "Follow this example.\n " \
-            "Example KNOWN CONTEXT input: \n" \
-            "```\n" \
-            "Caring 10\n" \
-            "Friendly 8\n" \
-            "Amused 5\n" \
-            "Active 2\n " \
-            "Lucid 2\n" \
-            "Relaxed 1\n" \
-            "```\n" \
-            "Example LEARNED CONTEXT input: \n" \
-            "```\n" \
+            "Example input: \n" \
+            "---\n" \
             "Example_User said: I like cats. I had a cat named Joey when I was five. It was my favorite " \
             "color, orange.\n " \
             "Example_User said: That was thirty years ago now!\n" \
             "Example_User said: By the way, I use she/her pronouns\n" \
             "Example_User said: I'm going to breakfast now\n" \
             "Example_user said: I will be back later!\n" \
-            "```\n" \
-            "From this you may decide the user sounds Casual, Open-minded, Friendly, Retrospective, Relaxed. \n" \
-            "You would not actually return that as a response. \n" \
-            "Instead you would then update the KNOWN CONTEXT as follows:\n"
-            "```\n" \
-            "Caring 10\n" \
-            "Friendly 9\n" \
-            "Amused 5\n" \
-            "Active 2\n " \
-            "Lucid 2\n" \
-            "Relaxed 2\n" \
-            "Casual 1\n" \
-            "Retrospective 1\n" \
-            "```\n" \
-            "Notice how in the example nothing was returned that was not on the list of options given. Notice that the " \
-            "options already existing on the KNOWN CONTEXT list had their number increased by 1. Notice that the ones " \
-            "not already appearing on the list were added with the number 1 next to them.\n" \
-            "Now, following this example, analyze the LEARNED CONTEXT and combine it with the KNOWN CONTEXT " \
-            "and return the list you have updated. Order the list first by the number next to each word with the  " \
-            "highest number at the top, and second in alphabetical order for any ties. " \
-            "Return no other text except the list of words and numbers."
+            "---\n" \
+            "From that you would respond as follows:\n" \
+            "---\n" \
+            "- Casual\n" \
+            "- Open-minded\n" \
+            "- Friendly\n" \
+            "- Retrospective\n " \
+            "- Relaxed\n" \
+            "---\n" \
+            "Now, following this example, analyze the LEARNED CONTEXT and classify the emotional state and " \
+            "conversational tone of the LEARNED CONTEXT into a bullet point list of the options given. " \
+            "Make sure not to use the example input when evaluating, that was just an example to show format. " \
+            "Return no other text except the list of words from the above option. No longer reply with the word UNDERSTOOD. "\
+            "You should now follow these all of these instructions for everything listed after PERSPECTIVE."
         elif subject.startswith("biography-"):
             perspective = "Analyze the LEARNED CONTEXT and compile a list of facts about the speaker they've " \
             "mentioned about themselves such as preferences, backgrounds, and beliefs. " \
@@ -100,23 +78,23 @@ class Memory:
             "anything they say. Only include information the user says about their prefernces, traits, and history. " \
             "Follow this example.\n " \
             "Example input: \n" \
-            "```\n" \
+            "---\n" \
             "Example_User said: I like cats. I had a cat named Joey when I was five. It was my favorite " \
             "color, orange.\n " \
             "Example_User said: That was thirty years ago now!\n" \
             "Example_User said: By the way, I use she/her pronouns\n" \
             "Example_User said: I'm going to breakfast now\n" \
             "Example_user said: I will be back later!\n" \
-            "```\n" \
+            "---\n" \
             "Your example output: \n" \
-            "```\n" \
+            "---\n" \
             "- Name is Example_User \n" \
             "- she/her pronouns \n" \
             "- likes cats \n" \
             "- had a cat named Joey \n" \
             "- favorite color orange \n" \
             "- 35 years old \n" \
-            "```\n" \
+            "---\n" \
             "Notice how in the example nothing about going to breakfast and being back later was included, " \
             "because that information is not about the Example_User's preferences, personal traits or history.\n" \
             "Now, following this example, analyze the LEARNED CONTEXT and combine it with the KNOWN CONTEXT " \
@@ -193,23 +171,64 @@ class Memory:
         tokens = self.get_token_size(subject) or tokens
 
         context = []
-        context = bot_utils.add_context_instruction(context, [f"Only respond by saying UNDERSTOOD for now."])
+        context = bot_utils.add_context_instruction(context, [f"Only respond by saying UNDERSTOOD until I tell you otherwise."])
         context = bot_utils.add_context_instruction(context, [f"The instructions I give after saying PERSPECTIVE " \
-            "must be followed exactly and precisely. Only respond by saying UNDERSTOOD until then."])
+            "must be followed exactly and precisely."])
         context = bot_utils.add_context_instruction(context, [f"I will now repeat several CONTEXTs for you, " \
             "each with different information. You will use this information in your PERSPECTIVE instructions."])
         context = bot_utils.add_context_instruction(context, [f"Keep your response under {tokens} tokens in size."])
-        context = bot_utils.add_context_instruction(context, [f"KNOWN CONTEXT: {current_memory}"])
-        context = bot_utils.add_context_instruction(context, [f"LEARNED CONTEXT: {information}"])
-        context = bot_utils.add_context_instruction(context, [f"PERSPECTIVE: {perspective}"])
+
+        if not subject.startswith("personality-"):
+            context = bot_utils.add_context_instruction(context, [f"KNOWN CONTEXT:\n```\n{current_memory}\n```\n"])
+
+        context = bot_utils.add_context_instruction(context, [f"LEARNED CONTEXT:\n```\n{information}\n```\n"])
+        context = bot_utils.add_context_instruction(context, [f"PERSPECTIVE:\n```\n{perspective}\n```\n"])
 
         new_memory = await bot_utils.gpt_call(context)
 
         if subject.startswith("personality-"):
-            self.find_emotional_words(new_memory)
+            new_memory = self.update_memory_count(current_memory, new_memory)
 
         if "An error occurred" not in new_memory:
             self.write_memory(subject, new_memory)
+
+    def update_memory_count(self, memory, new_info):
+        # Initialize a dictionary to store word counts
+        word_counts = {}
+
+        # Process memory string
+        for line in memory.split('\n'):
+            if line.startswith("- ") and " " in line[2:]:
+                word, count = line[2:].split(" ")
+                if count.isdigit():
+                    word_counts[word] = int(count)
+
+        # Prepare a set of words from new information
+        new_info_words = set()
+        for line in new_info.split('\n'):
+            if line.startswith("- ") and line[2:].isalpha():
+                word = line[2:]
+                new_info_words.add(word)
+
+        # If total number of words is greater than 10, lower count for each word by 1
+        if len(word_counts) > 20:
+            for word in list(word_counts.keys()):  # Use list to avoid 'dictionary changed size during iteration' error
+                if word not in new_info_words:
+                    word_counts[word] = word_counts[word] - 1
+                    if word_counts[word] <= 0:
+                        del word_counts[word]
+
+        # Process new information string
+        for word in new_info_words:
+            if word in word_counts:
+                word_counts[word] += 1
+            else:
+                word_counts[word] = 1
+
+        # Build the updated memory string
+        updated_memory = "\n".join([f"- {word} {count}" for word, count in word_counts.items()])
+        return updated_memory
+
 
     def read_memory(self, filename):
         with open(os.path.join("memories", filename), "r") as file:

@@ -15,7 +15,7 @@ def add_context_instruction(context, instructions, include_assistant=True):
     for instruction in instructions:
         context.append({"role": "user", "content": f"{instruction}"})
         if include_assistant and instruction != "SYNTHESIZE":
-            context.append({"role": "assistant", "content": "UNDERSTOOD"})
+            context.append({"role": "assistant", "content": "Understood."})
     return context
 
 
@@ -131,7 +131,7 @@ async def gpt_call(context):
     for line in context:
         print(line)
     print(f"Generated Message: {generated_message}")
-    print(f"------------------------------------------------------\n")
+    print(f"------------------------------------------------------\n\n\n")
 
     return generated_message
 
