@@ -210,8 +210,8 @@ class Memory:
                 word = line[2:]
                 new_info_words.add(word)
 
-        # If total number of words is greater than 10, lower count for each word by 1
-        if len(word_counts) > 20:
+        # If total number of words is greater than 30, lower count for each word by 1
+        if len(word_counts) > 30:
             for word in list(word_counts.keys()):  # Use list to avoid 'dictionary changed size during iteration' error
                 if word not in new_info_words:
                     word_counts[word] = word_counts[word] - 1
@@ -226,7 +226,9 @@ class Memory:
                 word_counts[word] = 1
 
         # Build the updated memory string
-        updated_memory = "\n".join([f"- {word} {count}" for word, count in word_counts.items()])
+        # Sort the dictionary items by count in descending order before constructing the string
+        updated_memory = "\n".join([f"- {word} {count}" for word, count in sorted(word_counts.items(), key=lambda item: item[1], reverse=True)])
+        
         return updated_memory
 
 

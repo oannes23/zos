@@ -2,7 +2,7 @@ import random
 import discord
 import bot_utils
 
-chattiness_level = 25
+chattiness_level = 50
 
 def set_chattiness_level(value):
     global chattiness_level
@@ -111,6 +111,12 @@ async def process_messages(bot, memory):
         # Calculate the probability of sending the message based on chattiness and channel_probability
         dice_roll = random.randint(1, 1000)
         talk_chance = chattiness_level * channel_probability
+
+        # There have been complaints to the management...
+        if channel_name != "zos-kia":
+            talk_chance = 0
+            print(f"Talk Chance for #{channel_name} set to 0.")
+
         print(f"{channel_name} Talk Target: {talk_chance} Roll: {dice_roll}")
 
         if dice_roll > talk_chance:

@@ -79,7 +79,7 @@ async def get_memory(ctx, memory_name=None):
     else:
         # Read a specific memory
         memory_content = bot.memory.read_memory(memory_name)
-        await ctx.send(f"Memory '{memory_name}': {memory_content}")
+        await ctx.send(f"Memory '{memory_name}':\n {memory_content}")
 
 
 @bot.command(name='chatty')
