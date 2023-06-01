@@ -6,6 +6,7 @@ import asyncio
 import talk
 import yaml
 from memory import Memory
+from bitd import BitD
 from discord.ext import commands, tasks
 from bot_utils import gpt_call, format_timestamp
 
@@ -19,15 +20,12 @@ default_channel_id = keys["default_channel_id"]
 intents = discord.Intents.all()
 intents.typing = False
 
-bot = commands.Bot(command_prefix='!zos ', intents=intents)
-default_channel = [None]
-memory = Memory()
-
 class MyBot(commands.Bot):
     def __init__(self, command_prefix, **options):
         super().__init__(command_prefix, **options)
         self.default_channel = None
         self.memory = Memory()
+        self.bitd = BitD()
 
     async def on_ready(self):
         print(f'We have logged in as {bot.user}')
@@ -81,6 +79,14 @@ async def get_memory(ctx, memory_name=None):
         memory_content = bot.memory.read_memory(memory_name)
         await ctx.send(f"Memory '{memory_name}':\n {memory_content}")
 
+@bot.command(name='bitd')
+async def ask_bitd(ctx, *, question=None):
+    if question is None:
+        await ctx.send("Please ask a question about Blades in the Dark.")
+        return
+
+    response = await bot.bitd.ask_question(bot, question)
+    await ctx.send(f"{response}")
 
 @bot.command(name='chatty')
 async def set_chattiness(ctx, value: int=None):
