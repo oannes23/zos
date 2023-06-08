@@ -4,7 +4,9 @@ import openai
 import time
 import asyncio
 import talk
+import summarize
 import yaml
+from direct_messages import DirectMemory
 from memory import Memory
 from bitd import BitD
 from discord.ext import commands, tasks
@@ -26,6 +28,7 @@ class MyBot(commands.Bot):
         self.default_channel = None
         self.memory = Memory()
         self.bitd = BitD()
+        self.dms = DirectMemory()
 
     async def on_ready(self):
         print(f'We have logged in as {bot.user}')
@@ -48,6 +51,10 @@ class MyBot(commands.Bot):
     async def on_message(self, message):
         formatted_timestamp = format_timestamp(message.created_at)
         if message.author.id == bot.user.id:
+            return
+
+        if isinstance(message.channel, discord.DMChannel):  # Check if the message is a Direct Message
+            asyncio.create_task(self.dms.chat(message))
             return
 
         if message.content.startswith("!zos"):
@@ -84,9 +91,15 @@ async def ask_bitd(ctx, *, question=None):
     if question is None:
         await ctx.send("Please ask a question about Blades in the Dark.")
         return
+    asyncio.create_task(bot.bitd.ask_question(ctx, bot, question))
 
-    response = await bot.bitd.ask_question(bot, question)
-    await ctx.send(f"{response}")
+@bot.command(name='summarize')
+async def summarize_link(ctx, *, link=None):
+    if link is None:
+        await ctx.send("Please provide a link to summarize.")
+        return
+    asyncio.create_task(summarize.summarize_link(ctx, bot, link))
+
 
 @bot.command(name='chatty')
 async def set_chattiness(ctx, value: int=None):
