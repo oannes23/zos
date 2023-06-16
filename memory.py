@@ -111,11 +111,11 @@ class Memory:
         tokens = None
 
         if subject.startswith("channel-"):
-            tokens = 200
+            tokens = 1000
         elif subject.startswith("personality-"):
             tokens = 100
         elif subject.startswith("biography-"):
-            tokens = 2000
+            tokens = 4000
 
         return tokens
 

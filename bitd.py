@@ -20,9 +20,9 @@ class BitD:
 
 	async def ask_question(self, ctx, bot, question):
 		print(f"BitD Question: {question}")
-		llm = ChatOpenAI(openai_api_key=self.openai_api_key,model="gpt-3.5-turbo-0301",temperature=0.3)
+		llm = ChatOpenAI(openai_api_key=self.openai_api_key,model="gpt-3.5-turbo-16k",temperature=0.3)
 		with get_openai_callback() as cb:
-			relevant_info = self.bitd_docs.similarity_search(question)
+			relevant_info = self.bitd_docs.similarity_search(question, k=10)
 			loop = asyncio.get_event_loop()
 			chain = await loop.run_in_executor(self.executor, load_qa_chain, llm, "stuff")
 				
