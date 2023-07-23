@@ -19,11 +19,11 @@ class Memory:
 
         for message in self.short_term_memory:
             formatted_timestamp = bot_utils.format_timestamp(message.created_at)
-            print(f"{formatted_timestamp} #{message.channel.name} @{message.author.name}: {message.content}")
+            # print(f"{formatted_timestamp} #{message.channel.name} @{message.author.name}: {message.content}")
             this_message = f"In channel #{message.channel.name} the user @{message.author.name} said: {message.content}\n"
 
         for subject in self.memory_subjects:
-            print(f"Processing subject: {subject}")
+            # print(f"Processing subject: {subject}")
             perspective = self.set_perspective(subject)
             information = await bot_utils.extract_information(bot, subject, self.short_term_memory)
             await self.process_memory(subject, perspective, information)
@@ -137,7 +137,7 @@ class Memory:
                            'Confident', 'Insecure', 'Aggressive', 'Passive', 'Humorous', 'Serious', 
                            'Impatient', 'Patient']
 
-        print(f"find_emotional_words input: {input_string}")
+        # print(f"find_emotional_words input: {input_string}")
         try:
             words_so_far = self.read_memory("emotion-words")
         except FileNotFoundError:
@@ -157,7 +157,7 @@ class Memory:
         # Convert found words list to comma-separated string
         found_words_str = ', '.join(found_words)
 
-        print(f"find_emotional_words output: {found_words_str}")
+        # print(f"find_emotional_words output: {found_words_str}")
 
         return found_words_str
 

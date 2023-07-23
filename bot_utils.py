@@ -24,10 +24,7 @@ async def convert_names_to_ids(bot, guild_id, message):
 
     for member in bot_buddies:
         if member.name in message:
-            print("convert_names_to_id:")
-            print(f"   MESSAGE BEFORE: {message}")
             message = message.replace(member.name, f"<@{member.id}>")
-            print(f"   MESSAGE AFTER: {message}")
     return message
 
 
@@ -36,10 +33,7 @@ async def convert_ids_to_names(bot, guild_id, message):
 
     for member in bot_buddies:
         if str(member.id) in message:
-            print("convert_ids_to_names:")
-            print(f"   MESSAGE BEFORE: {message}")
             message = message.replace(f"<@{member.id}>", member.name)
-            print(f"   MESSAGE AFTER: {message}")
     return message
 
 
@@ -123,16 +117,6 @@ async def gpt_call(context):
     generated_message = response.choices[0].message['content']
     token_usage = response['usage']['total_tokens']
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-
-    # Print the generated message, token usage, and timestamp
-    print(f"------------------------------------------------------")
-    print(f"Timestamp: {timestamp}   Token Usage: {token_usage}")
-    print(f"Context:")
-    for line in context:
-        print(line)
-    print(f"Generated Message: {generated_message}")
-    print(f"------------------------------------------------------\n\n\n")
-
     return generated_message
 
 

@@ -57,7 +57,7 @@ trees:
   description: "psychedelics, marijuana, psychedelic assisted therapy, drug culture, pharmacology, drug decriminalization, psychedelic shamanism"
 
 zos-kia:
-  chattiness: 10
+  chattiness: 5
   description: "Python software development, OpenAI API calls, Discord Bot API calls"
 
 mindfuck:

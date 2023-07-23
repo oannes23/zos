@@ -2,7 +2,7 @@ import random
 import discord
 import bot_utils
 
-chattiness_level = 50
+chattiness_level = 30
 
 def set_chattiness_level(value):
     global chattiness_level
@@ -29,7 +29,8 @@ async def craft_message(bot, memory, channel):
 
     context = bot_utils.add_context_instruction(context, 
         ["Do not just repeat or rephrase what someone said in MESSAGES, all of your responses " \
-            "should be original and interesting relevant things."])
+            "should be original and interesting relevant things. Limit your response to be no " \
+            "longer than a few sentences, and try to stay on a single topic."])
 
     context = bot_utils.add_context_instruction(context, 
         ["I will now repeat several CONTEXTs for you, each with different information. " \
@@ -68,7 +69,7 @@ async def craft_message(bot, memory, channel):
 
 
 async def process_messages(bot, memory):
-    print("Processing messages...")
+    # print("Processing messages...")
 
     # Load the channel probabilities from the YAML file
     channel_probabilities = bot_utils.load_yaml('channels.yml')
@@ -115,12 +116,12 @@ async def process_messages(bot, memory):
         # There have been complaints to the management...
         if channel_name != "zos-kia":
             talk_chance = 0
-            print(f"Talk Chance for #{channel_name} set to 0.")
+            # print(f"Talk Chance for #{channel_name} set to 0.")
 
-        print(f"{channel_name} Talk Target: {talk_chance} Roll: {dice_roll}")
+        # print(f"{channel_name} Talk Target: {talk_chance} Roll: {dice_roll}")
 
         if dice_roll > talk_chance:
-            print(f"No message sent to channel '{channel_name}':")
+            # print(f"No message sent to channel '{channel_name}':")
             continue
 
         # Get the channel object based on the channel name
