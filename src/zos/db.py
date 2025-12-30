@@ -1,0 +1,277 @@
+"""Database connection and migration management for Zos."""
+
+import sqlite3
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any
+
+from zos.config import DatabaseConfig, get_config
+from zos.exceptions import DatabaseError, MigrationError
+from zos.logging import get_logger
+
+logger = get_logger("db")
+
+# Current schema version
+SCHEMA_VERSION = 2
+
+# Base schema SQL
+BASE_SCHEMA = """
+-- Metadata table for tracking schema version and other info
+CREATE TABLE IF NOT EXISTS zos_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Insert initial schema version
+INSERT OR IGNORE INTO zos_metadata (key, value) VALUES ('schema_version', '0');
+"""
+
+
+# Migrations are functions that take a connection and upgrade from version N to N+1
+MIGRATIONS: dict[int, str] = {
+    # Migration from version 0 to 1: base tables
+    1: """
+    -- Schema version 1: Foundation tables
+
+    -- Update schema version
+    UPDATE zos_metadata SET value = '1', updated_at = datetime('now') WHERE key = 'schema_version';
+    """,
+    # Migration from version 1 to 2: Discord ingestion tables
+    2: """
+    -- Schema version 2: Discord ingestion tables
+
+    -- Messages table
+    CREATE TABLE IF NOT EXISTS messages (
+        message_id INTEGER PRIMARY KEY,  -- Discord snowflake ID
+        guild_id INTEGER,                -- NULL for DMs
+        channel_id INTEGER NOT NULL,
+        thread_id INTEGER,               -- NULL if not in thread
+        author_id INTEGER NOT NULL,
+        author_roles_snapshot TEXT NOT NULL DEFAULT '[]',  -- JSON array of role IDs
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,        -- ISO8601 timestamp
+        edited_at TEXT,                  -- ISO8601 timestamp, NULL if never edited
+        visibility_scope TEXT NOT NULL CHECK (visibility_scope IN ('public', 'dm')),
+        is_deleted INTEGER NOT NULL DEFAULT 0,  -- Soft delete flag
+        deleted_at TEXT                  -- ISO8601 timestamp when deleted
+    );
+
+    -- Indexes for common queries
+    CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_author_id ON messages(author_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_guild_channel ON messages(guild_id, channel_id);
+
+    -- Reactions table
+    CREATE TABLE IF NOT EXISTS reactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id INTEGER NOT NULL,
+        emoji TEXT NOT NULL,             -- Unicode or custom emoji (name:id)
+        user_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,        -- ISO8601 timestamp
+        is_removed INTEGER NOT NULL DEFAULT 0,  -- Track removal
+        FOREIGN KEY (message_id) REFERENCES messages(message_id),
+        UNIQUE(message_id, emoji, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reactions_message_id ON reactions(message_id);
+    CREATE INDEX IF NOT EXISTS idx_reactions_user_id ON reactions(user_id);
+
+    -- Update schema version
+    UPDATE zos_metadata SET value = '2', updated_at = datetime('now') WHERE key = 'schema_version';
+    """,
+}
+
+
+class Database:
+    """SQLite database manager with connection pooling and migrations."""
+
+    def __init__(self, config: DatabaseConfig | None = None) -> None:
+        """Initialize the database manager.
+
+        Args:
+            config: Database configuration. If None, uses global config.
+        """
+        if config is None:
+            config = get_config().database
+        self.db_path = Path(config.path).expanduser()
+        self._connection: sqlite3.Connection | None = None
+
+    def _ensure_directory(self) -> None:
+        """Ensure the database directory exists."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _get_connection(self) -> sqlite3.Connection:
+        """Get or create the database connection."""
+        if self._connection is None:
+            self._ensure_directory()
+            self._connection = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,
+                isolation_level="DEFERRED",  # Use deferred transactions
+            )
+            self._connection.row_factory = sqlite3.Row
+            # Enable foreign keys
+            self._connection.execute("PRAGMA foreign_keys = ON")
+            # Enable WAL mode for better concurrency
+            self._connection.execute("PRAGMA journal_mode = WAL")
+        return self._connection
+
+    @contextmanager
+    def transaction(self) -> Generator[sqlite3.Connection, None, None]:
+        """Context manager for database transactions.
+
+        Yields:
+            The database connection within a transaction.
+        """
+        conn = self._get_connection()
+        # Save current isolation level and switch to manual mode
+        old_isolation = conn.isolation_level
+        conn.isolation_level = None  # Autocommit off, manual control
+        try:
+            conn.execute("BEGIN")
+            yield conn
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.isolation_level = old_isolation
+
+    def execute(
+        self, sql: str, params: tuple[Any, ...] | dict[str, Any] | None = None
+    ) -> sqlite3.Cursor:
+        """Execute a SQL statement.
+
+        Args:
+            sql: SQL statement to execute.
+            params: Optional parameters for the statement.
+
+        Returns:
+            The cursor from the execution.
+        """
+        conn = self._get_connection()
+        if params is None:
+            return conn.execute(sql)
+        return conn.execute(sql, params)
+
+    def executemany(
+        self, sql: str, params_list: Sequence[tuple[Any, ...]] | Sequence[dict[str, Any]]
+    ) -> sqlite3.Cursor:
+        """Execute a SQL statement with multiple parameter sets.
+
+        Args:
+            sql: SQL statement to execute.
+            params_list: List of parameter sets.
+
+        Returns:
+            The cursor from the execution.
+        """
+        conn = self._get_connection()
+        return conn.executemany(sql, params_list)
+
+    def executescript(self, sql: str) -> None:
+        """Execute a SQL script (multiple statements).
+
+        Args:
+            sql: SQL script to execute.
+        """
+        conn = self._get_connection()
+        conn.executescript(sql)
+
+    def get_schema_version(self) -> int:
+        """Get the current schema version.
+
+        Returns:
+            The current schema version number.
+        """
+        try:
+            result = self.execute(
+                "SELECT value FROM zos_metadata WHERE key = 'schema_version'"
+            ).fetchone()
+            if result:
+                return int(result[0])
+            return 0
+        except sqlite3.OperationalError:
+            # Table doesn't exist yet
+            return 0
+
+    def initialize(self) -> None:
+        """Initialize the database with base schema if needed."""
+        logger.info(f"Initializing database at {self.db_path}")
+        self.executescript(BASE_SCHEMA)
+        self.migrate()
+
+    def migrate(self) -> None:
+        """Run any pending migrations."""
+        current_version = self.get_schema_version()
+        target_version = SCHEMA_VERSION
+
+        if current_version >= target_version:
+            logger.debug(f"Database already at version {current_version}")
+            return
+
+        logger.info(f"Migrating database from version {current_version} to {target_version}")
+
+        for version in range(current_version + 1, target_version + 1):
+            if version not in MIGRATIONS:
+                raise MigrationError(f"Missing migration for version {version}")
+
+            logger.info(f"Applying migration {version}")
+            try:
+                # executescript handles its own transaction
+                self.executescript(MIGRATIONS[version])
+            except Exception as e:
+                raise MigrationError(f"Failed to apply migration {version}: {e}") from e
+
+        logger.info(f"Database migrated to version {target_version}")
+
+    def close(self) -> None:
+        """Close the database connection."""
+        if self._connection:
+            self._connection.close()
+            self._connection = None
+
+
+# Global database instance
+_db: Database | None = None
+
+
+def get_db() -> Database:
+    """Get the global database instance.
+
+    Returns:
+        The global Database instance.
+
+    Raises:
+        DatabaseError: If database is not initialized.
+    """
+    global _db
+    if _db is None:
+        raise DatabaseError("Database not initialized. Call init_db() first.")
+    return _db
+
+
+def init_db(config: DatabaseConfig | None = None) -> Database:
+    """Initialize the global database.
+
+    Args:
+        config: Optional database configuration.
+
+    Returns:
+        The initialized Database instance.
+    """
+    global _db
+    _db = Database(config)
+    _db.initialize()
+    return _db
+
+
+def close_db() -> None:
+    """Close the global database connection."""
+    global _db
+    if _db:
+        _db.close()
+        _db = None
