@@ -28,26 +28,38 @@ class MessageRepository:
         self,
         message_id: int,
         guild_id: int | None,
+        guild_name: str | None,
         channel_id: int,
+        channel_name: str,
         thread_id: int | None,
         author_id: int,
+        author_name: str,
         author_roles_snapshot: str,
         content: str,
         created_at: datetime,
         visibility_scope: str,
+        is_tracked: bool = True,
     ) -> None:
         """Insert or update a message.
 
         Uses INSERT ... ON CONFLICT for idempotent upserts (important for backfill).
+
+        Args:
+            is_tracked: Whether the user has opted in for tracking.
+                        False = zero salience, not reflected upon.
         """
         self.db.execute(
             """
             INSERT INTO messages (
-                message_id, guild_id, channel_id, thread_id, author_id,
-                author_roles_snapshot, content, created_at, visibility_scope
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                message_id, guild_id, guild_name, channel_id, channel_name,
+                thread_id, author_id, author_name, author_roles_snapshot,
+                content, created_at, visibility_scope, is_tracked
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(message_id) DO UPDATE SET
                 content = excluded.content,
+                author_name = excluded.author_name,
+                channel_name = excluded.channel_name,
+                guild_name = excluded.guild_name,
                 edited_at = CASE
                     WHEN messages.content != excluded.content
                     THEN datetime('now')
@@ -57,13 +69,17 @@ class MessageRepository:
             (
                 message_id,
                 guild_id,
+                guild_name,
                 channel_id,
+                channel_name,
                 thread_id,
                 author_id,
+                author_name,
                 author_roles_snapshot,
                 content,
                 created_at.isoformat(),
                 visibility_scope,
+                1 if is_tracked else 0,
             ),
         )
 
@@ -99,6 +115,7 @@ class MessageRepository:
         message_id: int,
         emoji: str,
         user_id: int,
+        user_name: str,
         created_at: datetime,
     ) -> None:
         """Add a reaction (idempotent).
@@ -107,13 +124,14 @@ class MessageRepository:
         """
         self.db.execute(
             """
-            INSERT INTO reactions (message_id, emoji, user_id, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO reactions (message_id, emoji, user_id, user_name, created_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(message_id, emoji, user_id) DO UPDATE SET
                 is_removed = 0,
+                user_name = excluded.user_name,
                 created_at = excluded.created_at
             """,
-            (message_id, emoji, user_id, created_at.isoformat()),
+            (message_id, emoji, user_id, user_name, created_at.isoformat()),
         )
 
     def remove_reaction(

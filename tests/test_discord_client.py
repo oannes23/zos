@@ -31,55 +31,55 @@ class TestShouldProcessMessage:
         message = MagicMock()
         message.author.bot = False
         message.guild = None
-        message.channel.id = 123
+        message.channel.name = None  # DM channels have no name
 
         assert client._should_process_message(message) is True
 
     def test_filters_by_guild(self, message_repository: MessageRepository):
-        """Test guild filtering."""
-        config = DiscordConfig(token="test", guild_ids=[111])
+        """Test guild filtering by name."""
+        config = DiscordConfig(token="test", guilds=["AllowedGuild"])
         client = ZosDiscordClient(config=config, repository=message_repository)
 
         message = MagicMock()
         message.author.bot = False
-        message.guild.id = 222
-        message.channel.id = 123
+        message.guild.name = "OtherGuild"
+        message.channel.name = "general"
 
         assert client._should_process_message(message) is False
 
     def test_allows_configured_guild(self, message_repository: MessageRepository):
         """Test that configured guilds are allowed."""
-        config = DiscordConfig(token="test", guild_ids=[111])
+        config = DiscordConfig(token="test", guilds=["AllowedGuild"])
         client = ZosDiscordClient(config=config, repository=message_repository)
 
         message = MagicMock()
         message.author.bot = False
-        message.guild.id = 111
-        message.channel.id = 123
+        message.guild.name = "AllowedGuild"
+        message.channel.name = "general"
 
         assert client._should_process_message(message) is True
 
-    def test_filters_by_channel(self, message_repository: MessageRepository):
-        """Test channel filtering."""
-        config = DiscordConfig(token="test", watched_channel_ids=[111])
+    def test_excludes_channel_by_name(self, message_repository: MessageRepository):
+        """Test channel exclusion by name (opt-out)."""
+        config = DiscordConfig(token="test", excluded_channels=["bot-spam"])
         client = ZosDiscordClient(config=config, repository=message_repository)
 
         message = MagicMock()
         message.author.bot = False
         message.guild = None
-        message.channel.id = 222
+        message.channel.name = "bot-spam"
 
         assert client._should_process_message(message) is False
 
-    def test_allows_configured_channel(self, message_repository: MessageRepository):
-        """Test that configured channels are allowed."""
-        config = DiscordConfig(token="test", watched_channel_ids=[111])
+    def test_allows_non_excluded_channel(self, message_repository: MessageRepository):
+        """Test that non-excluded channels are allowed (opt-out default)."""
+        config = DiscordConfig(token="test", excluded_channels=["bot-spam"])
         client = ZosDiscordClient(config=config, repository=message_repository)
 
         message = MagicMock()
         message.author.bot = False
         message.guild = None
-        message.channel.id = 111
+        message.channel.name = "general"
 
         assert client._should_process_message(message) is True
 
@@ -87,17 +87,80 @@ class TestShouldProcessMessage:
         self, message_repository: MessageRepository
     ):
         """Test that DMs bypass guild filtering."""
-        config = DiscordConfig(token="test", guild_ids=[111])
+        config = DiscordConfig(token="test", guilds=["SomeGuild"])
         client = ZosDiscordClient(config=config, repository=message_repository)
 
         message = MagicMock()
         message.author.bot = False
         message.guild = None  # DM
-        message.channel.id = 999
+        message.channel.name = None  # DM channels don't have names
 
         # DMs should still be processed despite guild filter
-        # (unless there's a channel filter)
         assert client._should_process_message(message) is True
+
+
+class TestUserTracking:
+    """Tests for user opt-in tracking functionality."""
+
+    def test_dm_always_tracked(self, message_repository: MessageRepository):
+        """Test that DMs are always tracked (initiation implies consent)."""
+        config = DiscordConfig(token="test", tracking_opt_in_role="Zos Participant")
+        client = ZosDiscordClient(config=config, repository=message_repository)
+
+        message = MagicMock()
+        message.guild = None  # DM
+
+        assert client._is_user_tracked(message) is True
+
+    def test_no_role_configured_everyone_tracked(
+        self, message_repository: MessageRepository
+    ):
+        """Test that everyone is tracked when no role is configured."""
+        config = DiscordConfig(token="test", tracking_opt_in_role=None)
+        client = ZosDiscordClient(config=config, repository=message_repository)
+
+        message = MagicMock()
+        message.guild = MagicMock()
+
+        assert client._is_user_tracked(message) is True
+
+    def test_user_with_role_is_tracked(self, message_repository: MessageRepository):
+        """Test that users with the tracking role are tracked."""
+        import discord
+
+        config = DiscordConfig(token="test", tracking_opt_in_role="Zos Participant")
+        client = ZosDiscordClient(config=config, repository=message_repository)
+
+        role = MagicMock()
+        role.name = "Zos Participant"
+
+        member = MagicMock(spec=discord.Member)
+        member.roles = [role]
+
+        message = MagicMock()
+        message.guild = MagicMock()
+        message.author = member
+
+        assert client._is_user_tracked(message) is True
+
+    def test_user_without_role_not_tracked(self, message_repository: MessageRepository):
+        """Test that users without the tracking role are not tracked."""
+        import discord
+
+        config = DiscordConfig(token="test", tracking_opt_in_role="Zos Participant")
+        client = ZosDiscordClient(config=config, repository=message_repository)
+
+        other_role = MagicMock()
+        other_role.name = "Other Role"
+
+        member = MagicMock(spec=discord.Member)
+        member.roles = [other_role]
+
+        message = MagicMock()
+        message.guild = MagicMock()
+        message.author = member
+
+        assert client._is_user_tracked(message) is False
 
 
 class TestOnMessage:

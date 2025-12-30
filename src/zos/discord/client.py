@@ -58,19 +58,22 @@ class ZosDiscordClient(discord.Client):
 
         super().__init__(intents=intents, **kwargs)
 
-    def _should_process_guild(self, guild_id: int | None) -> bool:
-        """Check if we should process events from this guild."""
-        if not self.config.guild_ids:
-            return True  # No filter = process all
-        if guild_id is None:
+    def _should_process_guild(self, guild: discord.Guild | None) -> bool:
+        """Check if we should process events from this guild (by name)."""
+        if guild is None:
             return True  # DMs always processed
-        return guild_id in self.config.guild_ids
+        if not self.config.guilds:
+            return True  # No filter = process all guilds
+        return guild.name in self.config.guilds
 
-    def _should_process_channel(self, channel_id: int) -> bool:
-        """Check if we should process events from this channel."""
-        if not self.config.watched_channel_ids:
-            return True  # No filter = process all
-        return channel_id in self.config.watched_channel_ids
+    def _should_process_channel(self, channel: discord.abc.Messageable) -> bool:
+        """Check if channel should be processed (opt-out by name)."""
+        if not self.config.excluded_channels:
+            return True  # No exclusions = process all
+        channel_name = getattr(channel, "name", None)
+        if channel_name is None:
+            return True  # DM channels don't have names, always process
+        return channel_name not in self.config.excluded_channels
 
     def _should_process_message(self, message: discord.Message) -> bool:
         """Determine if a message should be processed."""
@@ -78,11 +81,35 @@ class ZosDiscordClient(discord.Client):
         if message.author.bot:
             return False
 
-        guild_id = message.guild.id if message.guild else None
-        if not self._should_process_guild(guild_id):
+        if not self._should_process_guild(message.guild):
             return False
 
-        return self._should_process_channel(message.channel.id)
+        return self._should_process_channel(message.channel)
+
+    def _is_user_tracked(self, message: discord.Message) -> bool:
+        """Check if user has opted in for tracking.
+
+        Returns True if:
+        - Message is a DM (initiation implies consent)
+        - No tracking role is configured (everyone tracked)
+        - User has the tracking opt-in role
+        """
+        # DMs always tracked
+        if message.guild is None:
+            return True
+
+        # No role configured = everyone tracked
+        if not self.config.tracking_opt_in_role:
+            return True
+
+        # Check if user has the role
+        if isinstance(message.author, discord.Member):
+            return any(
+                role.name == self.config.tracking_opt_in_role
+                for role in message.author.roles
+            )
+
+        return False  # Can't verify role = not tracked
 
     async def on_ready(self) -> None:
         """Called when the client is ready."""
@@ -94,50 +121,66 @@ class ZosDiscordClient(discord.Client):
         await self._run_backfill()
 
     async def _run_backfill(self) -> None:
-        """Run backfill for all configured channels."""
-        channels_to_backfill = self.config.watched_channel_ids
+        """Run backfill for all accessible channels (opt-out filtering)."""
+        channels_to_backfill: list[discord.TextChannel] = []
+
+        for guild in self.guilds:
+            # Skip guilds not in config (if config specifies guilds)
+            if not self._should_process_guild(guild):
+                logger.debug(f"Skipping guild {guild.name} (not in config)")
+                continue
+
+            for channel in guild.text_channels:
+                # Skip excluded channels
+                if not self._should_process_channel(channel):
+                    logger.debug(f"Skipping channel {channel.name} (excluded)")
+                    continue
+                channels_to_backfill.append(channel)
+
         if not channels_to_backfill:
-            logger.info("No channels configured for backfill")
+            logger.info("No channels to backfill")
             return
 
         logger.info(f"Starting backfill for {len(channels_to_backfill)} channels")
-        for channel_id in channels_to_backfill:
-            channel = self.get_channel(channel_id)
-            if channel is None:
-                logger.warning(f"Could not find channel {channel_id} for backfill")
-                continue
-
-            if not isinstance(channel, (discord.TextChannel, discord.Thread)):
-                logger.warning(f"Channel {channel_id} is not a text channel, skipping")
-                continue
-
+        for channel in channels_to_backfill:
             try:
-                await backfill_channel(channel, self.repository)
+                await backfill_channel(
+                    channel, self.repository, self.config.tracking_opt_in_role
+                )
             except Exception as e:
-                logger.error(f"Backfill failed for channel {channel_id}: {e}")
+                logger.error(f"Backfill failed for channel {channel.name}: {e}")
 
     async def on_message(self, message: discord.Message) -> None:
         """Handle new messages."""
         if not self._should_process_message(message):
             return
 
+        is_tracked = self._is_user_tracked(message)
+
         try:
             self.repository.upsert_message(
                 message_id=message.id,
                 guild_id=message.guild.id if message.guild else None,
+                guild_name=message.guild.name if message.guild else None,
                 channel_id=message.channel.id,
+                channel_name=getattr(message.channel, "name", "DM"),
                 thread_id=(
                     message.channel.id
                     if isinstance(message.channel, discord.Thread)
                     else None
                 ),
                 author_id=message.author.id,
+                author_name=message.author.display_name,
                 author_roles_snapshot=self._get_roles_snapshot(message),
                 content=message.content,
                 created_at=message.created_at,
                 visibility_scope="dm" if message.guild is None else "public",
+                is_tracked=is_tracked,
             )
-            logger.debug(f"Stored message {message.id} from {message.author}")
+            logger.debug(
+                f"Stored message {message.id} from {message.author.display_name} "
+                f"(tracked={is_tracked})"
+            )
         except Exception as e:
             logger.error(f"Failed to store message {message.id}: {e}")
 
@@ -161,10 +204,9 @@ class ZosDiscordClient(discord.Client):
     async def on_message_delete(self, message: discord.Message) -> None:
         """Handle message deletion - soft delete."""
         # Check guild/channel filters
-        guild_id = message.guild.id if message.guild else None
-        if not self._should_process_guild(guild_id):
+        if not self._should_process_guild(message.guild):
             return
-        if not self._should_process_channel(message.channel.id):
+        if not self._should_process_channel(message.channel):
             return
 
         try:
@@ -181,10 +223,9 @@ class ZosDiscordClient(discord.Client):
             return
 
         message = reaction.message
-        guild_id = message.guild.id if message.guild else None
-        if not self._should_process_guild(guild_id):
+        if not self._should_process_guild(message.guild):
             return
-        if not self._should_process_channel(message.channel.id):
+        if not self._should_process_channel(message.channel):
             return
 
         emoji_str = str(reaction.emoji)
@@ -193,6 +234,7 @@ class ZosDiscordClient(discord.Client):
                 message_id=message.id,
                 emoji=emoji_str,
                 user_id=user.id,
+                user_name=user.display_name,
                 created_at=datetime.now(UTC),
             )
             logger.debug(f"Added reaction {emoji_str} to message {message.id}")
@@ -207,10 +249,9 @@ class ZosDiscordClient(discord.Client):
             return
 
         message = reaction.message
-        guild_id = message.guild.id if message.guild else None
-        if not self._should_process_guild(guild_id):
+        if not self._should_process_guild(message.guild):
             return
-        if not self._should_process_channel(message.channel.id):
+        if not self._should_process_channel(message.channel):
             return
 
         emoji_str = str(reaction.emoji)

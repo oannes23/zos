@@ -22,22 +22,23 @@ class TestDiscordConfig:
     def test_defaults(self):
         config = DiscordConfig()
         assert config.token == ""
-        assert config.guild_ids == []
-        assert config.watched_channel_ids == []
-        assert config.output_channel_ids == []
-        assert config.required_role is None
+        assert config.guilds == []
+        assert config.excluded_channels == []
+        assert config.output_channels == []
+        assert config.tracking_opt_in_role is None
 
     def test_custom_values(self):
         config = DiscordConfig(
             token="test-token",
-            guild_ids=[123, 456],
-            watched_channel_ids=[789],
-            output_channel_ids=[101],
-            required_role="test-role",
+            guilds=["Test Guild", "Other Guild"],
+            excluded_channels=["bot-spam"],
+            output_channels=["general"],
+            tracking_opt_in_role="Zos Participant",
         )
         assert config.token == "test-token"
-        assert config.guild_ids == [123, 456]
-        assert config.required_role == "test-role"
+        assert config.guilds == ["Test Guild", "Other Guild"]
+        assert config.excluded_channels == ["bot-spam"]
+        assert config.tracking_opt_in_role == "Zos Participant"
 
 
 class TestDatabaseConfig:
@@ -124,7 +125,7 @@ class TestLoadConfig:
     def test_load_from_yaml(self, temp_dir: Path):
         config_path = temp_dir / "config.yml"
         config_data = {
-            "discord": {"guild_ids": [123456789]},
+            "discord": {"guilds": ["Test Guild"]},
             "logging": {"level": "DEBUG"},
             "enabled_layers": ["test_layer"],
         }
@@ -132,7 +133,7 @@ class TestLoadConfig:
             yaml.dump(config_data, f)
 
         config = load_config(config_path)
-        assert config.discord.guild_ids == [123456789]
+        assert config.discord.guilds == ["Test Guild"]
         assert config.logging.level == "DEBUG"
         assert config.enabled_layers == ["test_layer"]
 
@@ -144,7 +145,7 @@ class TestLoadConfig:
     def test_env_provides_defaults(self, temp_dir: Path, monkeypatch):
         config_path = temp_dir / "config.yml"
         # YAML doesn't specify logging level
-        config_data = {"discord": {"guild_ids": [123]}}
+        config_data = {"discord": {"guilds": ["Test Guild"]}}
         with open(config_path, "w") as f:
             yaml.dump(config_data, f)
 

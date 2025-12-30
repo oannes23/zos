@@ -12,14 +12,22 @@ class DiscordConfig(BaseModel):
     """Discord connection configuration."""
 
     token: str = Field(default="", description="Discord bot token (use env var)")
-    guild_ids: list[int] = Field(default_factory=list, description="Guild IDs to watch")
-    watched_channel_ids: list[int] = Field(
-        default_factory=list, description="Channel IDs to observe"
+    guilds: list[str] = Field(
+        default_factory=list,
+        description="Guild names to watch (empty = all guilds bot is in)",
     )
-    output_channel_ids: list[int] = Field(
-        default_factory=list, description="Channel IDs where Zos can speak"
+    excluded_channels: list[str] = Field(
+        default_factory=list,
+        description="Channel names to exclude from observation (opt-out)",
     )
-    required_role: str | None = Field(default=None, description="Role required for DM opt-in")
+    output_channels: list[str] = Field(
+        default_factory=list,
+        description="Channel names where Zos can speak",
+    )
+    tracking_opt_in_role: str | None = Field(
+        default=None,
+        description="Role name required for user tracking (zero salience without)",
+    )
 
 
 class DatabaseConfig(BaseModel):

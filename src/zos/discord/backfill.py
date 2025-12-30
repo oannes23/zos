@@ -22,6 +22,7 @@ DEFAULT_LOOKBACK_DAYS = 14
 async def backfill_channel(
     channel: discord.TextChannel | discord.Thread,
     repository: MessageRepository,
+    tracking_opt_in_role: str | None = None,
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
 ) -> int:
     """Backfill messages from a channel.
@@ -35,15 +36,19 @@ async def backfill_channel(
     Args:
         channel: The Discord channel to backfill.
         repository: Message repository for persistence.
+        tracking_opt_in_role: Role name required for user tracking (None = all tracked).
         lookback_days: How many days of history to fetch if no messages exist.
 
     Returns:
         Number of messages backfilled.
     """
     channel_id = channel.id
-    guild_id = channel.guild.id if channel.guild else None
+    guild = channel.guild
+    guild_id = guild.id if guild else None
+    guild_name = guild.name if guild else None
+    channel_name = channel.name
 
-    logger.info(f"Starting backfill for channel {channel.name} ({channel_id})")
+    logger.info(f"Starting backfill for channel {channel_name} ({channel_id})")
 
     # Determine starting point
     latest_id = repository.get_latest_message_id(channel_id)
@@ -74,23 +79,30 @@ async def backfill_channel(
         # Determine if in thread
         thread_id = channel_id if isinstance(channel, discord.Thread) else None
 
+        # Determine tracking status
+        is_tracked = _is_user_tracked(message, tracking_opt_in_role)
+
         repository.upsert_message(
             message_id=message.id,
             guild_id=guild_id,
+            guild_name=guild_name,
             channel_id=channel_id,
+            channel_name=channel_name,
             thread_id=thread_id,
             author_id=message.author.id,
+            author_name=message.author.display_name,
             author_roles_snapshot=roles_json,
             content=message.content,
             created_at=message.created_at,
             visibility_scope="dm" if guild_id is None else "public",
+            is_tracked=is_tracked,
         )
         count += 1
 
         if count % 100 == 0:
-            logger.info(f"Backfilled {count} messages from {channel.name}")
+            logger.info(f"Backfilled {count} messages from {channel_name}")
 
-    logger.info(f"Backfill complete for {channel.name}: {count} messages")
+    logger.info(f"Backfill complete for {channel_name}: {count} messages")
     return count
 
 
@@ -107,3 +119,30 @@ def _get_roles_snapshot(message: discord.Message) -> str:
         role_ids = [role.id for role in message.author.roles if role.name != "@everyone"]
         return json.dumps(role_ids)
     return "[]"
+
+
+def _is_user_tracked(message: discord.Message, tracking_opt_in_role: str | None) -> bool:
+    """Check if user has opted in for tracking.
+
+    Args:
+        message: The Discord message.
+        tracking_opt_in_role: Role name required for tracking (None = all tracked).
+
+    Returns:
+        True if user should be tracked, False otherwise.
+    """
+    # DMs always tracked (initiation implies consent)
+    if message.guild is None:
+        return True
+
+    # No role configured = everyone tracked
+    if not tracking_opt_in_role:
+        return True
+
+    # Check if user has the role
+    if isinstance(message.author, discord.Member):
+        return any(
+            role.name == tracking_opt_in_role for role in message.author.roles
+        )
+
+    return False  # Can't verify role = not tracked

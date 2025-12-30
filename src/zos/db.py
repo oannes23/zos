@@ -13,7 +13,7 @@ from zos.logging import get_logger
 logger = get_logger("db")
 
 # Current schema version
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Base schema SQL
 BASE_SCHEMA = """
@@ -81,6 +81,28 @@ MIGRATIONS: dict[int, str] = {
 
     -- Update schema version
     UPDATE zos_metadata SET value = '2', updated_at = datetime('now') WHERE key = 'schema_version';
+    """,
+    # Migration from version 2 to 3: Add name columns and tracking flag
+    3: """
+    -- Schema version 3: Name columns and user tracking
+
+    -- Add name columns to messages table
+    ALTER TABLE messages ADD COLUMN author_name TEXT;
+    ALTER TABLE messages ADD COLUMN channel_name TEXT;
+    ALTER TABLE messages ADD COLUMN guild_name TEXT;
+
+    -- Add tracking flag (1 = user has opt-in role, 0 = they don't)
+    -- Default 1 for backwards compatibility (existing messages treated as tracked)
+    ALTER TABLE messages ADD COLUMN is_tracked INTEGER NOT NULL DEFAULT 1;
+
+    -- Add user_name to reactions table
+    ALTER TABLE reactions ADD COLUMN user_name TEXT;
+
+    -- Index for querying by tracking status
+    CREATE INDEX IF NOT EXISTS idx_messages_is_tracked ON messages(is_tracked);
+
+    -- Update schema version
+    UPDATE zos_metadata SET value = '3', updated_at = datetime('now') WHERE key = 'schema_version';
     """,
 }
 

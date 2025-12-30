@@ -5,21 +5,28 @@ discord:
   # Token should be set via ZOS_DISCORD__TOKEN environment variable
   # token: "your-bot-token-here"
 
-  # Guild (server) IDs to watch
-  guild_ids:
-    - 123456789012345678
+  # Guild (server) names to watch (empty = all guilds bot is in)
+  guilds: []
+    # - "My Discord Server"
+    # - "Another Server"
 
-  # Channels to observe (all messages logged)
-  watched_channel_ids:
-    - 123456789012345678
-    - 234567890123456789
+  # Channels to EXCLUDE from observation (opt-out by name)
+  # By default, Zos observes all channels it has access to
+  excluded_channels:
+    - bot-spam
+    - admin-only
+    - mod-logs
 
-  # Channels where Zos can speak
-  output_channel_ids:
-    - 123456789012345678
+  # Channels where Zos can send messages (by name)
+  output_channels:
+    - zos-thoughts
+    - general
 
-  # Role required for DM opt-in (optional)
-  required_role: "zos-dm-enabled"
+  # Role required for user tracking (optional)
+  # Users without this role: messages stored but zero salience (not reflected upon)
+  # Users with this role: full tracking and reflection
+  # Leave empty/null to track all users
+  tracking_opt_in_role: "Zos Participant"
 
 database:
   # SQLite database location

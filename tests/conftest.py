@@ -47,6 +47,7 @@ def mock_discord_user() -> MagicMock:
     user = MagicMock()
     user.id = 123456789
     user.name = "TestUser"
+    user.display_name = "Test User"
     user.bot = False
     return user
 
