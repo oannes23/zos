@@ -47,16 +47,16 @@ class TestShouldProcessMessage:
     def test_filters_by_guild(
         self, message_repository: MessageRepository, salience_earner: SalienceEarner
     ):
-        """Test guild filtering by name."""
-        config = DiscordConfig(token="test", guilds=["AllowedGuild"])
+        """Test guild filtering by ID."""
+        config = DiscordConfig(token="test", guilds=[111111111111111111])
         client = ZosDiscordClient(
             config=config, repository=message_repository, salience_earner=salience_earner
         )
 
         message = MagicMock()
         message.author.bot = False
-        message.guild.name = "OtherGuild"
-        message.channel.name = "general"
+        message.guild.id = 222222222222222222  # Different guild
+        message.channel.id = 333333333333333333
 
         assert client._should_process_message(message) is False
 
@@ -64,23 +64,23 @@ class TestShouldProcessMessage:
         self, message_repository: MessageRepository, salience_earner: SalienceEarner
     ):
         """Test that configured guilds are allowed."""
-        config = DiscordConfig(token="test", guilds=["AllowedGuild"])
+        config = DiscordConfig(token="test", guilds=[111111111111111111])
         client = ZosDiscordClient(
             config=config, repository=message_repository, salience_earner=salience_earner
         )
 
         message = MagicMock()
         message.author.bot = False
-        message.guild.name = "AllowedGuild"
-        message.channel.name = "general"
+        message.guild.id = 111111111111111111  # Configured guild
+        message.channel.id = 333333333333333333
 
         assert client._should_process_message(message) is True
 
-    def test_excludes_channel_by_name(
+    def test_excludes_channel_by_id(
         self, message_repository: MessageRepository, salience_earner: SalienceEarner
     ):
-        """Test channel exclusion by name (opt-out)."""
-        config = DiscordConfig(token="test", excluded_channels=["bot-spam"])
+        """Test channel exclusion by ID (opt-out)."""
+        config = DiscordConfig(token="test", excluded_channels=[444444444444444444])
         client = ZosDiscordClient(
             config=config, repository=message_repository, salience_earner=salience_earner
         )
@@ -88,7 +88,7 @@ class TestShouldProcessMessage:
         message = MagicMock()
         message.author.bot = False
         message.guild = None
-        message.channel.name = "bot-spam"
+        message.channel.id = 444444444444444444  # Excluded channel
 
         assert client._should_process_message(message) is False
 
@@ -96,7 +96,7 @@ class TestShouldProcessMessage:
         self, message_repository: MessageRepository, salience_earner: SalienceEarner
     ):
         """Test that non-excluded channels are allowed (opt-out default)."""
-        config = DiscordConfig(token="test", excluded_channels=["bot-spam"])
+        config = DiscordConfig(token="test", excluded_channels=[444444444444444444])
         client = ZosDiscordClient(
             config=config, repository=message_repository, salience_earner=salience_earner
         )
@@ -104,7 +104,7 @@ class TestShouldProcessMessage:
         message = MagicMock()
         message.author.bot = False
         message.guild = None
-        message.channel.name = "general"
+        message.channel.id = 555555555555555555  # Not excluded
 
         assert client._should_process_message(message) is True
 
@@ -112,7 +112,7 @@ class TestShouldProcessMessage:
         self, message_repository: MessageRepository, salience_earner: SalienceEarner
     ):
         """Test that DMs bypass guild filtering."""
-        config = DiscordConfig(token="test", guilds=["SomeGuild"])
+        config = DiscordConfig(token="test", guilds=[111111111111111111])
         client = ZosDiscordClient(
             config=config, repository=message_repository, salience_earner=salience_earner
         )
@@ -120,7 +120,7 @@ class TestShouldProcessMessage:
         message = MagicMock()
         message.author.bot = False
         message.guild = None  # DM
-        message.channel.name = None  # DM channels don't have names
+        message.channel.id = 666666666666666666  # DM channel ID
 
         # DMs should still be processed despite guild filter
         assert client._should_process_message(message) is True

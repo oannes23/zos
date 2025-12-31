@@ -13,7 +13,7 @@ from zos.logging import get_logger
 logger = get_logger("db")
 
 # Current schema version
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Base schema SQL
 BASE_SCHEMA = """
@@ -183,6 +183,25 @@ MIGRATIONS: dict[int, str] = {
 
     -- Update schema version
     UPDATE zos_metadata SET value = '5', updated_at = datetime('now') WHERE key = 'schema_version';
+    """,
+    # Migration from version 5 to 6: Thread parent tracking and query indexes
+    6: """
+    -- Schema version 6: Thread parent tracking and message query indexes
+
+    -- Add parent_channel_id for thread messages
+    -- For regular channel messages: NULL
+    -- For thread messages: the parent channel ID
+    ALTER TABLE messages ADD COLUMN parent_channel_id INTEGER;
+
+    -- Index for finding threads by parent channel
+    CREATE INDEX IF NOT EXISTS idx_messages_parent_channel ON messages(parent_channel_id);
+
+    -- Performance indexes for message queries (context assembly)
+    CREATE INDEX IF NOT EXISTS idx_messages_channel_time ON messages(channel_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_author_time ON messages(author_id, created_at);
+
+    -- Update schema version
+    UPDATE zos_metadata SET value = '6', updated_at = datetime('now') WHERE key = 'schema_version';
     """,
 }
 

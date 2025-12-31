@@ -32,6 +32,7 @@ class MessageRepository:
         channel_id: int,
         channel_name: str,
         thread_id: int | None,
+        parent_channel_id: int | None,
         author_id: int,
         author_name: str,
         author_roles_snapshot: str,
@@ -45,6 +46,8 @@ class MessageRepository:
         Uses INSERT ... ON CONFLICT for idempotent upserts (important for backfill).
 
         Args:
+            thread_id: Thread ID if message is in a thread (channel_id will be the thread).
+            parent_channel_id: Parent channel ID for thread messages (NULL for regular channels).
             is_tracked: Whether the user has opted in for tracking.
                         False = zero salience, not reflected upon.
         """
@@ -52,9 +55,9 @@ class MessageRepository:
             """
             INSERT INTO messages (
                 message_id, guild_id, guild_name, channel_id, channel_name,
-                thread_id, author_id, author_name, author_roles_snapshot,
+                thread_id, parent_channel_id, author_id, author_name, author_roles_snapshot,
                 content, created_at, visibility_scope, is_tracked
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(message_id) DO UPDATE SET
                 content = excluded.content,
                 author_name = excluded.author_name,
@@ -73,6 +76,7 @@ class MessageRepository:
                 channel_id,
                 channel_name,
                 thread_id,
+                parent_channel_id,
                 author_id,
                 author_name,
                 author_roles_snapshot,
@@ -206,3 +210,230 @@ class MessageRepository:
                 "SELECT COUNT(*) FROM messages WHERE is_deleted = 0"
             ).fetchone()
         return result[0] if result else 0
+
+    def get_messages_by_channel(
+        self,
+        channel_id: int,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Fetch messages for a channel within a time range.
+
+        Args:
+            channel_id: The channel to query.
+            since: Optional start of time range (inclusive).
+            until: Optional end of time range (inclusive).
+            limit: Maximum number of messages to return.
+
+        Returns:
+            List of message dicts with all message fields.
+        """
+        query = """
+            SELECT
+                message_id, guild_id, guild_name, channel_id, channel_name,
+                thread_id, parent_channel_id, author_id, author_name,
+                author_roles_snapshot, content, created_at, edited_at,
+                visibility_scope, is_tracked, is_deleted
+            FROM messages
+            WHERE channel_id = ? AND is_deleted = 0
+        """
+        params: list = [channel_id]
+
+        if since:
+            query += " AND created_at >= ?"
+            params.append(since.isoformat())
+        if until:
+            query += " AND created_at <= ?"
+            params.append(until.isoformat())
+
+        query += " ORDER BY created_at ASC LIMIT ?"
+        params.append(limit)
+
+        rows = self.db.execute(query, tuple(params)).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_messages_by_user(
+        self,
+        user_id: int,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Fetch messages by a user within a time range.
+
+        Args:
+            user_id: The author ID to query.
+            since: Optional start of time range (inclusive).
+            until: Optional end of time range (inclusive).
+            limit: Maximum number of messages to return.
+
+        Returns:
+            List of message dicts with all message fields.
+        """
+        query = """
+            SELECT
+                message_id, guild_id, guild_name, channel_id, channel_name,
+                thread_id, parent_channel_id, author_id, author_name,
+                author_roles_snapshot, content, created_at, edited_at,
+                visibility_scope, is_tracked, is_deleted
+            FROM messages
+            WHERE author_id = ? AND is_deleted = 0
+        """
+        params: list = [user_id]
+
+        if since:
+            query += " AND created_at >= ?"
+            params.append(since.isoformat())
+        if until:
+            query += " AND created_at <= ?"
+            params.append(until.isoformat())
+
+        query += " ORDER BY created_at ASC LIMIT ?"
+        params.append(limit)
+
+        rows = self.db.execute(query, tuple(params)).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_messages_by_user_in_channel(
+        self,
+        channel_id: int,
+        user_id: int,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Fetch messages by a user in a specific channel.
+
+        Args:
+            channel_id: The channel to query.
+            user_id: The author ID to query.
+            since: Optional start of time range (inclusive).
+            until: Optional end of time range (inclusive).
+            limit: Maximum number of messages to return.
+
+        Returns:
+            List of message dicts with all message fields.
+        """
+        query = """
+            SELECT
+                message_id, guild_id, guild_name, channel_id, channel_name,
+                thread_id, parent_channel_id, author_id, author_name,
+                author_roles_snapshot, content, created_at, edited_at,
+                visibility_scope, is_tracked, is_deleted
+            FROM messages
+            WHERE channel_id = ? AND author_id = ? AND is_deleted = 0
+        """
+        params: list = [channel_id, user_id]
+
+        if since:
+            query += " AND created_at >= ?"
+            params.append(since.isoformat())
+        if until:
+            query += " AND created_at <= ?"
+            params.append(until.isoformat())
+
+        query += " ORDER BY created_at ASC LIMIT ?"
+        params.append(limit)
+
+        rows = self.db.execute(query, tuple(params)).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_messages_involving_users(
+        self,
+        user_id_1: int,
+        user_id_2: int,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Fetch messages where either user participated (for dyad context).
+
+        This is useful for understanding the interaction between two users.
+
+        Args:
+            user_id_1: First user ID.
+            user_id_2: Second user ID.
+            since: Optional start of time range (inclusive).
+            until: Optional end of time range (inclusive).
+            limit: Maximum number of messages to return.
+
+        Returns:
+            List of message dicts with all message fields.
+        """
+        query = """
+            SELECT
+                message_id, guild_id, guild_name, channel_id, channel_name,
+                thread_id, parent_channel_id, author_id, author_name,
+                author_roles_snapshot, content, created_at, edited_at,
+                visibility_scope, is_tracked, is_deleted
+            FROM messages
+            WHERE (author_id = ? OR author_id = ?) AND is_deleted = 0
+        """
+        params: list = [user_id_1, user_id_2]
+
+        if since:
+            query += " AND created_at >= ?"
+            params.append(since.isoformat())
+        if until:
+            query += " AND created_at <= ?"
+            params.append(until.isoformat())
+
+        query += " ORDER BY created_at ASC LIMIT ?"
+        params.append(limit)
+
+        rows = self.db.execute(query, tuple(params)).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_messages_for_context(
+        self,
+        since: datetime,
+        channel_ids: list[int] | None = None,
+        user_ids: list[int] | None = None,
+        scope: str = "public",
+        limit: int = 100,
+    ) -> list[dict]:
+        """Fetch messages for LLM context assembly with filtering.
+
+        This method provides flexible filtering for building LLM context.
+
+        Args:
+            since: Only fetch messages after this timestamp.
+            channel_ids: Optional list of channel IDs to include.
+            user_ids: Optional list of user IDs to include.
+            scope: Visibility scope filter ("public", "dm", or None for all).
+            limit: Maximum number of messages to return.
+
+        Returns:
+            List of message dicts ordered by created_at ascending.
+        """
+        query = """
+            SELECT
+                message_id, guild_id, guild_name, channel_id, channel_name,
+                thread_id, parent_channel_id, author_id, author_name,
+                author_roles_snapshot, content, created_at, edited_at,
+                visibility_scope, is_tracked, is_deleted
+            FROM messages
+            WHERE is_deleted = 0 AND created_at >= ?
+        """
+        params: list = [since.isoformat()]
+
+        if scope:
+            query += " AND visibility_scope = ?"
+            params.append(scope)
+
+        if channel_ids:
+            placeholders = ",".join("?" for _ in channel_ids)
+            query += f" AND channel_id IN ({placeholders})"
+            params.extend(channel_ids)
+
+        if user_ids:
+            placeholders = ",".join("?" for _ in user_ids)
+            query += f" AND author_id IN ({placeholders})"
+            params.extend(user_ids)
+
+        query += " ORDER BY created_at ASC LIMIT ?"
+        params.append(limit)
+
+        rows = self.db.execute(query, tuple(params)).fetchall()
+        return [dict(row) for row in rows]

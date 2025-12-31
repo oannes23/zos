@@ -182,6 +182,58 @@ class TestSalienceRepository:
         total = salience_repo.get_total_earned_by_category(TopicCategory.CHANNEL)
         assert total == 5.0
 
+    def test_apply_retention_zero(self, salience_repo: SalienceRepository) -> None:
+        """Test that 0% retention resets salience to zero."""
+        now = datetime.now(UTC)
+        topic = TopicKey.user(1)
+
+        # Earn some salience
+        salience_repo.earn(topic, 100.0, "message", now)
+        assert salience_repo.get_balance(topic) == 100.0
+
+        # Apply 0% retention (reset to zero)
+        new_balance = salience_repo.apply_retention(topic, "run-123", retention=0.0)
+
+        assert new_balance == 0.0
+        assert salience_repo.get_balance(topic) == 0.0
+
+    def test_apply_retention_partial(self, salience_repo: SalienceRepository) -> None:
+        """Test that partial retention keeps a fraction of salience."""
+        now = datetime.now(UTC)
+        topic = TopicKey.user(1)
+
+        # Earn 100 points
+        salience_repo.earn(topic, 100.0, "message", now)
+
+        # Apply 30% retention (keep 30, spend 70)
+        new_balance = salience_repo.apply_retention(topic, "run-123", retention=0.3)
+
+        assert new_balance == 30.0
+        assert salience_repo.get_balance(topic) == 30.0
+
+    def test_apply_retention_full(self, salience_repo: SalienceRepository) -> None:
+        """Test that 100% retention keeps all salience."""
+        now = datetime.now(UTC)
+        topic = TopicKey.user(1)
+
+        salience_repo.earn(topic, 100.0, "message", now)
+
+        # Apply 100% retention (keep all)
+        new_balance = salience_repo.apply_retention(topic, "run-123", retention=1.0)
+
+        assert new_balance == 100.0
+        assert salience_repo.get_balance(topic) == 100.0
+
+    def test_apply_retention_zero_balance(self, salience_repo: SalienceRepository) -> None:
+        """Test that retention on zero balance does nothing."""
+        topic = TopicKey.user(1)
+
+        # No salience earned
+        new_balance = salience_repo.apply_retention(topic, "run-123", retention=0.5)
+
+        assert new_balance == 0.0
+        assert salience_repo.get_balance(topic) == 0.0
+
 
 class TestSalienceEarner:
     """Tests for SalienceEarner."""
@@ -337,3 +389,53 @@ class TestSalienceEarner:
 
         # Dyad gets 5 (message) + 2 (mention) = 7
         assert earner.repository.get_balance(TopicKey.dyad(123, 789)) == 7.0
+
+    def test_earn_for_message_anonymous_user(
+        self, salience_earner: SalienceEarner
+    ) -> None:
+        """Test anonymous users (author_id=0) don't earn salience."""
+        ctx = MessageContext(
+            author_id=0,  # Anonymous marker
+            channel_id=456,
+            content="Hello",
+            is_tracked=True,  # Even if tracked flag is True, anonymous should not earn
+        )
+        now = datetime.now(UTC)
+
+        count = salience_earner.earn_for_message(ctx, message_id=1, timestamp=now)
+
+        assert count == 0
+        assert salience_earner.repository.get_balance(TopicKey.user(0)) == 0.0
+
+    def test_earn_for_reaction_given_anonymous_reactor(
+        self, salience_earner: SalienceEarner
+    ) -> None:
+        """Test anonymous reactors (reactor_id=0) don't earn salience."""
+        now = datetime.now(UTC)
+
+        count = salience_earner.earn_for_reaction_given(
+            reactor_id=0,  # Anonymous marker
+            channel_id=456,
+            message_id=1,
+            timestamp=now,
+            is_tracked=True,  # Even if tracked flag is True, anonymous should not earn
+        )
+
+        assert count == 0
+
+    def test_earn_for_reaction_received_anonymous_author(
+        self, salience_earner: SalienceEarner
+    ) -> None:
+        """Test anonymous authors (author_id=0) don't earn salience from reactions."""
+        now = datetime.now(UTC)
+
+        count = salience_earner.earn_for_reaction_received(
+            author_id=0,  # Anonymous marker
+            reactor_id=789,
+            channel_id=456,
+            message_id=1,
+            timestamp=now,
+            is_author_tracked=True,  # Even if tracked flag is True, anonymous should not earn
+        )
+
+        assert count == 0

@@ -58,10 +58,11 @@ The system prioritizes:
 
 ### Message & Reaction Logging
 - Messages:
-  - `message_id`, `guild_id`, `channel_id`, `thread_id`
-  - `author_id`, `author_roles_snapshot`
+  - `message_id`, `guild_id`, `channel_id`, `thread_id`, `parent_channel_id`
+  - `author_id`, `author_name`, `author_roles_snapshot`
   - `content`, `created_at`
   - `visibility_scope` (public / DM)
+  - For threads: `channel_id` = thread ID, `parent_channel_id` = parent channel
 - Reactions:
   - `message_id`, `emoji`, `user_id`, `created_at`
 
@@ -107,6 +108,12 @@ Salience is **earned and spent**, not just a score.
 - Primary cost unit: **tokens**
 - Estimated pre-call, actual recorded post-call.
 - Local models allowed fixed or estimated token pricing.
+
+### Salience Retention
+- After a topic is reflected upon, salience is reduced based on `retention` config (default: 0.0).
+- `retention=0.0`: salience resets to zero after reflection.
+- `retention=0.3`: 30% of salience is retained for future runs.
+- This prevents historically active topics from dominating budget allocation indefinitely.
 
 ---
 
@@ -188,8 +195,12 @@ Each node:
 
 ## Privacy & DM Policy
 
-- Users with the required role explicitly opt in.
-- DM messages **are stored**.
+- All messages are stored, but users without the opt-in role are **anonymized**:
+  - `author_id` set to 0
+  - `author_name` set to "chat"
+  - No salience earned; not reflected upon individually
+  - Messages may provide context for tracked users
+- DM messages **are stored** when user initiates (initiation implies consent).
 - DM **text is never directly included** in public outputs.
 - Derived insights **may reference DM-derived understanding**.
 - Every Insight carries:
@@ -313,4 +324,4 @@ Outputs JSON/YAML only. No fancy UI.
 
 ---
 
-**Status:** Phases 1-4 complete. Proceeding to Phase 5 (LLM Abstraction Layer).
+**Status:** Phases 1-5 complete. Proceeding to Phase 6 (Layer Execution Engine).

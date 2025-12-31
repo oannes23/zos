@@ -7,22 +7,24 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from zos.llm.config import LLMConfig
+
 
 class DiscordConfig(BaseModel):
     """Discord connection configuration."""
 
     token: str = Field(default="", description="Discord bot token (use env var)")
-    guilds: list[str] = Field(
+    guilds: list[int] = Field(
         default_factory=list,
-        description="Guild names to watch (empty = all guilds bot is in)",
+        description="Guild IDs to watch (empty = all guilds bot is in)",
     )
-    excluded_channels: list[str] = Field(
+    excluded_channels: list[int] = Field(
         default_factory=list,
-        description="Channel names to exclude from observation (opt-out)",
+        description="Channel IDs to exclude from observation (opt-out)",
     )
-    output_channels: list[str] = Field(
+    output_channels: list[int] = Field(
         default_factory=list,
-        description="Channel names where Zos can speak",
+        description="Channel IDs where Zos can speak",
     )
     tracking_opt_in_role: str | None = Field(
         default=None,
@@ -97,6 +99,12 @@ class SalienceConfig(BaseModel):
     """Salience system configuration."""
 
     earning_weights: EarningWeights = Field(default_factory=EarningWeights)
+    retention: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of salience retained after reflection (0.0 = reset, 1.0 = keep all)",
+    )
 
 
 class LoggingConfig(BaseModel):
@@ -124,6 +132,9 @@ class ZosConfig(BaseSettings):
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     salience: SalienceConfig = Field(default_factory=SalienceConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    llm: LLMConfig | None = Field(
+        default=None, description="LLM provider configuration"
+    )
     layers_dir: Path = Field(
         default=Path("layers"), description="Directory containing layer definitions"
     )

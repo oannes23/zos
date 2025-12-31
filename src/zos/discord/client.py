@@ -73,21 +73,21 @@ class ZosDiscordClient(discord.Client):
         super().__init__(intents=intents, **kwargs)
 
     def _should_process_guild(self, guild: discord.Guild | None) -> bool:
-        """Check if we should process events from this guild (by name)."""
+        """Check if we should process events from this guild (by ID)."""
         if guild is None:
             return True  # DMs always processed
         if not self.config.guilds:
             return True  # No filter = process all guilds
-        return guild.name in self.config.guilds
+        return guild.id in self.config.guilds
 
     def _should_process_channel(self, channel: discord.abc.Messageable) -> bool:
-        """Check if channel should be processed (opt-out by name)."""
+        """Check if channel should be processed (opt-out by ID)."""
         if not self.config.excluded_channels:
             return True  # No exclusions = process all
-        channel_name = getattr(channel, "name", None)
-        if channel_name is None:
-            return True  # DM channels don't have names, always process
-        return channel_name not in self.config.excluded_channels
+        channel_id = getattr(channel, "id", None)
+        if channel_id is None:
+            return True  # Should not happen, but be safe
+        return channel_id not in self.config.excluded_channels
 
     def _should_process_message(self, message: discord.Message) -> bool:
         """Determine if a message should be processed."""
@@ -192,27 +192,48 @@ class ZosDiscordClient(discord.Client):
 
         is_tracked = self._is_user_tracked(message)
 
+        # Determine thread/channel relationship
+        is_thread = isinstance(message.channel, discord.Thread)
+        if is_thread:
+            # For threads: channel_id = thread_id, parent_channel_id = parent
+            channel_id = message.channel.id
+            thread_id = message.channel.id
+            parent_channel_id = message.channel.parent_id
+        else:
+            # For regular channels: no thread info
+            channel_id = message.channel.id
+            thread_id = None
+            parent_channel_id = None
+
+        # Anonymize non-opted users (privacy protection)
+        if is_tracked:
+            author_id = message.author.id
+            author_name = message.author.display_name
+            author_roles_snapshot = self._get_roles_snapshot(message)
+        else:
+            author_id = 0  # Anonymous marker
+            author_name = "chat"
+            author_roles_snapshot = "[]"
+
         try:
             self.repository.upsert_message(
                 message_id=message.id,
                 guild_id=message.guild.id if message.guild else None,
                 guild_name=message.guild.name if message.guild else None,
-                channel_id=message.channel.id,
+                channel_id=channel_id,
                 channel_name=getattr(message.channel, "name", "DM"),
-                thread_id=(
-                    message.channel.id
-                    if isinstance(message.channel, discord.Thread)
-                    else None
-                ),
-                author_id=message.author.id,
-                author_name=message.author.display_name,
-                author_roles_snapshot=self._get_roles_snapshot(message),
+                thread_id=thread_id,
+                parent_channel_id=parent_channel_id,
+                author_id=author_id,
+                author_name=author_name,
+                author_roles_snapshot=author_roles_snapshot,
                 content=message.content,
                 created_at=message.created_at,
                 visibility_scope="dm" if message.guild is None else "public",
                 is_tracked=is_tracked,
             )
-            # Earn salience for this message
+            # Earn salience for this message (only for tracked users)
+            # Note: author_id is already 0 for non-tracked users
             reply_author_id = None
             if message.reference and message.reference.resolved:
                 ref = message.reference.resolved
@@ -220,7 +241,7 @@ class ZosDiscordClient(discord.Client):
                     reply_author_id = ref.author.id
 
             ctx = MessageContext(
-                author_id=message.author.id,
+                author_id=author_id,  # Use anonymized ID
                 channel_id=message.channel.id,
                 content=message.content,
                 reply_to_author_id=reply_author_id,
@@ -231,7 +252,7 @@ class ZosDiscordClient(discord.Client):
             )
 
             logger.debug(
-                f"Stored message {message.id} from {message.author.display_name} "
+                f"Stored message {message.id} from {author_name} "
                 f"(tracked={is_tracked})"
             )
         except Exception as e:
@@ -281,21 +302,30 @@ class ZosDiscordClient(discord.Client):
         if not self._should_process_channel(message.channel):
             return
 
+        is_reactor_tracked = self._is_member_tracked(user)
+
+        # Anonymize non-opted reactors (privacy protection)
+        if is_reactor_tracked:
+            reactor_id = user.id
+            reactor_name = user.display_name
+        else:
+            reactor_id = 0  # Anonymous marker
+            reactor_name = "chat"
+
         emoji_str = str(reaction.emoji)
         try:
             now = datetime.now(UTC)
             self.repository.add_reaction(
                 message_id=message.id,
                 emoji=emoji_str,
-                user_id=user.id,
-                user_name=user.display_name,
+                user_id=reactor_id,
+                user_name=reactor_name,
                 created_at=now,
             )
 
             # Earn salience for reaction given (reactor)
-            is_reactor_tracked = self._is_member_tracked(user)
             self.salience_earner.earn_for_reaction_given(
-                reactor_id=user.id,
+                reactor_id=reactor_id,  # Use anonymized ID
                 channel_id=message.channel.id,
                 message_id=message.id,
                 timestamp=now,
@@ -303,11 +333,13 @@ class ZosDiscordClient(discord.Client):
             )
 
             # Earn salience for reaction received (message author)
+            # Note: We use the real author_id here for salience tracking
+            # (the message author is already tracked or anonymous in their message)
             if message.author.id != user.id:  # Don't double-count self-reactions
                 is_author_tracked = self._is_user_tracked(message)
                 self.salience_earner.earn_for_reaction_received(
-                    author_id=message.author.id,
-                    reactor_id=user.id,
+                    author_id=message.author.id if is_author_tracked else 0,
+                    reactor_id=reactor_id,
                     channel_id=message.channel.id,
                     message_id=message.id,
                     timestamp=now,
@@ -331,12 +363,17 @@ class ZosDiscordClient(discord.Client):
         if not self._should_process_channel(message.channel):
             return
 
+        is_reactor_tracked = self._is_member_tracked(user)
+
+        # Use anonymized ID for non-tracked users (matches how we stored the reaction)
+        reactor_id = user.id if is_reactor_tracked else 0
+
         emoji_str = str(reaction.emoji)
         try:
             self.repository.remove_reaction(
                 message_id=message.id,
                 emoji=emoji_str,
-                user_id=user.id,
+                user_id=reactor_id,
             )
             logger.debug(f"Removed reaction {emoji_str} from message {message.id}")
         except Exception as e:

@@ -48,7 +48,8 @@ class SalienceEarner:
         Returns:
             Number of salience entries created.
         """
-        if not ctx.is_tracked:
+        # Skip untracked users and anonymous users (author_id == 0)
+        if not ctx.is_tracked or ctx.author_id == 0:
             return 0
 
         topic_keys = extract_topic_keys(ctx)
@@ -92,7 +93,8 @@ class SalienceEarner:
         Returns:
             Number of salience entries created.
         """
-        if not is_tracked:
+        # Skip untracked users and anonymous reactors (reactor_id == 0)
+        if not is_tracked or reactor_id == 0:
             return 0
 
         entries: list[tuple[TopicKey, float, str, datetime, int | None]] = []
@@ -148,7 +150,8 @@ class SalienceEarner:
         Returns:
             Number of salience entries created.
         """
-        if not is_author_tracked:
+        # Skip untracked authors and anonymous authors (author_id == 0)
+        if not is_author_tracked or author_id == 0:
             return 0
 
         entries: list[tuple[TopicKey, float, str, datetime, int | None]] = []

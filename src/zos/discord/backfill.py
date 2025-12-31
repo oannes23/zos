@@ -73,14 +73,27 @@ async def backfill_channel(
         if message.author.bot:
             continue
 
-        # Get role snapshot
-        roles_json = _get_roles_snapshot(message)
-
-        # Determine if in thread
-        thread_id = channel_id if isinstance(channel, discord.Thread) else None
+        # Determine thread/channel relationship
+        is_thread = isinstance(channel, discord.Thread)
+        if is_thread:
+            thread_id = channel_id
+            parent_channel_id = channel.parent_id
+        else:
+            thread_id = None
+            parent_channel_id = None
 
         # Determine tracking status
         is_tracked = _is_user_tracked(message, tracking_opt_in_role)
+
+        # Anonymize non-opted users (privacy protection)
+        if is_tracked:
+            author_id = message.author.id
+            author_name = message.author.display_name
+            roles_json = _get_roles_snapshot(message)
+        else:
+            author_id = 0  # Anonymous marker
+            author_name = "chat"
+            roles_json = "[]"
 
         repository.upsert_message(
             message_id=message.id,
@@ -89,8 +102,9 @@ async def backfill_channel(
             channel_id=channel_id,
             channel_name=channel_name,
             thread_id=thread_id,
-            author_id=message.author.id,
-            author_name=message.author.display_name,
+            parent_channel_id=parent_channel_id,
+            author_id=author_id,
+            author_name=author_name,
             author_roles_snapshot=roles_json,
             content=message.content,
             created_at=message.created_at,

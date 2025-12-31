@@ -32,14 +32,14 @@ class TestDiscordConfig:
     def test_custom_values(self):
         config = DiscordConfig(
             token="test-token",
-            guilds=["Test Guild", "Other Guild"],
-            excluded_channels=["bot-spam"],
-            output_channels=["general"],
+            guilds=[111111111111111111, 222222222222222222],
+            excluded_channels=[333333333333333333],
+            output_channels=[444444444444444444],
             tracking_opt_in_role="Zos Participant",
         )
         assert config.token == "test-token"
-        assert config.guilds == ["Test Guild", "Other Guild"]
-        assert config.excluded_channels == ["bot-spam"]
+        assert config.guilds == [111111111111111111, 222222222222222222]
+        assert config.excluded_channels == [333333333333333333]
         assert config.tracking_opt_in_role == "Zos Participant"
 
 
@@ -116,6 +116,24 @@ class TestSalienceConfig:
     def test_defaults(self):
         config = SalienceConfig()
         assert isinstance(config.earning_weights, EarningWeights)
+        assert config.retention == 0.0
+
+    def test_retention_bounds(self):
+        # Valid values
+        config = SalienceConfig(retention=0.0)
+        assert config.retention == 0.0
+        config = SalienceConfig(retention=0.5)
+        assert config.retention == 0.5
+        config = SalienceConfig(retention=1.0)
+        assert config.retention == 1.0
+
+    def test_retention_out_of_bounds(self):
+        import pytest
+
+        with pytest.raises(ValueError):
+            SalienceConfig(retention=-0.1)
+        with pytest.raises(ValueError):
+            SalienceConfig(retention=1.1)
 
 
 class TestLoggingConfig:
@@ -156,7 +174,7 @@ class TestLoadConfig:
     def test_load_from_yaml(self, temp_dir: Path):
         config_path = temp_dir / "config.yml"
         config_data = {
-            "discord": {"guilds": ["Test Guild"]},
+            "discord": {"guilds": [111111111111111111]},
             "logging": {"level": "DEBUG"},
             "enabled_layers": ["test_layer"],
         }
@@ -164,7 +182,7 @@ class TestLoadConfig:
             yaml.dump(config_data, f)
 
         config = load_config(config_path)
-        assert config.discord.guilds == ["Test Guild"]
+        assert config.discord.guilds == [111111111111111111]
         assert config.logging.level == "DEBUG"
         assert config.enabled_layers == ["test_layer"]
 
@@ -176,7 +194,7 @@ class TestLoadConfig:
     def test_env_provides_defaults(self, temp_dir: Path, monkeypatch):
         config_path = temp_dir / "config.yml"
         # YAML doesn't specify logging level
-        config_data = {"discord": {"guilds": ["Test Guild"]}}
+        config_data = {"discord": {"guilds": [111111111111111111]}}
         with open(config_path, "w") as f:
             yaml.dump(config_data, f)
 

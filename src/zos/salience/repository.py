@@ -315,3 +315,38 @@ class SalienceRepository:
                 (category.value,),
             ).fetchone()
         return float(result[0]) if result and result[0] else 0.0
+
+    def apply_retention(
+        self,
+        topic_key: TopicKey,
+        run_id: str,
+        retention: float = 0.0,
+    ) -> float:
+        """Apply retention after reflection, reducing salience balance.
+
+        After a topic has been reflected upon, this method applies the retention
+        policy by spending a portion of the salience. The remaining balance is
+        retained for future reflection runs.
+
+        Args:
+            topic_key: The topic to apply retention to.
+            run_id: UUID of the reflection run.
+            retention: Fraction to retain (0.0 = reset to zero, 1.0 = keep all).
+
+        Returns:
+            New balance after retention is applied.
+
+        Example:
+            If current balance is 100 and retention is 0.23:
+            - Spends 77 (100 * 0.77)
+            - Returns 23 (the remaining balance)
+        """
+        current = self.get_balance(topic_key)
+        if current <= 0:
+            return 0.0
+
+        spend_amount = current * (1.0 - retention)
+        if spend_amount > 0:
+            self.spend(topic_key, spend_amount, run_id, layer="retention", node=None)
+
+        return current - spend_amount

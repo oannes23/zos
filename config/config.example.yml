@@ -5,25 +5,26 @@ discord:
   # Token should be set via ZOS_DISCORD__TOKEN environment variable
   # token: "your-bot-token-here"
 
-  # Guild (server) names to watch (empty = all guilds bot is in)
+  # Guild (server) IDs to watch (empty = all guilds bot is in)
+  # Get IDs by enabling Developer Mode in Discord and right-clicking servers
   guilds: []
-    # - "My Discord Server"
-    # - "Another Server"
+    # - 123456789012345678
+    # - 987654321098765432
 
-  # Channels to EXCLUDE from observation (opt-out by name)
+  # Channel IDs to EXCLUDE from observation (opt-out)
   # By default, Zos observes all channels it has access to
-  excluded_channels:
-    - bot-spam
-    - admin-only
-    - mod-logs
+  # Get IDs by right-clicking channels with Developer Mode enabled
+  excluded_channels: []
+    # - 111111111111111111  # bot-spam
+    # - 222222222222222222  # admin-only
 
-  # Channels where Zos can send messages (by name)
-  output_channels:
-    - zos-thoughts
-    - general
+  # Channel IDs where Zos can send messages
+  output_channels: []
+    # - 333333333333333333  # zos-thoughts
+    # - 444444444444444444  # general
 
   # Role required for user tracking (optional)
-  # Users without this role: messages stored but zero salience (not reflected upon)
+  # Users without this role: messages stored anonymously (author_id=0, name="chat")
   # Users with this role: full tracking and reflection
   # Leave empty/null to track all users
   tracking_opt_in_role: "Zos Participant"
@@ -55,6 +56,11 @@ salience:
     reaction_received: 0.3 # Points for receiving a reaction
     mention: 0.5           # Bonus points for mentions/replies (added to dyad keys)
 
+  # Retention fraction after reflection (0.0 = reset, 1.0 = keep all)
+  # After a topic is reflected upon, this fraction of salience is retained
+  # Example: 0.0 means salience resets to zero, 0.3 means keep 30%
+  retention: 0.0
+
 logging:
   # Log level: DEBUG, INFO, WARNING, ERROR
   level: "INFO"
@@ -69,3 +75,51 @@ layers_dir: "layers"
 enabled_layers:
   # - channel_digest
   # - social_dynamics
+
+# LLM Provider Configuration
+llm:
+  # Default provider to use (openai, anthropic, ollama, or a generic provider name)
+  default_provider: openai
+
+  # Global default model (overrides provider defaults)
+  # default_model: gpt-4o
+
+  # Retry configuration for API calls
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 1.0
+    max_delay_seconds: 60.0
+    exponential_base: 2.0
+    retryable_status_codes: [429, 500, 502, 503, 504]
+
+  # OpenAI provider (also works with Azure OpenAI, local OpenAI-compatible servers)
+  openai:
+    # API key should be set via ZOS_LLM__OPENAI__API_KEY environment variable
+    # api_key: "sk-..."
+    base_url: "https://api.openai.com/v1"
+    default_model: gpt-4o-mini
+    timeout_seconds: 60
+
+  # Anthropic Claude provider
+  anthropic:
+    # API key should be set via ZOS_LLM__ANTHROPIC__API_KEY environment variable
+    # api_key: "sk-ant-..."
+    default_model: claude-sonnet-4-20250514
+    timeout_seconds: 60
+    max_tokens: 4096
+
+  # Ollama local models (no API key required)
+  ollama:
+    base_url: "http://localhost:11434"
+    default_model: llama3.2
+    timeout_seconds: 120  # Longer timeout for local models
+
+  # Generic HTTP providers for custom APIs
+  # generic:
+  #   my-custom-api:
+  #     base_url: "http://localhost:8000"
+  #     api_key: "optional-key"
+  #     default_model: custom-model
+  #     timeout_seconds: 60
+  #     endpoint_path: "/v1/chat/completions"
+  #     response_content_path: "choices.0.message.content"

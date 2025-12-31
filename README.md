@@ -40,13 +40,15 @@ Insights persist. When Zos reflects again tomorrow, it can reference what it lea
 
 ## Current Status
 
-Zos is in early development. Currently implemented:
+Zos is in active development. Currently implemented:
 
 - **Phase 1**: Project foundation (config, database, logging)
 - **Phase 2**: Discord ingestion (message/reaction capture, backfill)
 - **Phase 3**: Topic system and salience ledger (attention allocation)
+- **Phase 4**: Budget allocation system (token distribution by salience)
+- **Phase 5**: LLM abstraction layer (multi-provider support, prompts, retry)
 
-Coming next: budget allocation, LLM integration, and the first reflection layers.
+Coming next: Layer execution engine and the first reflection layers.
 
 ## Quick Start
 
@@ -110,6 +112,23 @@ uv run python -m zos.cli salience top --category user --days 7
 uv run python -m zos.cli salience balance user:123456789
 ```
 
-## Privacy Note
+Preview budget allocation:
 
-Zos stores Discord messages locally. Users without the tracking opt-in role have their messages stored but receive zero salience (Zos won't actively reflect on them). DM ingestion requires explicit opt-in. The system is designed to be transparent about what it observes and respects user consent boundaries.
+```bash
+# Preview how budget would be allocated
+uv run python -m zos.cli budget preview
+
+# Preview with custom total token budget
+uv run python -m zos.cli budget preview --total-tokens 50000
+```
+
+Manage LLM providers:
+
+```bash
+# List configured providers
+uv run python -m zos.cli llm list
+
+# Test a provider connection
+uv run python -m zos.cli llm test --provider openai
+uv run python -m zos.cli llm test --provider anthropic --model claude-sonnet-4-20250514
+```

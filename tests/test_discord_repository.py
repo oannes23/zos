@@ -1,6 +1,6 @@
 """Tests for Discord message repository."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from zos.discord.repository import MessageRepository
 
@@ -17,6 +17,7 @@ class TestMessageRepository:
             channel_id=555555555,
             channel_name="general",
             thread_id=None,
+            parent_channel_id=None,
             author_id=123456789,
             author_name="TestUser",
             author_roles_snapshot="[111, 222]",
@@ -41,6 +42,7 @@ class TestMessageRepository:
                 channel_id=555555555,
                 channel_name="general",
                 thread_id=None,
+                parent_channel_id=None,
                 author_id=123456789,
                 author_name="TestUser",
                 author_roles_snapshot="[]",
@@ -68,6 +70,7 @@ class TestMessageRepository:
             channel_id=555555555,
             channel_name="general",
             thread_id=None,
+            parent_channel_id=None,
             author_id=123456789,
             author_name="TestUser",
             author_roles_snapshot="[]",
@@ -84,6 +87,7 @@ class TestMessageRepository:
             channel_id=555555555,
             channel_name="general",
             thread_id=None,
+            parent_channel_id=None,
             author_id=123456789,
             author_name="TestUser",
             author_roles_snapshot="[]",
@@ -112,6 +116,7 @@ class TestMessageRepository:
             channel_id=555555555,
             channel_name="general",
             thread_id=None,
+            parent_channel_id=None,
             author_id=123456789,
             author_name="TestUser",
             author_roles_snapshot="[]",
@@ -143,6 +148,7 @@ class TestMessageRepository:
             channel_id=555555555,
             channel_name="general",
             thread_id=None,
+            parent_channel_id=None,
             author_id=123456789,
             author_name="TestUser",
             author_roles_snapshot="[]",
@@ -172,6 +178,7 @@ class TestMessageRepository:
             channel_id=555555555,
             channel_name="general",
             thread_id=None,
+            parent_channel_id=None,
             author_id=123456789,
             author_name="TestUser",
             author_roles_snapshot="[]",
@@ -206,6 +213,7 @@ class TestMessageRepository:
             channel_id=555555555,
             channel_name="general",
             thread_id=None,
+            parent_channel_id=None,
             author_id=123456789,
             author_name="TestUser",
             author_roles_snapshot="[]",
@@ -247,6 +255,7 @@ class TestMessageRepository:
             channel_id=555555555,
             channel_name="general",
             thread_id=None,
+            parent_channel_id=None,
             author_id=123456789,
             author_name="TestUser",
             author_roles_snapshot="[]",
@@ -301,6 +310,7 @@ class TestGetLatestMessageId:
                 channel_id=555,
                 channel_name="general",
                 thread_id=None,
+                parent_channel_id=None,
                 author_id=1,
                 author_name="TestUser",
                 author_roles_snapshot="[]",
@@ -329,6 +339,7 @@ class TestMessageCount:
                 channel_id=555,
                 channel_name="general",
                 thread_id=None,
+                parent_channel_id=None,
                 author_id=1,
                 author_name="TestUser",
                 author_roles_snapshot="[]",
@@ -351,6 +362,7 @@ class TestMessageCount:
                 channel_id=555,
                 channel_name="general",
                 thread_id=None,
+                parent_channel_id=None,
                 author_id=1,
                 author_name="TestUser",
                 author_roles_snapshot="[]",
@@ -378,6 +390,7 @@ class TestMessageCount:
                 channel_id=555,
                 channel_name="general",
                 thread_id=None,
+                parent_channel_id=None,
                 author_id=1,
                 author_name="TestUser",
                 author_roles_snapshot="[]",
@@ -395,6 +408,7 @@ class TestMessageCount:
                 channel_id=666,
                 channel_name="other",
                 thread_id=None,
+                parent_channel_id=None,
                 author_id=1,
                 author_name="TestUser",
                 author_roles_snapshot="[]",
@@ -405,3 +419,183 @@ class TestMessageCount:
 
         assert message_repository.get_message_count(channel_id=555) == 3
         assert message_repository.get_message_count(channel_id=666) == 2
+
+
+class TestMessageQueries:
+    """Tests for message query methods."""
+
+    def _insert_test_messages(
+        self, repository: MessageRepository, now: datetime
+    ) -> None:
+        """Helper to insert test messages for query tests."""
+        # User 1 in channel 100: 3 messages
+        for i in range(3):
+            repository.upsert_message(
+                message_id=100 + i,
+                guild_id=1,
+                guild_name="TestGuild",
+                channel_id=100,
+                channel_name="general",
+                thread_id=None,
+                parent_channel_id=None,
+                author_id=1,
+                author_name="Alice",
+                author_roles_snapshot="[]",
+                content=f"Message {i} from Alice in general",
+                created_at=now - timedelta(hours=i),
+                visibility_scope="public",
+            )
+        # User 2 in channel 100: 2 messages
+        for i in range(2):
+            repository.upsert_message(
+                message_id=200 + i,
+                guild_id=1,
+                guild_name="TestGuild",
+                channel_id=100,
+                channel_name="general",
+                thread_id=None,
+                parent_channel_id=None,
+                author_id=2,
+                author_name="Bob",
+                author_roles_snapshot="[]",
+                content=f"Message {i} from Bob in general",
+                created_at=now - timedelta(hours=i + 3),
+                visibility_scope="public",
+            )
+        # User 1 in channel 200: 2 messages
+        for i in range(2):
+            repository.upsert_message(
+                message_id=300 + i,
+                guild_id=1,
+                guild_name="TestGuild",
+                channel_id=200,
+                channel_name="random",
+                thread_id=None,
+                parent_channel_id=None,
+                author_id=1,
+                author_name="Alice",
+                author_roles_snapshot="[]",
+                content=f"Message {i} from Alice in random",
+                created_at=now - timedelta(hours=i + 5),
+                visibility_scope="public",
+            )
+
+    def test_get_messages_by_channel(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test fetching messages by channel."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        messages = message_repository.get_messages_by_channel(100)
+        assert len(messages) == 5  # 3 from Alice + 2 from Bob
+        assert all(m["channel_id"] == 100 for m in messages)
+
+    def test_get_messages_by_channel_with_time_filter(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test fetching messages by channel with time filter."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        # Only get messages from last 1.5 hours (excludes message at -2 hours)
+        since = now - timedelta(hours=1, minutes=30)
+        messages = message_repository.get_messages_by_channel(100, since=since)
+        assert len(messages) == 2  # Only Alice's messages at 0 and -1 hours
+
+    def test_get_messages_by_user(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test fetching messages by user."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        messages = message_repository.get_messages_by_user(1)
+        assert len(messages) == 5  # 3 in channel 100 + 2 in channel 200
+        assert all(m["author_id"] == 1 for m in messages)
+
+    def test_get_messages_by_user_in_channel(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test fetching messages by user in a specific channel."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        messages = message_repository.get_messages_by_user_in_channel(100, 1)
+        assert len(messages) == 3  # Alice's 3 messages in general
+        assert all(m["channel_id"] == 100 and m["author_id"] == 1 for m in messages)
+
+    def test_get_messages_involving_users(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test fetching messages involving two users."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        messages = message_repository.get_messages_involving_users(1, 2)
+        # Should get all messages from both users
+        assert len(messages) == 7  # 5 from Alice + 2 from Bob
+        author_ids = {m["author_id"] for m in messages}
+        assert author_ids == {1, 2}
+
+    def test_get_messages_for_context(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test fetching messages for LLM context."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        # Get all messages since 10 hours ago
+        since = now - timedelta(hours=10)
+        messages = message_repository.get_messages_for_context(since)
+        assert len(messages) == 7
+
+    def test_get_messages_for_context_filtered_by_channels(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test fetching messages for context filtered by channels."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        since = now - timedelta(hours=10)
+        messages = message_repository.get_messages_for_context(
+            since, channel_ids=[100]
+        )
+        assert len(messages) == 5
+        assert all(m["channel_id"] == 100 for m in messages)
+
+    def test_get_messages_for_context_filtered_by_users(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test fetching messages for context filtered by users."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        since = now - timedelta(hours=10)
+        messages = message_repository.get_messages_for_context(
+            since, user_ids=[2]
+        )
+        assert len(messages) == 2
+        assert all(m["author_id"] == 2 for m in messages)
+
+    def test_get_messages_respects_limit(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test that limit is respected in query methods."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        messages = message_repository.get_messages_by_channel(100, limit=2)
+        assert len(messages) == 2
+
+    def test_get_messages_ordered_by_time(
+        self, message_repository: MessageRepository
+    ) -> None:
+        """Test that messages are ordered by created_at ascending."""
+        now = datetime.now(UTC)
+        self._insert_test_messages(message_repository, now)
+
+        messages = message_repository.get_messages_by_channel(100)
+        # Check messages are in chronological order
+        for i in range(len(messages) - 1):
+            assert messages[i]["created_at"] <= messages[i + 1]["created_at"]

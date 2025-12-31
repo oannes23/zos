@@ -2,6 +2,8 @@
 
 Reflective Discord agent that observes conversations and generates insights.
 
+**Note:** Files in `plan/archived/` are historical documents. Ignore them unless explicitly asked to review archived content.
+
 ## Commands
 
 ```bash
@@ -11,6 +13,8 @@ uv run mypy src/zos        # Type check
 uv run python -m zos       # Run bot (needs DISCORD_TOKEN)
 uv run python -m zos.cli salience top --category user  # View salience
 uv run python -m zos.cli budget preview                # Preview budget allocation
+uv run python -m zos.cli llm list                      # List configured LLM providers
+uv run python -m zos.cli llm test --provider openai    # Test LLM provider connection
 ```
 
 ## Behavior
@@ -26,7 +30,8 @@ src/zos/           # Main application
   topics/          # TopicKey system (canonical key formats)
   salience/        # Salience ledger (earn/spend tracking)
   budget/          # Budget allocation (token distribution by salience)
-  cli/             # CLI tools (salience, budget inspection)
+  llm/             # LLM abstraction (providers, retry, prompts)
+  cli/             # CLI tools (salience, budget, llm)
 tests/             # pytest tests
 config/            # config.example.yml
 plan/              # Architecture docs
