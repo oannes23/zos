@@ -154,7 +154,7 @@ uv run python -m zos.cli salience top --category channel --limit 5
 
 ---
 
-## Phase 4: Budget Allocation System
+## Phase 4: Budget Allocation System ✅ COMPLETE
 
 **Goal:** Implement the budget allocation logic that distributes reflection resources based on salience.
 

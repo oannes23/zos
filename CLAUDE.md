@@ -10,6 +10,7 @@ uv run ruff check src      # Lint
 uv run mypy src/zos        # Type check
 uv run python -m zos       # Run bot (needs DISCORD_TOKEN)
 uv run python -m zos.cli salience top --category user  # View salience
+uv run python -m zos.cli budget preview                # Preview budget allocation
 ```
 
 ## Behavior
@@ -24,7 +25,8 @@ src/zos/           # Main application
   discord/         # Discord client, repository, backfill
   topics/          # TopicKey system (canonical key formats)
   salience/        # Salience ledger (earn/spend tracking)
-  cli/             # CLI tools (salience inspection)
+  budget/          # Budget allocation (token distribution by salience)
+  cli/             # CLI tools (salience, budget inspection)
 tests/             # pytest tests
 config/            # config.example.yml
 plan/              # Architecture docs

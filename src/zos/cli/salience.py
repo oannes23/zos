@@ -1,10 +1,12 @@
-"""Salience CLI commands."""
+"""Zos CLI commands."""
 
 from __future__ import annotations
 
 import argparse
 from datetime import UTC, datetime, timedelta
 
+from zos.budget import BudgetAllocator
+from zos.config import get_config
 from zos.db import get_db, init_db
 from zos.salience.repository import SalienceRepository
 from zos.topics.topic_key import TopicCategory, TopicKey
@@ -82,6 +84,60 @@ def cmd_balance(args: argparse.Namespace) -> None:
     print("-" * 40)
 
 
+def cmd_budget_preview(args: argparse.Namespace) -> None:
+    """Preview budget allocation without persisting."""
+    init_db()
+    db = get_db()
+    config = get_config()
+
+    allocator = BudgetAllocator(db, config.budget)
+
+    since = None
+    if args.days:
+        since = datetime.now(UTC) - timedelta(days=args.days)
+
+    plan = allocator.create_allocation_plan(since=since)
+
+    print(f"\nBudget Allocation Preview")
+    print(f"Run ID: {plan.run_id}")
+    print(f"Total Budget: {plan.total_budget:,} tokens")
+    print(f"Per-Topic Cap: {plan.per_topic_cap:,} tokens")
+    print("=" * 70)
+
+    total_allocated = 0
+    for category in TopicCategory:
+        cat_alloc = plan.category_allocations.get(category)
+        if not cat_alloc:
+            continue
+
+        print(f"\n{category.value.upper()} (weight: {cat_alloc.weight}, budget: {cat_alloc.total_tokens:,})")
+        print("-" * 50)
+
+        if not cat_alloc.topic_allocations:
+            print("  (no topics with salience)")
+            continue
+
+        for alloc in cat_alloc.topic_allocations[:10]:  # Top 10
+            print(
+                f"  {alloc.topic_key.key:<35} "
+                f"{alloc.allocated_tokens:>8,} tokens "
+                f"({alloc.salience_proportion*100:>5.1f}%)"
+            )
+            total_allocated += alloc.allocated_tokens
+
+        if len(cat_alloc.topic_allocations) > 10:
+            remaining = len(cat_alloc.topic_allocations) - 10
+            remaining_tokens = sum(
+                a.allocated_tokens for a in cat_alloc.topic_allocations[10:]
+            )
+            total_allocated += remaining_tokens
+            print(f"  ... and {remaining} more topics ({remaining_tokens:,} tokens)")
+
+    print("\n" + "=" * 70)
+    print(f"Total Allocated: {total_allocated:,} tokens")
+    print(f"Unallocated: {plan.total_budget - total_allocated:,} tokens")
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -124,6 +180,27 @@ def create_parser() -> argparse.ArgumentParser:
     balance_parser.add_argument("topic_key", help="Topic key (e.g., user:123)")
     balance_parser.set_defaults(func=cmd_balance)
 
+    # budget command
+    budget_parser = subparsers.add_parser("budget", help="Budget allocation")
+    budget_subparsers = budget_parser.add_subparsers(
+        dest="subcommand", help="Budget subcommands"
+    )
+
+    # budget preview
+    preview_parser = budget_subparsers.add_parser(
+        "preview", help="Preview budget allocation"
+    )
+    preview_parser.add_argument(
+        "--days", "-d", type=int, help="Only consider salience from last N days"
+    )
+    preview_parser.add_argument(
+        "--total-tokens",
+        "-t",
+        type=int,
+        help="Override total token budget (default from config)",
+    )
+    preview_parser.set_defaults(func=cmd_budget_preview)
+
     return parser
 
 
@@ -138,6 +215,10 @@ def main() -> None:
 
     if args.command == "salience" and args.subcommand is None:
         parser.parse_args(["salience", "--help"])
+        return
+
+    if args.command == "budget" and args.subcommand is None:
+        parser.parse_args(["budget", "--help"])
         return
 
     if hasattr(args, "func"):

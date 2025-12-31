@@ -53,6 +53,20 @@ class CategoryWeights(BaseModel):
     dyad: int = Field(default=5, ge=0)
     dyad_in_channel: int = Field(default=0, ge=0)
 
+    def get_weight(self, category: str) -> int:
+        """Get weight for a category by name.
+
+        Args:
+            category: Category name (user, channel, etc.) or TopicCategory value.
+
+        Returns:
+            The weight for that category, or 0 if not found.
+        """
+        # Handle TopicCategory enum or string
+        if hasattr(category, "value"):
+            category = category.value
+        return getattr(self, category, 0)
+
 
 class BudgetConfig(BaseModel):
     """Budget allocation configuration."""

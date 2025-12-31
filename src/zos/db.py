@@ -13,7 +13,7 @@ from zos.logging import get_logger
 logger = get_logger("db")
 
 # Current schema version
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Base schema SQL
 BASE_SCHEMA = """
@@ -143,6 +143,46 @@ MIGRATIONS: dict[int, str] = {
 
     -- Update schema version
     UPDATE zos_metadata SET value = '4', updated_at = datetime('now') WHERE key = 'schema_version';
+    """,
+    # Migration from version 4 to 5: Budget allocation tables
+    5: """
+    -- Schema version 5: Budget allocation and LLM call tracking
+
+    -- Token allocations per topic for a reflection run
+    CREATE TABLE IF NOT EXISTS token_allocations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,               -- UUID of the reflection run
+        topic_key TEXT NOT NULL,            -- Canonical key string
+        category TEXT NOT NULL,             -- user, channel, etc.
+        allocated_tokens INTEGER NOT NULL,  -- Tokens allocated to this topic
+        spent_tokens INTEGER NOT NULL DEFAULT 0,  -- Tokens actually spent
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(run_id, topic_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_token_alloc_run ON token_allocations(run_id);
+    CREATE INDEX IF NOT EXISTS idx_token_alloc_topic ON token_allocations(topic_key);
+
+    -- Individual LLM call records
+    CREATE TABLE IF NOT EXISTS llm_calls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,               -- UUID of the reflection run
+        topic_key TEXT,                     -- Topic this call was for (nullable for run-level calls)
+        layer TEXT NOT NULL,                -- Layer that made the call
+        node TEXT,                          -- Specific node within layer
+        model TEXT NOT NULL,                -- Model identifier used
+        prompt_tokens INTEGER NOT NULL,     -- Input tokens
+        completion_tokens INTEGER NOT NULL, -- Output tokens
+        total_tokens INTEGER NOT NULL,      -- Total tokens (cached for convenience)
+        estimated_cost_usd REAL,            -- Estimated cost in USD (nullable)
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_llm_calls_run ON llm_calls(run_id);
+    CREATE INDEX IF NOT EXISTS idx_llm_calls_topic ON llm_calls(topic_key);
+
+    -- Update schema version
+    UPDATE zos_metadata SET value = '5', updated_at = datetime('now') WHERE key = 'schema_version';
     """,
 }
 

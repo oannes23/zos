@@ -313,4 +313,4 @@ Outputs JSON/YAML only. No fancy UI.
 
 ---
 
-**Status:** Phases 1-3 complete. Proceeding to Phase 4 (Budget Allocation).
+**Status:** Phases 1-4 complete. Proceeding to Phase 5 (LLM Abstraction Layer).
