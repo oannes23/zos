@@ -83,22 +83,23 @@ Each Insight has exactly **one** TopicKey.
 ### Salience Ledger
 Salience is **earned and spent**, not just a score.
 
-- Earned via:
-  - Messages observed
-  - Reactions
-  - Mentions
-  - (Initially simple activity-based; modular for later expansion)
+- Earned via (configurable weights):
+  - Messages: 1.0 points per message
+  - Reactions given: 0.5 points
+  - Reactions received: 0.3 points
+  - Mentions/replies: 0.5 bonus points (added to dyad keys)
 - Stored as:
-  - `salience_earned(topic_key, timestamp, amount, reason)`
-  - `salience_spent(topic_key, run_id, amount, layer, node)`
+  - `salience_earned(topic_key, category, timestamp, amount, reason, message_id)`
+  - `salience_spent(topic_key, category, run_id, layer, node, amount)`
 
 ### Budget Allocation
 - Total reflection budget per run (tokens).
-- Budget divided by **Topic Category Weights**, e.g.:
-  - User: 20
-  - Channel: 20
-  - User in Channel: 10
+- Budget divided by **Topic Category Weights** (default values):
+  - User: 40
+  - Channel: 40
+  - User in Channel: 15
   - Dyad: 5
+  - Dyad in Channel: 0
 - Each category allocates budget internally to its highest-salience topics.
 - Per-topic caps enforced.
 
@@ -312,4 +313,4 @@ Outputs JSON/YAML only. No fancy UI.
 
 ---
 
-**Status:** Architecture sufficiently specified. Ready to proceed to implementation.
+**Status:** Phases 1-3 complete. Proceeding to Phase 4 (Budget Allocation).

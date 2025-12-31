@@ -4,7 +4,7 @@ This document breaks down the Zos project into implementation phases. Each phase
 
 ---
 
-## Phase 1: Project Foundation
+## Phase 1: Project Foundation ✅ COMPLETE
 
 **Goal:** Establish the project skeleton, configuration system, and development infrastructure.
 
@@ -56,7 +56,7 @@ ls data/zos.db
 
 ---
 
-## Phase 2: Discord Ingestion
+## Phase 2: Discord Ingestion ✅ COMPLETE
 
 **Goal:** Connect to Discord and persist all observed messages and reactions to SQLite.
 
@@ -107,7 +107,7 @@ uv run python -c "from zos.db import get_db; print(get_db().execute('SELECT COUN
 
 ---
 
-## Phase 3: Topic System & Salience
+## Phase 3: Topic System & Salience ✅ COMPLETE
 
 **Goal:** Implement the TopicKey system and salience ledger for attention allocation.
 

@@ -13,7 +13,7 @@ from zos.logging import get_logger
 logger = get_logger("db")
 
 # Current schema version
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Base schema SQL
 BASE_SCHEMA = """
@@ -103,6 +103,46 @@ MIGRATIONS: dict[int, str] = {
 
     -- Update schema version
     UPDATE zos_metadata SET value = '3', updated_at = datetime('now') WHERE key = 'schema_version';
+    """,
+    # Migration from version 3 to 4: Salience ledger tables
+    4: """
+    -- Schema version 4: Salience ledger tables
+
+    -- Salience earned from activity
+    CREATE TABLE IF NOT EXISTS salience_earned (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic_key TEXT NOT NULL,           -- Canonical key string (e.g., user:123)
+        category TEXT NOT NULL,            -- user, channel, user_in_channel, dyad, dyad_in_channel
+        timestamp TEXT NOT NULL,           -- ISO8601 when salience was earned
+        amount REAL NOT NULL,              -- Amount earned (can be fractional)
+        reason TEXT NOT NULL,              -- message, reaction_given, reaction_received, mention
+        message_id INTEGER,                -- Source message ID (nullable for derived events)
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Indexes for salience queries
+    CREATE INDEX IF NOT EXISTS idx_salience_earned_topic ON salience_earned(topic_key);
+    CREATE INDEX IF NOT EXISTS idx_salience_earned_category ON salience_earned(category);
+    CREATE INDEX IF NOT EXISTS idx_salience_earned_timestamp ON salience_earned(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_salience_earned_category_timestamp ON salience_earned(category, timestamp);
+
+    -- Salience spent during reflection runs
+    CREATE TABLE IF NOT EXISTS salience_spent (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic_key TEXT NOT NULL,
+        category TEXT NOT NULL,
+        run_id TEXT NOT NULL,              -- UUID of the reflection run
+        layer TEXT NOT NULL,               -- Layer that spent this salience
+        node TEXT,                         -- Optional: specific node within layer
+        amount REAL NOT NULL,
+        timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_salience_spent_topic ON salience_spent(topic_key);
+    CREATE INDEX IF NOT EXISTS idx_salience_spent_run ON salience_spent(run_id);
+
+    -- Update schema version
+    UPDATE zos_metadata SET value = '4', updated_at = datetime('now') WHERE key = 'schema_version';
     """,
 }
 

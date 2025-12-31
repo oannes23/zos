@@ -10,7 +10,9 @@ from zos.config import (
     CategoryWeights,
     DatabaseConfig,
     DiscordConfig,
+    EarningWeights,
     LoggingConfig,
+    SalienceConfig,
     ZosConfig,
     load_config,
 )
@@ -62,11 +64,11 @@ class TestCategoryWeights:
 
     def test_defaults(self):
         weights = CategoryWeights()
-        assert weights.user == 20
-        assert weights.channel == 20
-        assert weights.user_in_channel == 10
+        assert weights.user == 40
+        assert weights.channel == 40
+        assert weights.user_in_channel == 15
         assert weights.dyad == 5
-        assert weights.dyad_in_channel == 5
+        assert weights.dyad_in_channel == 0
 
     def test_custom_weights(self):
         weights = CategoryWeights(user=50, channel=30)
@@ -86,6 +88,34 @@ class TestBudgetConfig:
         assert config.total_tokens_per_run == 100000
         assert config.per_topic_cap == 10000
         assert isinstance(config.category_weights, CategoryWeights)
+
+
+class TestEarningWeights:
+    """Tests for EarningWeights."""
+
+    def test_defaults(self):
+        weights = EarningWeights()
+        assert weights.message == 1.0
+        assert weights.reaction_given == 0.5
+        assert weights.reaction_received == 0.3
+        assert weights.mention == 0.5
+
+    def test_custom_weights(self):
+        weights = EarningWeights(message=2.0, mention=1.0)
+        assert weights.message == 2.0
+        assert weights.mention == 1.0
+
+    def test_negative_weight_rejected(self):
+        with pytest.raises(ValueError):
+            EarningWeights(message=-1.0)
+
+
+class TestSalienceConfig:
+    """Tests for SalienceConfig."""
+
+    def test_defaults(self):
+        config = SalienceConfig()
+        assert isinstance(config.earning_weights, EarningWeights)
 
 
 class TestLoggingConfig:
@@ -109,6 +139,7 @@ class TestZosConfig:
         assert isinstance(config.discord, DiscordConfig)
         assert isinstance(config.database, DatabaseConfig)
         assert isinstance(config.budget, BudgetConfig)
+        assert isinstance(config.salience, SalienceConfig)
         assert isinstance(config.logging, LoggingConfig)
         assert config.layers_dir == Path("layers")
         assert config.enabled_layers == []

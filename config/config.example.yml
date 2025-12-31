@@ -39,13 +39,21 @@ budget:
   # Maximum tokens per individual topic
   per_topic_cap: 10000
 
-  # Category weights for budget allocation
+  # Category weights for budget allocation (must sum to 100 for percentages)
   category_weights:
-    user: 20
-    channel: 20
-    user_in_channel: 10
+    user: 40
+    channel: 40
+    user_in_channel: 15
     dyad: 5
-    dyad_in_channel: 5
+    dyad_in_channel: 0
+
+salience:
+  # Weights for salience earning per activity type
+  earning_weights:
+    message: 1.0           # Base points per message sent
+    reaction_given: 0.5    # Points for giving a reaction
+    reaction_received: 0.3 # Points for receiving a reaction
+    mention: 0.5           # Bonus points for mentions/replies (added to dyad keys)
 
 logging:
   # Log level: DEBUG, INFO, WARNING, ERROR

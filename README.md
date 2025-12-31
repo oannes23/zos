@@ -44,8 +44,9 @@ Zos is in early development. Currently implemented:
 
 - **Phase 1**: Project foundation (config, database, logging)
 - **Phase 2**: Discord ingestion (message/reaction capture, backfill)
+- **Phase 3**: Topic system and salience ledger (attention allocation)
 
-Coming next: salience tracking, budget allocation, LLM integration, and the first reflection layers.
+Coming next: budget allocation, LLM integration, and the first reflection layers.
 
 ## Quick Start
 
@@ -89,6 +90,24 @@ See `config/config.example.yml` for all options. Key settings:
 uv run pytest           # Run tests
 uv run ruff check src   # Lint
 uv run mypy src/zos     # Type check
+```
+
+## CLI Tools
+
+Inspect salience balances:
+
+```bash
+# Show top users by salience
+uv run python -m zos.cli salience top --category user --limit 10
+
+# Show top channels by salience
+uv run python -m zos.cli salience top --category channel --limit 5
+
+# Show salience from last 7 days only
+uv run python -m zos.cli salience top --category user --days 7
+
+# Check balance for a specific topic
+uv run python -m zos.cli salience balance user:123456789
 ```
 
 ## Privacy Note

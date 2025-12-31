@@ -8,9 +8,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zos.config import DatabaseConfig, DiscordConfig, ZosConfig
+from zos.config import DatabaseConfig, DiscordConfig, EarningWeights, ZosConfig
 from zos.db import Database
 from zos.discord.repository import MessageRepository
+from zos.salience.earner import SalienceEarner
 
 
 @pytest.fixture
@@ -122,3 +123,9 @@ def test_discord_config() -> DiscordConfig:
 def message_repository(test_db: Database) -> MessageRepository:
     """Create a message repository with test database."""
     return MessageRepository(test_db)
+
+
+@pytest.fixture
+def salience_earner(test_db: Database) -> SalienceEarner:
+    """Create a salience earner with test database."""
+    return SalienceEarner(test_db, EarningWeights())

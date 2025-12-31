@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import discord
 from discord import Intents
@@ -14,9 +14,8 @@ from zos.discord.backfill import backfill_channel
 from zos.discord.repository import MessageRepository
 from zos.exceptions import DiscordError
 from zos.logging import get_logger
-
-if TYPE_CHECKING:
-    pass
+from zos.salience.earner import SalienceEarner
+from zos.topics.extractor import MessageContext
 
 logger = get_logger("discord.client")
 
@@ -28,6 +27,7 @@ class ZosDiscordClient(discord.Client):
         self,
         config: DiscordConfig | None = None,
         repository: MessageRepository | None = None,
+        salience_earner: SalienceEarner | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the Discord client.
@@ -35,17 +35,31 @@ class ZosDiscordClient(discord.Client):
         Args:
             config: Discord configuration. Uses global config if None.
             repository: Message repository for DB operations.
+            salience_earner: Salience earner for tracking attention.
             **kwargs: Additional arguments passed to discord.Client.
         """
         if config is None:
             config = get_config().discord
         self.config = config
 
+        # Get DB only if needed for creating components
         if repository is None:
             from zos.db import get_db
 
-            repository = MessageRepository(get_db())
+            db = get_db()
+            repository = MessageRepository(db)
         self.repository = repository
+
+        if salience_earner is None:
+            from zos.config import get_config as get_full_config
+            from zos.db import get_db
+
+            db = get_db()
+            salience_earner = SalienceEarner(
+                db,
+                get_full_config().salience.earning_weights,
+            )
+        self.salience_earner = salience_earner
 
         # Configure intents
         intents = Intents.default()
@@ -110,6 +124,27 @@ class ZosDiscordClient(discord.Client):
             )
 
         return False  # Can't verify role = not tracked
+
+    def _is_member_tracked(self, user: discord.User | discord.Member) -> bool:
+        """Check if a user/member has opted in for tracking.
+
+        Used for reaction handlers where we have a User or Member, not a Message.
+
+        Returns True if:
+        - No tracking role is configured (everyone tracked)
+        - User is a Member with the tracking opt-in role
+        """
+        # No role configured = everyone tracked
+        if not self.config.tracking_opt_in_role:
+            return True
+
+        # Check if user has the role
+        if isinstance(user, discord.Member):
+            return any(
+                role.name == self.config.tracking_opt_in_role for role in user.roles
+            )
+
+        return False  # Can't verify role for plain User = not tracked
 
     async def on_ready(self) -> None:
         """Called when the client is ready."""
@@ -177,6 +212,24 @@ class ZosDiscordClient(discord.Client):
                 visibility_scope="dm" if message.guild is None else "public",
                 is_tracked=is_tracked,
             )
+            # Earn salience for this message
+            reply_author_id = None
+            if message.reference and message.reference.resolved:
+                ref = message.reference.resolved
+                if isinstance(ref, discord.Message):
+                    reply_author_id = ref.author.id
+
+            ctx = MessageContext(
+                author_id=message.author.id,
+                channel_id=message.channel.id,
+                content=message.content,
+                reply_to_author_id=reply_author_id,
+                is_tracked=is_tracked,
+            )
+            self.salience_earner.earn_for_message(
+                ctx, message.id, message.created_at
+            )
+
             logger.debug(
                 f"Stored message {message.id} from {message.author.display_name} "
                 f"(tracked={is_tracked})"
@@ -230,13 +283,37 @@ class ZosDiscordClient(discord.Client):
 
         emoji_str = str(reaction.emoji)
         try:
+            now = datetime.now(UTC)
             self.repository.add_reaction(
                 message_id=message.id,
                 emoji=emoji_str,
                 user_id=user.id,
                 user_name=user.display_name,
-                created_at=datetime.now(UTC),
+                created_at=now,
             )
+
+            # Earn salience for reaction given (reactor)
+            is_reactor_tracked = self._is_member_tracked(user)
+            self.salience_earner.earn_for_reaction_given(
+                reactor_id=user.id,
+                channel_id=message.channel.id,
+                message_id=message.id,
+                timestamp=now,
+                is_tracked=is_reactor_tracked,
+            )
+
+            # Earn salience for reaction received (message author)
+            if message.author.id != user.id:  # Don't double-count self-reactions
+                is_author_tracked = self._is_user_tracked(message)
+                self.salience_earner.earn_for_reaction_received(
+                    author_id=message.author.id,
+                    reactor_id=user.id,
+                    channel_id=message.channel.id,
+                    message_id=message.id,
+                    timestamp=now,
+                    is_author_tracked=is_author_tracked,
+                )
+
             logger.debug(f"Added reaction {emoji_str} to message {message.id}")
         except Exception as e:
             logger.error(f"Failed to add reaction: {e}")

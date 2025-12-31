@@ -47,11 +47,11 @@ class DatabaseConfig(BaseModel):
 class CategoryWeights(BaseModel):
     """Salience budget weights per topic category."""
 
-    user: int = Field(default=20, ge=0)
-    channel: int = Field(default=20, ge=0)
-    user_in_channel: int = Field(default=10, ge=0)
+    user: int = Field(default=40, ge=0)
+    channel: int = Field(default=40, ge=0)
+    user_in_channel: int = Field(default=15, ge=0)
     dyad: int = Field(default=5, ge=0)
-    dyad_in_channel: int = Field(default=5, ge=0)
+    dyad_in_channel: int = Field(default=0, ge=0)
 
 
 class BudgetConfig(BaseModel):
@@ -62,6 +62,27 @@ class BudgetConfig(BaseModel):
     )
     per_topic_cap: int = Field(default=10000, description="Max tokens per individual topic")
     category_weights: CategoryWeights = Field(default_factory=CategoryWeights)
+
+
+class EarningWeights(BaseModel):
+    """Weights for salience earning per activity type."""
+
+    message: float = Field(default=1.0, ge=0, description="Points per message")
+    reaction_given: float = Field(
+        default=0.5, ge=0, description="Points for giving a reaction"
+    )
+    reaction_received: float = Field(
+        default=0.3, ge=0, description="Points for receiving a reaction"
+    )
+    mention: float = Field(
+        default=0.5, ge=0, description="Bonus points for mentions/replies (added to dyad keys)"
+    )
+
+
+class SalienceConfig(BaseModel):
+    """Salience system configuration."""
+
+    earning_weights: EarningWeights = Field(default_factory=EarningWeights)
 
 
 class LoggingConfig(BaseModel):
@@ -87,6 +108,7 @@ class ZosConfig(BaseSettings):
     discord: DiscordConfig = Field(default_factory=DiscordConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    salience: SalienceConfig = Field(default_factory=SalienceConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     layers_dir: Path = Field(
         default=Path("layers"), description="Directory containing layer definitions"

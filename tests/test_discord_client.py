@@ -8,25 +8,34 @@ import pytest
 from zos.config import DiscordConfig
 from zos.discord.client import ZosDiscordClient
 from zos.discord.repository import MessageRepository
+from zos.salience.earner import SalienceEarner
 
 
 class TestShouldProcessMessage:
     """Tests for message filtering logic."""
 
-    def test_ignores_bot_messages(self, message_repository: MessageRepository):
+    def test_ignores_bot_messages(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test that bot messages are ignored."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.author.bot = True
 
         assert client._should_process_message(message) is False
 
-    def test_processes_user_messages(self, message_repository: MessageRepository):
+    def test_processes_user_messages(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test that user messages are processed."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.author.bot = False
@@ -35,10 +44,14 @@ class TestShouldProcessMessage:
 
         assert client._should_process_message(message) is True
 
-    def test_filters_by_guild(self, message_repository: MessageRepository):
+    def test_filters_by_guild(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test guild filtering by name."""
         config = DiscordConfig(token="test", guilds=["AllowedGuild"])
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.author.bot = False
@@ -47,10 +60,14 @@ class TestShouldProcessMessage:
 
         assert client._should_process_message(message) is False
 
-    def test_allows_configured_guild(self, message_repository: MessageRepository):
+    def test_allows_configured_guild(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test that configured guilds are allowed."""
         config = DiscordConfig(token="test", guilds=["AllowedGuild"])
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.author.bot = False
@@ -59,10 +76,14 @@ class TestShouldProcessMessage:
 
         assert client._should_process_message(message) is True
 
-    def test_excludes_channel_by_name(self, message_repository: MessageRepository):
+    def test_excludes_channel_by_name(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test channel exclusion by name (opt-out)."""
         config = DiscordConfig(token="test", excluded_channels=["bot-spam"])
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.author.bot = False
@@ -71,10 +92,14 @@ class TestShouldProcessMessage:
 
         assert client._should_process_message(message) is False
 
-    def test_allows_non_excluded_channel(self, message_repository: MessageRepository):
+    def test_allows_non_excluded_channel(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test that non-excluded channels are allowed (opt-out default)."""
         config = DiscordConfig(token="test", excluded_channels=["bot-spam"])
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.author.bot = False
@@ -84,11 +109,13 @@ class TestShouldProcessMessage:
         assert client._should_process_message(message) is True
 
     def test_dms_always_processed_regardless_of_guild_filter(
-        self, message_repository: MessageRepository
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
     ):
         """Test that DMs bypass guild filtering."""
         config = DiscordConfig(token="test", guilds=["SomeGuild"])
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.author.bot = False
@@ -102,10 +129,14 @@ class TestShouldProcessMessage:
 class TestUserTracking:
     """Tests for user opt-in tracking functionality."""
 
-    def test_dm_always_tracked(self, message_repository: MessageRepository):
+    def test_dm_always_tracked(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test that DMs are always tracked (initiation implies consent)."""
         config = DiscordConfig(token="test", tracking_opt_in_role="Zos Participant")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.guild = None  # DM
@@ -113,23 +144,29 @@ class TestUserTracking:
         assert client._is_user_tracked(message) is True
 
     def test_no_role_configured_everyone_tracked(
-        self, message_repository: MessageRepository
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
     ):
         """Test that everyone is tracked when no role is configured."""
         config = DiscordConfig(token="test", tracking_opt_in_role=None)
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         message = MagicMock()
         message.guild = MagicMock()
 
         assert client._is_user_tracked(message) is True
 
-    def test_user_with_role_is_tracked(self, message_repository: MessageRepository):
+    def test_user_with_role_is_tracked(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test that users with the tracking role are tracked."""
         import discord
 
         config = DiscordConfig(token="test", tracking_opt_in_role="Zos Participant")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         role = MagicMock()
         role.name = "Zos Participant"
@@ -143,12 +180,16 @@ class TestUserTracking:
 
         assert client._is_user_tracked(message) is True
 
-    def test_user_without_role_not_tracked(self, message_repository: MessageRepository):
+    def test_user_without_role_not_tracked(
+        self, message_repository: MessageRepository, salience_earner: SalienceEarner
+    ):
         """Test that users without the tracking role are not tracked."""
         import discord
 
         config = DiscordConfig(token="test", tracking_opt_in_role="Zos Participant")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         other_role = MagicMock()
         other_role.name = "Other Role"
@@ -168,11 +209,16 @@ class TestOnMessage:
 
     @pytest.mark.asyncio
     async def test_stores_message(
-        self, message_repository: MessageRepository, mock_discord_message: MagicMock
+        self,
+        message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
+        mock_discord_message: MagicMock,
     ):
         """Test that valid messages are stored."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         await client.on_message(mock_discord_message)
 
@@ -180,11 +226,16 @@ class TestOnMessage:
 
     @pytest.mark.asyncio
     async def test_ignores_bot_message(
-        self, message_repository: MessageRepository, mock_discord_message: MagicMock
+        self,
+        message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
+        mock_discord_message: MagicMock,
     ):
         """Test that bot messages are not stored."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         mock_discord_message.author.bot = True
         await client.on_message(mock_discord_message)
@@ -193,11 +244,16 @@ class TestOnMessage:
 
     @pytest.mark.asyncio
     async def test_stores_dm_as_dm_scope(
-        self, message_repository: MessageRepository, mock_discord_message: MagicMock
+        self,
+        message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
+        mock_discord_message: MagicMock,
     ):
         """Test that DMs are stored with dm visibility scope."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         mock_discord_message.guild = None  # DM
         await client.on_message(mock_discord_message)
@@ -210,11 +266,16 @@ class TestOnMessage:
 
     @pytest.mark.asyncio
     async def test_stores_guild_message_as_public(
-        self, message_repository: MessageRepository, mock_discord_message: MagicMock
+        self,
+        message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
+        mock_discord_message: MagicMock,
     ):
         """Test that guild messages are stored with public visibility scope."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         await client.on_message(mock_discord_message)
 
@@ -230,11 +291,16 @@ class TestOnMessageEdit:
 
     @pytest.mark.asyncio
     async def test_updates_content(
-        self, message_repository: MessageRepository, mock_discord_message: MagicMock
+        self,
+        message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
+        mock_discord_message: MagicMock,
     ):
         """Test that edited messages update content."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         # First store the original
         await client.on_message(mock_discord_message)
@@ -263,11 +329,16 @@ class TestOnMessageDelete:
 
     @pytest.mark.asyncio
     async def test_soft_deletes_message(
-        self, message_repository: MessageRepository, mock_discord_message: MagicMock
+        self,
+        message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
+        mock_discord_message: MagicMock,
     ):
         """Test that deleted messages are soft deleted."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         # First store the message
         await client.on_message(mock_discord_message)
@@ -289,13 +360,16 @@ class TestOnReaction:
     async def test_adds_reaction(
         self,
         message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
         mock_discord_message: MagicMock,
         mock_discord_reaction: MagicMock,
         mock_discord_user: MagicMock,
     ):
         """Test that reactions are added."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         # First store the message
         await client.on_message(mock_discord_message)
@@ -314,13 +388,16 @@ class TestOnReaction:
     async def test_removes_reaction(
         self,
         message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
         mock_discord_message: MagicMock,
         mock_discord_reaction: MagicMock,
         mock_discord_user: MagicMock,
     ):
         """Test that reactions are marked as removed."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         # First store the message
         await client.on_message(mock_discord_message)
@@ -339,13 +416,16 @@ class TestOnReaction:
     async def test_ignores_bot_reactions(
         self,
         message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
         mock_discord_message: MagicMock,
         mock_discord_reaction: MagicMock,
         mock_discord_user: MagicMock,
     ):
         """Test that bot reactions are ignored."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         # First store the message
         await client.on_message(mock_discord_message)
@@ -365,11 +445,16 @@ class TestRolesSnapshot:
     """Tests for role snapshot functionality."""
 
     def test_gets_roles_for_member(
-        self, message_repository: MessageRepository, mock_discord_message: MagicMock
+        self,
+        message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
+        mock_discord_message: MagicMock,
     ):
         """Test that member roles are captured."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         import discord
 
@@ -382,11 +467,16 @@ class TestRolesSnapshot:
         assert "222" not in roles_json
 
     def test_returns_empty_for_non_member(
-        self, message_repository: MessageRepository, mock_discord_message: MagicMock
+        self,
+        message_repository: MessageRepository,
+        salience_earner: SalienceEarner,
+        mock_discord_message: MagicMock,
     ):
         """Test that non-members get empty role list."""
         config = DiscordConfig(token="test")
-        client = ZosDiscordClient(config=config, repository=message_repository)
+        client = ZosDiscordClient(
+            config=config, repository=message_repository, salience_earner=salience_earner
+        )
 
         import discord
 
