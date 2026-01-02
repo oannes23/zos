@@ -251,7 +251,7 @@ uv run python -m zos.cli llm test --provider anthropic --prompt "Say hello"
 
 ---
 
-## Phase 6: Layer Execution Engine
+## Phase 6: Layer Execution Engine ✅ COMPLETE
 
 **Goal:** Build the core engine that executes YAML-defined reflection layers.
 
@@ -263,11 +263,11 @@ uv run python -m zos.cli llm test --provider anthropic --prompt "Say hello"
 
 6.2 **Pipeline Nodes**
 - `fetch_messages`: Retrieve messages for topic/time range
-- `fetch_insights`: Retrieve existing insights for topic
+- `fetch_insights`: Retrieve existing insights for topic (stub until Phase 8)
 - `llm_call`: Execute LLM with persona and context
-- `reduce`: Combine multiple outputs
-- `store_insight`: Persist new insight
-- `output`: Send to Discord or other sink
+- `reduce`: Combine multiple outputs (concatenate or summarize)
+- `store_insight`: Persist new insight (stub until Phase 8)
+- `output`: Send to log (Discord deferred to Phase 11)
 
 6.3 **Pipeline Executor**
 - Linear execution with context passing
@@ -284,16 +284,27 @@ uv run python -m zos.cli llm test --provider anthropic --prompt "Say hello"
 - Execute a simple layer from YAML definition
 - Full pipeline trace in logs
 - Integration tests with mocked LLM
+- Example `channel_digest` layer with prompts
+
+### Implementation Notes
+- Created `src/zos/layer/` module with schema, context, loader, executor, privacy modules
+- Created `src/zos/layer/nodes/` with BaseNode, NodeResult, and implementations
+- Added CLI commands: `layer validate`, `layer list`, `layer dry-run`
+- Example layer at `layers/channel_digest/` with Jinja2 prompts
+- Comprehensive tests in `tests/test_layer_*.py`
 
 ### Manual Testing Checkpoint
 ```bash
 # 1. Run tests
-uv run pytest tests/test_layer_engine.py
+uv run pytest tests/test_layer_schema.py tests/test_layer_nodes.py tests/test_layer_executor.py tests/test_layer_context.py tests/test_layer_loader.py
 
 # 2. Validate a layer definition
-uv run python -m zos.cli layer validate layers/channel_digest/
+uv run python -m zos.cli layer validate channel_digest
 
-# 3. Dry-run a layer (no actual LLM calls or DB writes)
+# 3. List available layers
+uv run python -m zos.cli layer list
+
+# 4. Dry-run a layer (no actual LLM calls or DB writes)
 uv run python -m zos.cli layer dry-run channel_digest --topic "channel:123456"
 ```
 **Expected behavior:**

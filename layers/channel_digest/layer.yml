@@ -1,0 +1,47 @@
+name: channel_digest
+description: Nightly summary of channel activity and notable discussions
+
+# Schedule for automated execution (Phase 7)
+# Runs at 3 AM daily
+schedule: "0 3 * * *"
+
+targets:
+  categories:
+    - channel
+  min_salience: 10.0
+  max_targets: 20
+
+salience_rules:
+  spend_per_target: 1.0
+  spend_on_output: 0.0
+
+model_defaults:
+  provider: null  # Use global default
+  model: null     # Use global default
+  temperature: 0.7
+  max_tokens: 2048
+
+pipeline:
+  for_each: target
+  nodes:
+    - type: fetch_messages
+      name: get_recent_messages
+      lookback_hours: 24
+      max_messages: 100
+      scope: public
+
+    - type: fetch_insights
+      name: get_prior_insights
+      max_insights: 5
+
+    - type: llm_call
+      name: summarize
+      prompt: summarize
+      system_prompt: system
+
+    - type: store_insight
+      name: save_summary
+
+    - type: output
+      name: log_output
+      destination: log

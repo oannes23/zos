@@ -324,4 +324,4 @@ Outputs JSON/YAML only. No fancy UI.
 
 ---
 
-**Status:** Phases 1-5 complete. Proceeding to Phase 6 (Layer Execution Engine).
+**Status:** Phases 1-6 complete. Proceeding to Phase 7 (Scheduling & Run Management).

@@ -37,6 +37,26 @@ class LayerValidationError(LayerError):
     pass
 
 
+class PipelineError(LayerError):
+    """Error during pipeline execution."""
+
+    pass
+
+
+class NodeExecutionError(PipelineError):
+    """Error executing a specific node."""
+
+    def __init__(self, node_name: str, message: str) -> None:
+        self.node_name = node_name
+        super().__init__(f"Node '{node_name}': {message}")
+
+
+class PrivacyScopeError(LayerError):
+    """Privacy scope violation."""
+
+    pass
+
+
 class BudgetExhaustedError(ZosError):
     """Raised when budget is exhausted during a run."""
 

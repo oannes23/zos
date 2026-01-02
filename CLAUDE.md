@@ -15,6 +15,9 @@ uv run python -m zos.cli salience top --category user  # View salience
 uv run python -m zos.cli budget preview                # Preview budget allocation
 uv run python -m zos.cli llm list                      # List configured LLM providers
 uv run python -m zos.cli llm test --provider openai    # Test LLM provider connection
+uv run python -m zos.cli layer list                    # List available layers
+uv run python -m zos.cli layer validate channel_digest # Validate a layer definition
+uv run python -m zos.cli layer dry-run channel_digest  # Dry-run a layer
 ```
 
 ## Behavior
@@ -31,13 +34,15 @@ src/zos/           # Main application
   salience/        # Salience ledger (earn/spend tracking)
   budget/          # Budget allocation (token distribution by salience)
   llm/             # LLM abstraction (providers, retry, prompts)
-  cli/             # CLI tools (salience, budget, llm)
+  layer/           # Layer execution engine (schema, executor, nodes)
+  cli/             # CLI tools (salience, budget, llm, layer)
 tests/             # pytest tests
 config/            # config.example.yml
 plan/              # Architecture docs
   project.md       # Full spec
   plan.md          # Implementation phases
-layers/            # Reflection layer definitions (future)
+layers/            # Reflection layer definitions (YAML + prompts)
+  channel_digest/  # Example layer for channel summaries
 ```
 
 ## Key Files

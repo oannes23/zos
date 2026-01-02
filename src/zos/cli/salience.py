@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 from datetime import UTC, datetime, timedelta
 
 from zos.budget import BudgetAllocator
@@ -313,6 +314,149 @@ def cmd_llm_list(_args: argparse.Namespace) -> None:
     print(f"Default provider: {default}")
 
 
+def cmd_layer_validate(args: argparse.Namespace) -> None:
+    """Validate a layer definition."""
+    config = get_config()
+
+    from zos.layer import LayerLoader
+
+    loader = LayerLoader(config.layers_dir)
+    errors = loader.validate(args.layer_name)
+
+    if errors:
+        print(f"\nValidation FAILED for layer '{args.layer_name}':")
+        for error in errors:
+            print(f"  - {error}")
+        sys.exit(1)
+    else:
+        print(f"\nLayer '{args.layer_name}' is valid.")
+
+        # Show layer summary
+        try:
+            layer = loader.load(args.layer_name)
+            print("\nLayer Summary:")
+            print(f"  Name: {layer.name}")
+            if layer.description:
+                print(f"  Description: {layer.description}")
+            if layer.schedule:
+                print(f"  Schedule: {layer.schedule}")
+            print(f"  Target categories: {', '.join(layer.targets.categories)}")
+            print(f"  Pipeline nodes: {len(layer.pipeline.nodes)}")
+            if layer.pipeline.for_each:
+                print(f"  Execution: for_each {layer.pipeline.for_each}")
+        except Exception as e:
+            print(f"  (could not load layer details: {e})")
+
+
+def cmd_layer_list(_args: argparse.Namespace) -> None:
+    """List available layers."""
+    config = get_config()
+
+    from zos.layer import LayerLoader
+
+    loader = LayerLoader(config.layers_dir)
+    layer_names = loader.list_layers()
+
+    if not layer_names:
+        print(f"\nNo layers found in {config.layers_dir}")
+        return
+
+    print(f"\nAvailable layers in {config.layers_dir}:")
+    print("-" * 50)
+
+    for name in sorted(layer_names):
+        try:
+            layer = loader.load(name)
+            desc = layer.description or "(no description)"
+            print(f"  {name:<20} {desc}")
+        except Exception as e:
+            print(f"  {name:<20} (error: {e})")
+
+
+def cmd_layer_dry_run(args: argparse.Namespace) -> None:
+    """Dry-run a layer without making LLM calls."""
+    init_db()
+    db = get_db()
+    config = get_config()
+
+    from zos.budget import BudgetAllocator
+    from zos.layer import LayerLoader, PipelineExecutor
+    from zos.llm import LLMClient
+
+    loader = LayerLoader(config.layers_dir)
+
+    try:
+        layer = loader.load(args.layer_name)
+    except Exception as e:
+        print(f"Error loading layer: {e}")
+        sys.exit(1)
+
+    # Create allocation plan
+    allocator = BudgetAllocator(db, config.budget)
+
+    since = None
+    if args.days:
+        since = datetime.now(UTC) - timedelta(days=args.days)
+
+    plan = allocator.create_allocation_plan(since=since)
+
+    # Filter to specific topic if provided
+    if args.topic:
+        topic = TopicKey.parse(args.topic)
+        # Filter plan to just this topic by modifying allocations
+        for _cat, cat_alloc in plan.category_allocations.items():
+            cat_alloc.topic_allocations = [
+                a for a in cat_alloc.topic_allocations if a.topic_key == topic
+            ]
+
+    # Create executor with dummy LLM client (won't be used in dry-run)
+    # We need a valid LLM config, but it won't make actual calls
+    if config.llm:
+        llm_client = LLMClient(config.llm, db, config.layers_dir)
+    else:
+        # Create minimal mock for dry-run
+        print("Warning: No LLM config found, dry-run will skip LLM validation")
+        llm_client = None
+
+    if llm_client is None:
+        print("Error: LLM client required for dry-run (even though no calls are made)")
+        sys.exit(1)
+
+    executor = PipelineExecutor(db=db, llm_client=llm_client, config=config)
+
+    async def run() -> None:
+        result = await executor.execute(layer, plan, dry_run=True)
+
+        print(f"\nDry-run: {layer.name}")
+        print(f"Run ID: {result.run_id}")
+        print("-" * 50)
+        print(f"Targets: {result.targets_processed} processed, {result.targets_skipped} skipped")
+        print(f"Duration: {result.duration_seconds:.2f}s")
+
+        if result.trace:
+            print("\nExecution Trace:")
+            for entry in result.trace:
+                status = "OK" if entry["success"] else "FAIL"
+                if entry["skipped"]:
+                    status = "SKIP"
+                topic_str = f" ({entry['topic']})" if entry.get("topic") else ""
+                print(f"  [{status}] {entry['node']}{topic_str}")
+                if entry.get("skip_reason"):
+                    print(f"         Reason: {entry['skip_reason']}")
+                if entry.get("error"):
+                    print(f"         Error: {entry['error']}")
+
+        if result.errors:
+            print("\nErrors:")
+            for error in result.errors:
+                print(f"  - {error}")
+            sys.exit(1)
+        else:
+            print("\nDry-run completed successfully.")
+
+    asyncio.run(run())
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -406,6 +550,38 @@ def create_parser() -> argparse.ArgumentParser:
     )
     llm_list_parser.set_defaults(func=cmd_llm_list)
 
+    # layer command
+    layer_parser = subparsers.add_parser("layer", help="Layer management")
+    layer_subparsers = layer_parser.add_subparsers(
+        dest="subcommand", help="Layer subcommands"
+    )
+
+    # layer validate
+    layer_validate_parser = layer_subparsers.add_parser(
+        "validate", help="Validate a layer definition"
+    )
+    layer_validate_parser.add_argument("layer_name", help="Layer directory name")
+    layer_validate_parser.set_defaults(func=cmd_layer_validate)
+
+    # layer list
+    layer_list_parser = layer_subparsers.add_parser(
+        "list", help="List available layers"
+    )
+    layer_list_parser.set_defaults(func=cmd_layer_list)
+
+    # layer dry-run
+    layer_dry_run_parser = layer_subparsers.add_parser(
+        "dry-run", help="Dry-run a layer without making LLM calls"
+    )
+    layer_dry_run_parser.add_argument("layer_name", help="Layer to run")
+    layer_dry_run_parser.add_argument(
+        "--topic", "-t", help="Specific topic to process (e.g., channel:123)"
+    )
+    layer_dry_run_parser.add_argument(
+        "--days", "-d", type=int, help="Only consider salience from last N days"
+    )
+    layer_dry_run_parser.set_defaults(func=cmd_layer_dry_run)
+
     return parser
 
 
@@ -428,6 +604,10 @@ def main() -> None:
 
     if args.command == "llm" and args.subcommand is None:
         parser.parse_args(["llm", "--help"])
+        return
+
+    if args.command == "layer" and args.subcommand is None:
+        parser.parse_args(["layer", "--help"])
         return
 
     if hasattr(args, "func"):

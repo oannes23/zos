@@ -1,0 +1,28 @@
+Please analyze the following messages from the past 24 hours and provide a channel digest.
+
+{% if messages_text %}
+## Recent Messages
+
+{{ messages_text }}
+{% else %}
+No messages to analyze.
+{% endif %}
+
+{% if insights %}
+## Previous Insights
+
+{% for insight in insights %}
+- {{ insight.summary }}
+{% endfor %}
+{% endif %}
+
+---
+
+Based on these messages, please provide:
+
+1. **Activity Summary**: A brief overview of the day's activity level and general mood
+2. **Key Topics**: Main subjects discussed (2-4 topics)
+3. **Notable Moments**: Any interesting exchanges, insights shared, or community highlights
+4. **Emerging Themes**: Patterns or recurring topics that might be worth tracking
+
+Keep the digest concise (300-500 words) and useful for someone who wants to catch up on what happened.
