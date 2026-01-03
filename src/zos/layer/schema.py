@@ -211,7 +211,12 @@ class LayerDefinition(BaseModel):
     )
     schedule: str | None = Field(
         default=None,
-        description="Cron expression for scheduled execution (Phase 7)",
+        description="Cron expression for scheduled execution",
+    )
+    max_lookback_hours: int = Field(
+        default=168,  # 1 week
+        ge=1,
+        description="Maximum hours to look back for messages (default: 168 = 1 week)",
     )
     targets: TargetConfig = Field(
         default_factory=TargetConfig,

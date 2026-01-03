@@ -315,7 +315,7 @@ uv run python -m zos.cli layer dry-run channel_digest --topic "channel:123456"
 
 ---
 
-## Phase 7: Scheduling & Run Management
+## Phase 7: Scheduling & Run Management ✅ COMPLETE
 
 **Goal:** Implement scheduled execution of layers and comprehensive run tracking.
 
@@ -335,6 +335,7 @@ uv run python -m zos.cli layer dry-run channel_digest --topic "channel:123456"
 7.3 **Run Artifacts Schema**
 - Table: `runs`
 - Fields: `run_id`, `layer_name`, `schedule`, `started_at`, `completed_at`, `status`, `targets_processed`, `targets_skipped`, `salience_spent`, `tokens_used`, `cost`
+- Table: `run_traces` for detailed execution traces
 
 7.4 **Run Logging**
 - Per-run detailed log (LLM calls, decisions, errors)
@@ -343,12 +344,28 @@ uv run python -m zos.cli layer dry-run channel_digest --topic "channel:123456"
 ### Deliverables
 - Layers execute on schedule automatically
 - Full audit trail per run
-- Graceful handling of overlapping/delayed runs
+- Graceful handling of overlapping/delayed runs (skip policy)
+- Stale run recovery on startup
+
+### Implementation Notes
+- Created `src/zos/scheduler/` module with:
+  - `models.py`: Run, RunStatus, TriggerType, TraceEntry dataclasses
+  - `repository.py`: RunRepository for database CRUD operations
+  - `window.py`: Time window calculation based on last successful run
+  - `run_manager.py`: RunManager for run lifecycle orchestration
+  - `scheduler.py`: LayerScheduler wrapping APScheduler
+- Added migration 7 for `runs` and `run_traces` tables
+- Added `max_lookback_hours` field to LayerDefinition schema
+- Added `window_start`, `window_end` fields to PipelineContext
+- Updated PipelineExecutor to accept and pass window parameters
+- Updated FetchMessagesNode to use context window when available
+- Added CLI commands: `layer run`, `runs list`, `runs show`
+- Comprehensive tests in `tests/test_runs.py` (39 tests)
 
 ### Manual Testing Checkpoint
 ```bash
 # 1. Run tests
-uv run pytest tests/test_scheduler.py
+uv run pytest tests/test_runs.py
 
 # 2. Manually trigger a layer run
 uv run python -m zos.cli layer run channel_digest
@@ -356,11 +373,16 @@ uv run python -m zos.cli layer run channel_digest
 # 3. View run history
 uv run python -m zos.cli runs list --limit 5
 uv run python -m zos.cli runs show <run_id>
+
+# 4. Show run with trace details
+uv run python -m zos.cli runs show <run_id> --trace
 ```
 **Expected behavior:**
 - Manual trigger creates a run with unique ID
 - Run status progresses: pending → running → completed/failed
 - Run artifacts show targets processed, tokens used, cost
+- Overlapping runs are skipped (skip policy)
+- Stale runs are recovered as failed on startup
 - Scheduler fires layers at configured times (test by setting near-future schedule)
 
 ---

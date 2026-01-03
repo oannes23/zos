@@ -60,6 +60,10 @@ class PipelineContext:
     # Layer configuration
     model_defaults: ModelDefaults | None = field(default=None)
 
+    # Time window for message fetching (set by scheduler/run_manager)
+    window_start: datetime | None = field(default=None)
+    window_end: datetime | None = field(default=None)
+
     # Data store for passing between nodes
     _data: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -173,6 +177,8 @@ class PipelineContext:
             token_ledger=self.token_ledger,
             current_topic=topic,
             model_defaults=self.model_defaults,
+            window_start=self.window_start,
+            window_end=self.window_end,
             _data={},  # Fresh data store
             _trace=self._trace,  # Shared trace
         )

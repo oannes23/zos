@@ -49,7 +49,12 @@ class FetchMessagesNode(BaseNode):
             return NodeResult.fail("No current topic set")
 
         # Calculate time range
-        since = context.run_start - timedelta(hours=self.config.lookback_hours)
+        # Use window_start from context if set by scheduler (since last successful run),
+        # otherwise fall back to lookback_hours from node config
+        if context.window_start is not None:
+            since = context.window_start
+        else:
+            since = context.run_start - timedelta(hours=self.config.lookback_hours)
         limit = self.config.max_messages
 
         # Fetch messages based on topic category

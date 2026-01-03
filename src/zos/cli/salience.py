@@ -381,7 +381,7 @@ def cmd_layer_dry_run(args: argparse.Namespace) -> None:
 
     from zos.budget import BudgetAllocator
     from zos.layer import LayerLoader, PipelineExecutor
-    from zos.llm import LLMClient
+    from zos.llm.client import LLMClient
 
     loader = LayerLoader(config.layers_dir)
 
@@ -455,6 +455,179 @@ def cmd_layer_dry_run(args: argparse.Namespace) -> None:
             print("\nDry-run completed successfully.")
 
     asyncio.run(run())
+
+
+def cmd_layer_run(args: argparse.Namespace) -> None:
+    """Run a layer manually."""
+    init_db()
+    db = get_db()
+    config = get_config()
+
+    from zos.layer import LayerLoader
+    from zos.llm.client import LLMClient
+    from zos.scheduler.models import TriggerType
+    from zos.scheduler.run_manager import RunManager
+
+    # Check for LLM config
+    if not config.llm:
+        print("Error: LLM configuration required to run layers")
+        sys.exit(1)
+
+    loader = LayerLoader(config.layers_dir)
+    llm_client = LLMClient(config.llm, db, config.layers_dir)
+
+    # Verify layer exists
+    try:
+        loader.load(args.layer_name)
+    except Exception as e:
+        print(f"Error loading layer: {e}")
+        sys.exit(1)
+
+    run_manager = RunManager(
+        db=db,
+        llm_client=llm_client,
+        config=config,
+        layer_loader=loader,
+    )
+
+    async def do_run() -> None:
+        print(f"\nRunning layer: {args.layer_name}")
+        print("-" * 50)
+
+        result = await run_manager.execute_layer(
+            layer_name=args.layer_name,
+            triggered_by=TriggerType.MANUAL,
+            dry_run=args.dry_run,
+        )
+
+        if result is None:
+            print("Run skipped: layer is already running")
+            return
+
+        print(f"\nRun ID: {result.run_id}")
+        print(f"Status: {result.status.value}")
+        print(f"Window: {result.window_start.isoformat()} to {result.window_end.isoformat()}")
+        print("-" * 50)
+        print(f"Targets: {result.targets_processed} processed, {result.targets_skipped} skipped")
+        print(f"Tokens used: {result.tokens_used:,}")
+        if result.estimated_cost_usd > 0:
+            print(f"Estimated cost: ${result.estimated_cost_usd:.4f}")
+        if result.duration_seconds:
+            print(f"Duration: {result.duration_seconds:.2f}s")
+
+        if result.error_message:
+            print(f"\nError: {result.error_message}")
+            sys.exit(1)
+        else:
+            print("\nRun completed successfully.")
+
+    asyncio.run(do_run())
+
+
+def cmd_runs_list(args: argparse.Namespace) -> None:
+    """List runs with optional filters."""
+    init_db()
+    db = get_db()
+
+    from zos.scheduler.models import RunStatus
+    from zos.scheduler.repository import RunRepository
+
+    repo = RunRepository(db)
+
+    status = None
+    if args.status:
+        try:
+            status = RunStatus(args.status)
+        except ValueError:
+            valid = [s.value for s in RunStatus]
+            print(f"Invalid status: {args.status}")
+            print(f"Valid statuses: {', '.join(valid)}")
+            return
+
+    runs = repo.get_runs(
+        layer_name=args.layer,
+        status=status,
+        limit=args.limit,
+    )
+
+    if not runs:
+        print("\nNo runs found.")
+        return
+
+    print(f"\n{'Run ID':<36} {'Layer':<20} {'Status':<10} {'Started':<20} {'Targets':>8}")
+    print("-" * 100)
+
+    for run in runs:
+        started = run.started_at.strftime("%Y-%m-%d %H:%M:%S")
+        targets = f"{run.targets_processed}/{run.targets_total}"
+        print(f"{run.run_id:<36} {run.layer_name:<20} {run.status.value:<10} {started:<20} {targets:>8}")
+
+    print("-" * 100)
+    print(f"Showing {len(runs)} runs")
+
+
+def cmd_runs_show(args: argparse.Namespace) -> None:
+    """Show details of a specific run."""
+    init_db()
+    db = get_db()
+
+    from zos.scheduler.repository import RunRepository
+
+    repo = RunRepository(db)
+    run = repo.get_run(args.run_id)
+
+    if run is None:
+        print(f"Run not found: {args.run_id}")
+        sys.exit(1)
+
+    print(f"\nRun: {run.run_id}")
+    print("=" * 60)
+    print(f"Layer: {run.layer_name}")
+    print(f"Status: {run.status.value}")
+    print(f"Triggered by: {run.triggered_by.value}")
+    if run.schedule_expression:
+        print(f"Schedule: {run.schedule_expression}")
+    print()
+    print(f"Started: {run.started_at.isoformat()}")
+    if run.completed_at:
+        print(f"Completed: {run.completed_at.isoformat()}")
+        print(f"Duration: {run.duration_seconds:.2f}s")
+    print()
+    print(f"Window: {run.window_start.isoformat()} to {run.window_end.isoformat()}")
+    print()
+    print(f"Targets total: {run.targets_total}")
+    print(f"Targets processed: {run.targets_processed}")
+    print(f"Targets skipped: {run.targets_skipped}")
+    print()
+    print(f"Tokens used: {run.tokens_used:,}")
+    print(f"Estimated cost: ${run.estimated_cost_usd:.4f}")
+    print(f"Salience spent: {run.salience_spent:.2f}")
+
+    if run.error_message:
+        print()
+        print(f"Error: {run.error_message}")
+
+    # Show trace if requested
+    if args.trace:
+        trace = repo.get_trace(run.run_id)
+        if trace:
+            print()
+            print("Execution Trace:")
+            print("-" * 60)
+            for entry in trace:
+                status = "OK" if entry.success else "FAIL"
+                if entry.skipped:
+                    status = "SKIP"
+                topic_str = f" ({entry.topic_key})" if entry.topic_key else ""
+                print(f"  [{status}] {entry.node_name}{topic_str}")
+                if entry.skip_reason:
+                    print(f"         Reason: {entry.skip_reason}")
+                if entry.error:
+                    print(f"         Error: {entry.error}")
+                if entry.tokens_used > 0:
+                    print(f"         Tokens: {entry.tokens_used}")
+        else:
+            print("\nNo trace entries found.")
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -582,6 +755,47 @@ def create_parser() -> argparse.ArgumentParser:
     )
     layer_dry_run_parser.set_defaults(func=cmd_layer_dry_run)
 
+    # layer run
+    layer_run_parser = layer_subparsers.add_parser(
+        "run", help="Run a layer manually"
+    )
+    layer_run_parser.add_argument("layer_name", help="Layer to run")
+    layer_run_parser.add_argument(
+        "--dry-run", action="store_true", help="Validate without executing"
+    )
+    layer_run_parser.set_defaults(func=cmd_layer_run)
+
+    # runs command
+    runs_parser = subparsers.add_parser("runs", help="Run management")
+    runs_subparsers = runs_parser.add_subparsers(
+        dest="subcommand", help="Runs subcommands"
+    )
+
+    # runs list
+    runs_list_parser = runs_subparsers.add_parser(
+        "list", help="List runs"
+    )
+    runs_list_parser.add_argument(
+        "--layer", "-l", help="Filter by layer name"
+    )
+    runs_list_parser.add_argument(
+        "--status", "-s", help="Filter by status (pending, running, completed, failed, cancelled)"
+    )
+    runs_list_parser.add_argument(
+        "--limit", "-n", type=int, default=20, help="Maximum runs to show (default: 20)"
+    )
+    runs_list_parser.set_defaults(func=cmd_runs_list)
+
+    # runs show
+    runs_show_parser = runs_subparsers.add_parser(
+        "show", help="Show run details"
+    )
+    runs_show_parser.add_argument("run_id", help="Run ID to show")
+    runs_show_parser.add_argument(
+        "--trace", "-t", action="store_true", help="Show execution trace"
+    )
+    runs_show_parser.set_defaults(func=cmd_runs_show)
+
     return parser
 
 
@@ -608,6 +822,10 @@ def main() -> None:
 
     if args.command == "layer" and args.subcommand is None:
         parser.parse_args(["layer", "--help"])
+        return
+
+    if args.command == "runs" and args.subcommand is None:
+        parser.parse_args(["runs", "--help"])
         return
 
     if hasattr(args, "func"):

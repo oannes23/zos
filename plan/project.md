@@ -324,4 +324,4 @@ Outputs JSON/YAML only. No fancy UI.
 
 ---
 
-**Status:** Phases 1-6 complete. Proceeding to Phase 7 (Scheduling & Run Management).
+**Status:** Phases 1-7 complete. Proceeding to Phase 8 (Insights Storage).

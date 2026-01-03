@@ -79,6 +79,8 @@ class PipelineExecutor:
         layer: LayerDefinition,
         allocation_plan: AllocationPlan,
         dry_run: bool = False,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
     ) -> ExecutionResult:
         """Execute a layer pipeline.
 
@@ -86,6 +88,8 @@ class PipelineExecutor:
             layer: The layer definition to execute.
             allocation_plan: Budget allocation for this run.
             dry_run: If True, validate only without executing.
+            window_start: Start of message window (from scheduler).
+            window_end: End of message window (from scheduler).
 
         Returns:
             ExecutionResult with details of the execution.
@@ -111,6 +115,8 @@ class PipelineExecutor:
             salience_repo=self._salience_repo,
             token_ledger=ledger,
             model_defaults=layer.model_defaults,
+            window_start=window_start,
+            window_end=window_end,
         )
 
         # Build node instances

@@ -13,7 +13,7 @@ from zos.logging import get_logger
 logger = get_logger("db")
 
 # Current schema version
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Base schema SQL
 BASE_SCHEMA = """
@@ -202,6 +202,78 @@ MIGRATIONS: dict[int, str] = {
 
     -- Update schema version
     UPDATE zos_metadata SET value = '6', updated_at = datetime('now') WHERE key = 'schema_version';
+    """,
+    # Migration from version 6 to 7: Run management and scheduling
+    7: """
+    -- Schema version 7: Run management and scheduling
+
+    -- Runs table - tracks each layer execution
+    CREATE TABLE IF NOT EXISTS runs (
+        run_id TEXT PRIMARY KEY,           -- UUID from AllocationPlan
+        layer_name TEXT NOT NULL,          -- Layer identifier
+        triggered_by TEXT NOT NULL,        -- 'schedule', 'manual', 'api'
+        schedule_expression TEXT,          -- Cron expression if scheduled
+
+        -- Timing
+        started_at TEXT NOT NULL,          -- ISO8601 when run began
+        completed_at TEXT,                 -- ISO8601 when run finished (null if still running)
+
+        -- Status
+        status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+        error_message TEXT,                -- Error details if failed
+
+        -- Execution window
+        window_start TEXT NOT NULL,        -- ISO8601 start of time window for messages
+        window_end TEXT NOT NULL,          -- ISO8601 end of time window (run start time)
+
+        -- Metrics (populated on completion)
+        targets_total INTEGER DEFAULT 0,   -- Total targets considered
+        targets_processed INTEGER DEFAULT 0,
+        targets_skipped INTEGER DEFAULT 0,
+
+        -- Token and cost tracking
+        tokens_used INTEGER DEFAULT 0,
+        estimated_cost_usd REAL DEFAULT 0.0,
+
+        -- Salience spent during this run
+        salience_spent REAL DEFAULT 0.0,
+
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_runs_layer ON runs(layer_name);
+    CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+    CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at);
+    CREATE INDEX IF NOT EXISTS idx_runs_layer_status ON runs(layer_name, status);
+
+    -- Run traces - detailed execution log per node
+    CREATE TABLE IF NOT EXISTS run_traces (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        node_name TEXT NOT NULL,
+        topic_key TEXT,                    -- Target topic (nullable for non-target nodes)
+
+        -- Execution result
+        success INTEGER NOT NULL,          -- Boolean
+        skipped INTEGER NOT NULL DEFAULT 0,
+        skip_reason TEXT,
+        error TEXT,
+
+        -- Metrics
+        tokens_used INTEGER DEFAULT 0,
+
+        -- Timing
+        executed_at TEXT NOT NULL,         -- ISO8601
+
+        FOREIGN KEY (run_id) REFERENCES runs(run_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_run_traces_run ON run_traces(run_id);
+    CREATE INDEX IF NOT EXISTS idx_run_traces_node ON run_traces(node_name);
+
+    -- Update schema version
+    UPDATE zos_metadata SET value = '7', updated_at = datetime('now') WHERE key = 'schema_version';
     """,
 }
 

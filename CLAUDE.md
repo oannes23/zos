@@ -18,6 +18,10 @@ uv run python -m zos.cli llm test --provider openai    # Test LLM provider conne
 uv run python -m zos.cli layer list                    # List available layers
 uv run python -m zos.cli layer validate channel_digest # Validate a layer definition
 uv run python -m zos.cli layer dry-run channel_digest  # Dry-run a layer
+uv run python -m zos.cli layer run channel_digest      # Run a layer manually
+uv run python -m zos.cli runs list                     # List recent runs
+uv run python -m zos.cli runs show <run_id>            # Show run details
+uv run python -m zos.cli runs show <run_id> --trace    # Show run with execution trace
 ```
 
 ## Behavior
@@ -35,7 +39,8 @@ src/zos/           # Main application
   budget/          # Budget allocation (token distribution by salience)
   llm/             # LLM abstraction (providers, retry, prompts)
   layer/           # Layer execution engine (schema, executor, nodes)
-  cli/             # CLI tools (salience, budget, llm, layer)
+  scheduler/       # Run scheduling (APScheduler, run management)
+  cli/             # CLI tools (salience, budget, llm, layer, runs)
 tests/             # pytest tests
 config/            # config.example.yml
 plan/              # Architecture docs
