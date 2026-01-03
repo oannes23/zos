@@ -96,16 +96,22 @@ class FetchMessagesConfig(BaseNodeConfig):
 
 
 class FetchInsightsConfig(BaseNodeConfig):
-    """Configuration for fetch_insights node.
-
-    Note: Stub implementation until Phase 8 (Insights Storage).
-    """
+    """Configuration for fetch_insights node."""
 
     type: Literal["fetch_insights"] = "fetch_insights"
     max_insights: int = Field(
         default=10,
         ge=1,
         description="Maximum insights to retrieve",
+    )
+    scope: Literal["public", "dm", "all"] = Field(
+        default="all",
+        description="Filter by privacy scope (public, dm, or all)",
+    )
+    since_hours: int | None = Field(
+        default=None,
+        ge=1,
+        description="Only fetch insights from the last N hours (None for all time)",
     )
 
 
@@ -172,12 +178,13 @@ class ReduceConfig(BaseNodeConfig):
 
 
 class StoreInsightConfig(BaseNodeConfig):
-    """Configuration for store_insight node.
-
-    Note: Stub implementation until Phase 8 (Insights Storage).
-    """
+    """Configuration for store_insight node."""
 
     type: Literal["store_insight"] = "store_insight"
+    include_payload: bool = Field(
+        default=False,
+        description="Include structured payload data in stored insight",
+    )
 
 
 class OutputConfig(BaseNodeConfig):

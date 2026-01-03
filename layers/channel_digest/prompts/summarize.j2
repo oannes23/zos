@@ -5,19 +5,20 @@ Please analyze the following messages from the past 24 hours and provide a chann
 
 {{ messages_text }}
 {% else %}
-No messages to analyze.
+No new messages to analyze in this period.
 {% endif %}
 
 {% if insights %}
-## Previous Insights
+## Previous Insights (for context)
 
 {% for insight in insights %}
-- {{ insight.summary }}
+- {{ insight.summary[:200] }}{% if insight.summary|length > 200 %}...{% endif %}
 {% endfor %}
 {% endif %}
 
 ---
 
+{% if messages_text %}
 Based on these messages, please provide:
 
 1. **Activity Summary**: A brief overview of the day's activity level and general mood
@@ -26,3 +27,6 @@ Based on these messages, please provide:
 4. **Emerging Themes**: Patterns or recurring topics that might be worth tracking
 
 Keep the digest concise (300-500 words) and useful for someone who wants to catch up on what happened.
+{% else %}
+There were no messages in this period. Provide a brief note acknowledging the quiet period and, if previous insights are available, summarize what topics were discussed before.
+{% endif %}

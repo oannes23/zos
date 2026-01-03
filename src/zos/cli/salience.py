@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from zos.budget import BudgetAllocator
 from zos.config import BudgetConfig, get_config
 from zos.db import get_db, init_db
+from zos.insights import InsightRepository
 from zos.salience.repository import SalienceRepository
 from zos.topics.topic_key import TopicCategory, TopicKey
 
@@ -566,6 +567,108 @@ def cmd_runs_list(args: argparse.Namespace) -> None:
     print(f"Showing {len(runs)} runs")
 
 
+def cmd_insights_list(args: argparse.Namespace) -> None:
+    """List insights with optional filters."""
+    init_db()
+    db = get_db()
+
+    repo = InsightRepository(db)
+
+    since = None
+    if args.since:
+        try:
+            since = datetime.fromisoformat(args.since).replace(tzinfo=UTC)
+        except ValueError:
+            print(f"Invalid date format: {args.since}")
+            print("Use ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS")
+            return
+
+    if args.days:
+        since = datetime.now(UTC) - timedelta(days=args.days)
+
+    if args.topic:
+        try:
+            topic_key = TopicKey.parse(args.topic)
+        except ValueError as e:
+            print(f"Invalid topic key: {e}")
+            return
+        insights = repo.get_insights(
+            topic_key=topic_key,
+            limit=args.limit,
+            since=since,
+            scope=args.scope if args.scope != "all" else None,
+        )
+    elif args.run_id:
+        insights = repo.get_insights_by_run(args.run_id)
+    else:
+        insights = repo.get_all_insights(
+            limit=args.limit,
+            since=since,
+            scope=args.scope if args.scope != "all" else None,
+        )
+
+    if not insights:
+        print("\nNo insights found.")
+        return
+
+    print(f"\n{'ID':<36} {'Topic':<25} {'Scope':<8} {'Created':<20} {'Summary':<30}")
+    print("-" * 125)
+
+    for insight in insights:
+        created = insight.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        summary_preview = insight.summary[:27] + "..." if len(insight.summary) > 30 else insight.summary
+        summary_preview = summary_preview.replace("\n", " ")
+        print(
+            f"{insight.insight_id:<36} {insight.topic_key:<25} "
+            f"{insight.sources_scope_max:<8} {created:<20} {summary_preview:<30}"
+        )
+
+    print("-" * 125)
+    print(f"Showing {len(insights)} insights")
+
+
+def cmd_insights_show(args: argparse.Namespace) -> None:
+    """Show details of a specific insight."""
+    init_db()
+    db = get_db()
+
+    repo = InsightRepository(db)
+    insight = repo.get_insight(args.insight_id)
+
+    if insight is None:
+        print(f"Insight not found: {args.insight_id}")
+        sys.exit(1)
+
+    print(f"\nInsight: {insight.insight_id}")
+    print("=" * 60)
+    print(f"Topic: {insight.topic_key}")
+    print(f"Created: {insight.created_at.isoformat()}")
+    print(f"Scope: {insight.sources_scope_max}")
+    if insight.run_id:
+        print(f"Run ID: {insight.run_id}")
+    if insight.layer:
+        print(f"Layer: {insight.layer}")
+    print(f"Source messages: {len(insight.source_refs)}")
+    print()
+    print("Summary:")
+    print("-" * 60)
+    print(insight.summary)
+    print("-" * 60)
+
+    if args.full and insight.payload:
+        import json
+        print("\nPayload:")
+        print(json.dumps(insight.payload, indent=2))
+
+    if args.full and insight.source_refs:
+        print(f"\nSource message IDs ({len(insight.source_refs)}):")
+        # Show first 20 source refs
+        for ref in insight.source_refs[:20]:
+            print(f"  - {ref}")
+        if len(insight.source_refs) > 20:
+            print(f"  ... and {len(insight.source_refs) - 20} more")
+
+
 def cmd_runs_show(args: argparse.Namespace) -> None:
     """Show details of a specific run."""
     init_db()
@@ -796,6 +899,47 @@ def create_parser() -> argparse.ArgumentParser:
     )
     runs_show_parser.set_defaults(func=cmd_runs_show)
 
+    # insights command
+    insights_parser = subparsers.add_parser("insights", help="Insights management")
+    insights_subparsers = insights_parser.add_subparsers(
+        dest="subcommand", help="Insights subcommands"
+    )
+
+    # insights list
+    insights_list_parser = insights_subparsers.add_parser(
+        "list", help="List insights"
+    )
+    insights_list_parser.add_argument(
+        "--topic", "-t", help="Filter by topic key (e.g., channel:123)"
+    )
+    insights_list_parser.add_argument(
+        "--run-id", "-r", help="Filter by run ID"
+    )
+    insights_list_parser.add_argument(
+        "--scope", "-s", default="all",
+        help="Filter by scope (public, dm, all). Default: all"
+    )
+    insights_list_parser.add_argument(
+        "--since", help="Only show insights since this date (YYYY-MM-DD)"
+    )
+    insights_list_parser.add_argument(
+        "--days", "-d", type=int, help="Only show insights from last N days"
+    )
+    insights_list_parser.add_argument(
+        "--limit", "-l", type=int, default=20, help="Maximum insights to show (default: 20)"
+    )
+    insights_list_parser.set_defaults(func=cmd_insights_list)
+
+    # insights show
+    insights_show_parser = insights_subparsers.add_parser(
+        "show", help="Show insight details"
+    )
+    insights_show_parser.add_argument("insight_id", help="Insight ID to show")
+    insights_show_parser.add_argument(
+        "--full", "-f", action="store_true", help="Show full details including payload and source refs"
+    )
+    insights_show_parser.set_defaults(func=cmd_insights_show)
+
     return parser
 
 
@@ -826,6 +970,10 @@ def main() -> None:
 
     if args.command == "runs" and args.subcommand is None:
         parser.parse_args(["runs", "--help"])
+        return
+
+    if args.command == "insights" and args.subcommand is None:
+        parser.parse_args(["insights", "--help"])
         return
 
     if hasattr(args, "func"):

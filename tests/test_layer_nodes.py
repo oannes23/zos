@@ -243,12 +243,12 @@ class TestFetchMessagesNode:
 
 
 # =============================================================================
-# FetchInsightsNode Tests (Stub)
+# FetchInsightsNode Tests
 # =============================================================================
 
 
 class TestFetchInsightsNode:
-    """Tests for FetchInsightsNode (stub implementation)."""
+    """Tests for FetchInsightsNode."""
 
     @pytest.fixture
     def node(self) -> FetchInsightsNode:
@@ -261,16 +261,55 @@ class TestFetchInsightsNode:
         assert node.node_type == "fetch_insights"
 
     @pytest.mark.asyncio
-    async def test_execute_returns_empty_and_skips(
+    async def test_execute_no_topic_returns_empty(
         self, node: FetchInsightsNode, mock_context: PipelineContext
     ) -> None:
-        """Test stub returns empty list and skip status."""
+        """Test returns empty list when no topic set."""
+        mock_context.current_topic = None
+
         result = await node.execute(mock_context)
 
         assert result.success is True
-        assert result.skipped is True
-        assert "Phase 8" in result.skip_reason
+        assert result.skipped is False
+        assert result.data == []
         assert mock_context.get("insights") == []
+
+    @pytest.mark.asyncio
+    async def test_execute_fetches_insights(
+        self, node: FetchInsightsNode, mock_context: PipelineContext
+    ) -> None:
+        """Test fetches insights from database."""
+        from zos.db import Database
+        from zos.insights import InsightRepository
+
+        # Use a real database for this test
+        import tempfile
+        from pathlib import Path
+        from zos.config import DatabaseConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = DatabaseConfig(path=Path(tmpdir) / "test.db")
+            db = Database(config)
+            db.initialize()
+
+            # Store some insights
+            repo = InsightRepository(db)
+            topic = TopicKey.channel(123456)
+            repo.store(topic_key=topic, summary="Insight 1")
+            repo.store(topic_key=topic, summary="Insight 2")
+
+            # Update context with real DB
+            mock_context.db = db
+            mock_context.current_topic = topic
+
+            result = await node.execute(mock_context)
+
+            assert result.success is True
+            assert result.skipped is False
+            assert len(result.data) == 2
+            assert len(mock_context.get("insights")) == 2
+
+            db.close()
 
 
 # =============================================================================
@@ -523,12 +562,12 @@ class TestReduceNode:
 
 
 # =============================================================================
-# StoreInsightNode Tests (Stub)
+# StoreInsightNode Tests
 # =============================================================================
 
 
 class TestStoreInsightNode:
-    """Tests for StoreInsightNode (stub implementation)."""
+    """Tests for StoreInsightNode."""
 
     @pytest.fixture
     def node(self) -> StoreInsightNode:
@@ -541,17 +580,148 @@ class TestStoreInsightNode:
         assert node.node_type == "store_insight"
 
     @pytest.mark.asyncio
-    async def test_execute_skips_with_message(
+    async def test_execute_no_topic_fails(
         self, node: StoreInsightNode, mock_context: PipelineContext
     ) -> None:
-        """Test stub returns skip status."""
-        mock_context.set("llm_output", "Test insight content")
+        """Test fails when no topic set."""
+        mock_context.current_topic = None
+        mock_context.set("llm_output", "Test content")
 
+        result = await node.execute(mock_context)
+
+        assert result.success is False
+        assert "No current topic" in result.error
+
+    @pytest.mark.asyncio
+    async def test_execute_no_output_skips(
+        self, node: StoreInsightNode, mock_context: PipelineContext
+    ) -> None:
+        """Test skips when no output to store."""
         result = await node.execute(mock_context)
 
         assert result.success is True
         assert result.skipped is True
-        assert "Phase 8" in result.skip_reason
+        assert "No output to store" in result.skip_reason
+
+    @pytest.mark.asyncio
+    async def test_execute_stores_insight(
+        self, node: StoreInsightNode, mock_context: PipelineContext
+    ) -> None:
+        """Test stores insight in database."""
+        from zos.db import Database
+        from zos.insights import InsightRepository
+
+        # Use a real database for this test
+        import tempfile
+        from pathlib import Path
+        from zos.config import DatabaseConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = DatabaseConfig(path=Path(tmpdir) / "test.db")
+            db = Database(config)
+            db.initialize()
+
+            topic = TopicKey.channel(123456)
+
+            # Update context with real DB and required data
+            # Note: set run_id to None to avoid foreign key constraint issues
+            mock_context.db = db
+            mock_context.run_id = None  # Avoid FK constraint
+            mock_context.current_topic = topic
+            mock_context.set("llm_output", "Generated insight content")
+            mock_context.set("messages", [
+                {"message_id": 1, "visibility_scope": "public"},
+                {"message_id": 2, "visibility_scope": "public"},
+            ])
+
+            result = await node.execute(mock_context)
+
+            assert result.success is True
+            assert result.skipped is False
+            assert "insight_id" in result.data
+            assert result.data["topic_key"] == "channel:123456"
+            assert result.data["source_count"] == 2
+
+            # Verify insight was stored
+            repo = InsightRepository(db)
+            insights = repo.get_insights(topic)
+            assert len(insights) == 1
+            assert insights[0].summary == "Generated insight content"
+            assert insights[0].source_refs == [1, 2]
+
+            db.close()
+
+    @pytest.mark.asyncio
+    async def test_execute_uses_reduced_output(
+        self, node: StoreInsightNode, mock_context: PipelineContext
+    ) -> None:
+        """Test prefers reduced_output over llm_output."""
+        from zos.db import Database
+
+        import tempfile
+        from pathlib import Path
+        from zos.config import DatabaseConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = DatabaseConfig(path=Path(tmpdir) / "test.db")
+            db = Database(config)
+            db.initialize()
+
+            topic = TopicKey.channel(789)
+            mock_context.db = db
+            mock_context.run_id = None  # Avoid FK constraint
+            mock_context.current_topic = topic
+            mock_context.set("llm_output", "LLM output")
+            mock_context.set("reduced_output", "Reduced output")
+
+            result = await node.execute(mock_context)
+
+            assert result.success is True
+            # Verify the reduced output was used
+            from zos.insights import InsightRepository
+            repo = InsightRepository(db)
+            insights = repo.get_insights(topic)
+            assert insights[0].summary == "Reduced output"
+
+            db.close()
+
+    @pytest.mark.asyncio
+    async def test_execute_determines_dm_scope(
+        self, node: StoreInsightNode, mock_context: PipelineContext
+    ) -> None:
+        """Test correctly determines DM scope from messages."""
+        from zos.db import Database
+        from zos.insights import InsightRepository
+
+        import tempfile
+        from pathlib import Path
+        from zos.config import DatabaseConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = DatabaseConfig(path=Path(tmpdir) / "test.db")
+            db = Database(config)
+            db.initialize()
+
+            topic = TopicKey.channel(999)
+            mock_context.db = db
+            mock_context.run_id = None  # Avoid FK constraint
+            mock_context.current_topic = topic
+            mock_context.set("llm_output", "DM-based insight")
+            mock_context.set("messages", [
+                {"message_id": 1, "visibility_scope": "public"},
+                {"message_id": 2, "visibility_scope": "dm"},  # One DM message
+            ])
+
+            result = await node.execute(mock_context)
+
+            assert result.success is True
+            assert result.data["sources_scope_max"] == "dm"
+
+            repo = InsightRepository(db)
+            insights = repo.get_insights(topic)
+            assert insights[0].sources_scope_max == "dm"
+
+            db.close()
 
 
 # =============================================================================

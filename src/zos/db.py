@@ -13,7 +13,7 @@ from zos.logging import get_logger
 logger = get_logger("db")
 
 # Current schema version
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Base schema SQL
 BASE_SCHEMA = """
@@ -274,6 +274,35 @@ MIGRATIONS: dict[int, str] = {
 
     -- Update schema version
     UPDATE zos_metadata SET value = '7', updated_at = datetime('now') WHERE key = 'schema_version';
+    """,
+    # Migration from version 7 to 8: Insights storage
+    8: """
+    -- Schema version 8: Insights storage
+
+    -- Insights table - stores reflection outputs
+    CREATE TABLE IF NOT EXISTS insights (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        insight_id TEXT UNIQUE NOT NULL,      -- UUID for external reference
+        topic_key TEXT NOT NULL,              -- Canonical key (e.g., "user:123")
+        created_at TEXT NOT NULL,             -- ISO8601 timestamp
+        summary TEXT NOT NULL,                -- Main insight text content
+        payload TEXT,                         -- Optional JSON structured data
+        source_refs TEXT NOT NULL DEFAULT '[]', -- JSON array of message IDs
+        sources_scope_max TEXT NOT NULL DEFAULT 'public' CHECK (sources_scope_max IN ('public', 'dm')),
+        run_id TEXT,                          -- UUID of generating run
+        layer TEXT,                           -- Layer that generated this
+        FOREIGN KEY (run_id) REFERENCES runs(run_id)
+    );
+
+    -- Indexes for common queries
+    CREATE INDEX IF NOT EXISTS idx_insights_topic ON insights(topic_key);
+    CREATE INDEX IF NOT EXISTS idx_insights_created ON insights(created_at);
+    CREATE INDEX IF NOT EXISTS idx_insights_run ON insights(run_id);
+    CREATE INDEX IF NOT EXISTS idx_insights_scope ON insights(sources_scope_max);
+    CREATE INDEX IF NOT EXISTS idx_insights_topic_created ON insights(topic_key, created_at);
+
+    -- Update schema version
+    UPDATE zos_metadata SET value = '8', updated_at = datetime('now') WHERE key = 'schema_version';
     """,
 }
 

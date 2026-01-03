@@ -387,7 +387,7 @@ uv run python -m zos.cli runs show <run_id> --trace
 
 ---
 
-## Phase 8: Insights Storage
+## Phase 8: Insights Storage ✅ COMPLETE
 
 **Goal:** Implement the persistent insight system that stores reflection outputs.
 
@@ -400,22 +400,31 @@ uv run python -m zos.cli runs show <run_id> --trace
 8.2 **Insight CRUD**
 - Create insight from layer output
 - Query insights by topic, time range, scope
-- Update/supersede insights (optional versioning)
+- Append-only model (each run creates new insights)
 
 8.3 **Source Reference Tracking**
 - Link insights to source messages
-- Track derivation chain (insight from insight)
-- Privacy scope propagation
+- Privacy scope propagation via `sources_scope_max`
 
 8.4 **Insight Retrieval for Context**
 - Get relevant insights for topic
-- Recency and relevance weighting
+- Recency filtering (via `since_hours` config)
 - Scope filtering for context assembly
 
 ### Deliverables
 - Insights persisted from layer runs
 - Query API for insight retrieval
 - Privacy scope enforcement
+
+### Implementation Notes
+- Created `src/zos/insights/` module with models.py, repository.py
+- Added migration 8 for `insights` table with FK to `runs`
+- Updated `FetchInsightsNode` with real DB queries and scope/since filtering
+- Updated `StoreInsightNode` with real DB persistence and source tracking
+- Expanded `FetchInsightsConfig` with `scope` and `since_hours` fields
+- Expanded `StoreInsightConfig` with `include_payload` field
+- Added CLI commands: `insights list`, `insights show`
+- Comprehensive tests in `tests/test_insights.py`
 
 ### Manual Testing Checkpoint
 ```bash
@@ -434,7 +443,7 @@ uv run python -m zos.cli insights show <insight_id>
 
 ---
 
-## Phase 9: First Reflection Layer (Channel Digest)
+## Phase 9: First Reflection Layer (Channel Digest) ✅ COMPLETE
 
 **Goal:** Implement and validate a complete nightly reflection layer.
 
@@ -465,6 +474,19 @@ uv run python -m zos.cli insights show <insight_id>
 - Working nightly channel digest
 - Generated insights visible in database
 - Documented layer as reference implementation
+
+### Implementation Notes
+- Layer definition at `layers/channel_digest/layer.yml`
+- Prompts at `layers/channel_digest/prompts/` (system.j2, summarize.j2)
+- README documentation at `layers/channel_digest/README.md`
+- Comprehensive integration tests in `tests/test_channel_digest.py` (32 tests)
+- Tests cover:
+  - Layer definition loading and validation
+  - Prompt rendering with Jinja2
+  - Pipeline execution with mocked LLM
+  - Insight storage and retrieval
+  - RunManager integration
+  - Output quality validation
 
 ### Manual Testing Checkpoint
 ```bash

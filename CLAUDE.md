@@ -22,6 +22,10 @@ uv run python -m zos.cli layer run channel_digest      # Run a layer manually
 uv run python -m zos.cli runs list                     # List recent runs
 uv run python -m zos.cli runs show <run_id>            # Show run details
 uv run python -m zos.cli runs show <run_id> --trace    # Show run with execution trace
+uv run python -m zos.cli insights list                 # List recent insights
+uv run python -m zos.cli insights list --topic channel:123  # Filter by topic
+uv run python -m zos.cli insights show <insight_id>    # Show insight details
+uv run python -m zos.cli insights show <insight_id> --full  # Show with payload and sources
 ```
 
 ## Behavior
@@ -40,7 +44,8 @@ src/zos/           # Main application
   llm/             # LLM abstraction (providers, retry, prompts)
   layer/           # Layer execution engine (schema, executor, nodes)
   scheduler/       # Run scheduling (APScheduler, run management)
-  cli/             # CLI tools (salience, budget, llm, layer, runs)
+  insights/        # Insights storage (reflection outputs with source tracking)
+  cli/             # CLI tools (salience, budget, llm, layer, runs, insights)
 tests/             # pytest tests
 config/            # config.example.yml
 plan/              # Architecture docs
