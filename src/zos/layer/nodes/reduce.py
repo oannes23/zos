@@ -32,6 +32,20 @@ class ReduceNode(BaseNode):
     def node_type(self) -> str:
         return "reduce"
 
+    def estimate_tokens(self, context: PipelineContext) -> int:
+        """Estimate tokens for budget checking in summarize strategy."""
+        outputs = context.get("target_outputs", [])
+        if not outputs:
+            return 0
+
+        # Estimate input: combined text length / 4 chars per token
+        total_chars = sum(len(str(o)) for o in outputs)
+        input_estimate = total_chars // 4
+
+        # Add expected output tokens
+        max_out = self.config.max_tokens or 1024
+        return input_estimate + max_out
+
     async def execute(self, context: PipelineContext) -> NodeResult:
         """Reduce multiple outputs into one.
 
@@ -78,6 +92,20 @@ class ReduceNode(BaseNode):
         if not self.config.prompt:
             return NodeResult.fail("summarize strategy requires a prompt template")
 
+        # Budget check before LLM call
+        topic = context.current_topic
+        estimated = self.estimate_tokens(context)
+
+        if topic and not context.token_ledger.can_afford(topic, estimated):
+            remaining = context.token_ledger.get_remaining(topic)
+            logger.info(
+                f"Skipping reduce summarization for {topic.key}: "
+                f"estimated {estimated} tokens, remaining {remaining}"
+            )
+            return NodeResult.skip(
+                reason=f"Insufficient budget for summarization (need ~{estimated}, have {remaining})"
+            )
+
         # Build prompt context
         prompt_context = {
             "outputs": outputs,
@@ -98,6 +126,11 @@ class ReduceNode(BaseNode):
             return NodeResult.fail(str(e))
 
         tokens_used = response.prompt_tokens + response.completion_tokens
+
+        # Track spending
+        if topic:
+            context.token_ledger.spend(topic, tokens_used, enforce=False)
+
         context.set("reduced_output", response.content)
 
         logger.debug(f"Summarized {len(outputs)} outputs ({tokens_used} tokens)")

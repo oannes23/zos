@@ -152,6 +152,23 @@ class ReduceConfig(BaseNodeConfig):
         default=None,
         description="Prompt template for summarize strategy",
     )
+    # LLM options for summarize strategy
+    provider: str | None = Field(
+        default=None,
+        description="Provider override for summarize (uses layer/global default if None)",
+    )
+    model: str | None = Field(
+        default=None,
+        description="Model override for summarize (uses layer/global default if None)",
+    )
+    temperature: float | None = Field(
+        default=None,
+        description="Temperature override for summarize",
+    )
+    max_tokens: int | None = Field(
+        default=None,
+        description="Max tokens override for summarize",
+    )
 
 
 class StoreInsightConfig(BaseNodeConfig):

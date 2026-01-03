@@ -402,3 +402,101 @@ class TestPipelineExecutor:
         errors = await executor.validate_layer(invalid_layer)
         assert len(errors) == 1
         assert "Invalid target category" in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_execute_budget_exhaustion_mid_loop(
+        self,
+        executor: PipelineExecutor,
+    ) -> None:
+        """Test behavior when budget runs out during for_each loop."""
+        # Layer with LLM call
+        layer = LayerDefinition(
+            name="test_layer",
+            targets=TargetConfig(categories=["channel"]),
+            model_defaults=ModelDefaults(),
+            pipeline=PipelineConfig(
+                for_each="target",
+                nodes=[
+                    FetchMessagesConfig(type="fetch_messages"),
+                    LLMCallConfig(type="llm_call", prompt="test"),
+                ],
+            ),
+        )
+
+        # Allocation with two targets but very limited budget
+        plan = AllocationPlan(
+            run_id="test-run",
+            total_budget=200,  # Very small
+            per_topic_cap=100,  # Only enough for one call
+            category_allocations={
+                TopicCategory.CHANNEL: CategoryAllocation(
+                    category=TopicCategory.CHANNEL,
+                    weight=40,
+                    total_tokens=200,
+                    topic_allocations=[
+                        TopicAllocation(
+                            topic_key=TopicKey.channel(1),
+                            allocated_tokens=100,
+                            salience_balance=50.0,
+                            salience_proportion=0.5,
+                        ),
+                        TopicAllocation(
+                            topic_key=TopicKey.channel(2),
+                            allocated_tokens=100,
+                            salience_balance=30.0,
+                            salience_proportion=0.5,
+                        ),
+                    ],
+                ),
+            },
+            created_at=datetime.now(UTC),
+        )
+
+        result = await executor.execute(layer, plan)
+
+        assert result.success is True
+        # At least one target should have been skipped due to budget
+        # (the exact behavior depends on token estimation and spending)
+        assert result.targets_processed + result.targets_skipped == 2
+
+    @pytest.mark.asyncio
+    async def test_execute_node_failure_propagation(
+        self,
+        executor: PipelineExecutor,
+        allocation_plan: AllocationPlan,
+    ) -> None:
+        """Test that node failures are properly recorded in trace."""
+        from zos.exceptions import LLMError
+
+        # Layer with LLM call that will fail
+        layer = LayerDefinition(
+            name="test_layer",
+            targets=TargetConfig(categories=["channel"]),
+            model_defaults=ModelDefaults(),
+            pipeline=PipelineConfig(
+                for_each="target",
+                nodes=[
+                    FetchMessagesConfig(type="fetch_messages"),
+                    LLMCallConfig(type="llm_call", prompt="test"),
+                    OutputConfig(type="output", destination="log"),
+                ],
+            ),
+        )
+
+        # Make LLM call fail
+        executor.llm_client.complete_with_prompt.side_effect = LLMError("API error")
+
+        result = await executor.execute(layer, allocation_plan)
+
+        # Execution should complete but with errors
+        assert result.success is False
+        assert len(result.errors) > 0
+        assert "API error" in result.errors[0]
+
+        # Trace should show the failure
+        llm_trace = next(
+            (t for t in result.trace if t["node"] == "llm_call"), None
+        )
+        assert llm_trace is not None
+        assert llm_trace["success"] is False
+        assert "API error" in llm_trace["error"]

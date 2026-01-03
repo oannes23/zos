@@ -452,6 +452,75 @@ class TestReduceNode:
         assert len(errors) == 1
         assert "requires a prompt" in errors[0]
 
+    @pytest.mark.asyncio
+    async def test_execute_summarize_skips_when_budget_exhausted(
+        self, mock_context: PipelineContext
+    ) -> None:
+        """Test summarize strategy respects budget."""
+        config = ReduceConfig(
+            type="reduce",
+            strategy="summarize",
+            prompt="summarize_outputs",
+        )
+        node = ReduceNode(config=config)
+
+        mock_context.set("target_outputs", ["Output 1", "Output 2"])
+        mock_context.token_ledger.can_afford.return_value = False
+        mock_context.token_ledger.get_remaining.return_value = 50
+
+        result = await node.execute(mock_context)
+
+        assert result.success is True
+        assert result.skipped is True
+        assert "Insufficient budget" in result.skip_reason
+
+    @pytest.mark.asyncio
+    async def test_execute_summarize_spends_tokens(
+        self, mock_context: PipelineContext
+    ) -> None:
+        """Test that tokens are spent after summarize."""
+        config = ReduceConfig(
+            type="reduce",
+            strategy="summarize",
+            prompt="summarize_outputs",
+        )
+        node = ReduceNode(config=config)
+
+        mock_context.set("target_outputs", ["Output 1", "Output 2"])
+
+        # Mock LLM response
+        mock_response = MagicMock()
+        mock_response.content = "Combined summary"
+        mock_response.prompt_tokens = 100
+        mock_response.completion_tokens = 50
+        mock_context.llm_client.complete_with_prompt = AsyncMock(
+            return_value=mock_response
+        )
+
+        await node.execute(mock_context)
+
+        mock_context.token_ledger.spend.assert_called_once()
+        call_args = mock_context.token_ledger.spend.call_args
+        assert call_args[0][1] == 150  # tokens spent
+
+    def test_estimate_tokens(self, mock_context: PipelineContext) -> None:
+        """Test token estimation for summarize."""
+        config = ReduceConfig(
+            type="reduce",
+            strategy="summarize",
+            prompt="test",
+            max_tokens=512,
+        )
+        node = ReduceNode(config=config)
+
+        # Set outputs with known length
+        mock_context.set("target_outputs", ["A" * 400, "B" * 400])  # 800 chars
+
+        estimate = node.estimate_tokens(mock_context)
+
+        # Should be: 800/4 (input) + 512 (max_tokens) = 712
+        assert estimate == 712
+
 
 # =============================================================================
 # StoreInsightNode Tests (Stub)
