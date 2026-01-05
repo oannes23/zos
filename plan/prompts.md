@@ -1,0 +1,2 @@
+Sample prompt for Claude Code:
+Please examine the @plan/plan.md and @plan/project.md. First examine this project and previous work on it to understand what's there so far and what it needs. I would like you to implement phase 9 as specified in the plan. Make sure that you add new tests with the same quality standard as the existing ones, and that all tests and linting passes before you're done. Also make sure you update documentation in all markdown files when you're done. Finally, if you have any ambiguity about anything, ask me.

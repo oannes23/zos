@@ -118,6 +118,29 @@ class LoggingConfig(BaseModel):
     file: Path | None = Field(default=None, description="Log file path (optional)")
 
 
+class ApiConfig(BaseModel):
+    """Web API configuration."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable web API server alongside Discord bot",
+    )
+    host: str = Field(
+        default="127.0.0.1",
+        description="API server bind address",
+    )
+    port: int = Field(
+        default=8000,
+        ge=1,
+        le=65535,
+        description="API server port",
+    )
+    cors_origins: list[str] = Field(
+        default_factory=list,
+        description="Allowed CORS origins (empty = no CORS)",
+    )
+
+
 class ZosConfig(BaseSettings):
     """Root configuration for Zos."""
 
@@ -141,6 +164,7 @@ class ZosConfig(BaseSettings):
     enabled_layers: list[str] = Field(
         default_factory=list, description="List of enabled layer names"
     )
+    api: ApiConfig = Field(default_factory=ApiConfig)
 
 
 def load_config(config_path: Path | None = None) -> ZosConfig:

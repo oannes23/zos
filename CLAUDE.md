@@ -26,7 +26,25 @@ uv run python -m zos.cli insights list                 # List recent insights
 uv run python -m zos.cli insights list --topic channel:123  # Filter by topic
 uv run python -m zos.cli insights show <insight_id>    # Show insight details
 uv run python -m zos.cli insights show <insight_id> --full  # Show with payload and sources
+uv run python -m zos.api                               # Run standalone API server
 ```
+
+## Web API
+
+When `api.enabled: true` in config, the API server runs alongside the Discord bot. Or run standalone with `python -m zos.api`.
+
+**Endpoints:**
+- `GET /health` - Health check
+- `GET /config` - Configuration (secrets redacted)
+- `GET /layers` - Available layers and schedules
+- `GET /runs` - Run history with pagination
+- `GET /runs/{id}` - Run details (with optional trace)
+- `GET /insights` - Insights with filters
+- `GET /insights/{id}` - Insight details
+- `GET /salience?category=user` - Salience balances
+- `GET /audit` - LLM call audit log
+
+OpenAPI docs at `/docs` when server is running.
 
 ## Behavior
 - After you make a change, make sure to update any relevant markdown files if the change needs to be reflected in that documentation
@@ -45,6 +63,7 @@ src/zos/           # Main application
   layer/           # Layer execution engine (schema, executor, nodes)
   scheduler/       # Run scheduling (APScheduler, run management)
   insights/        # Insights storage (reflection outputs with source tracking)
+  api/             # FastAPI web server (introspection endpoints)
   cli/             # CLI tools (salience, budget, llm, layer, runs, insights)
 tests/             # pytest tests
 config/            # config.example.yml

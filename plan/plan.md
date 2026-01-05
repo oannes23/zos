@@ -509,7 +509,7 @@ uv run python -m zos.cli insights show <insight_id> --full
 
 ---
 
-## Phase 10: Web API & Introspection
+## Phase 10: Web API & Introspection ✅ COMPLETE
 
 **Goal:** Expose system state and audit data via FastAPI endpoints.
 
@@ -539,6 +539,18 @@ uv run python -m zos.cli insights show <insight_id> --full
 - Running API server
 - All specified endpoints functional
 - OpenAPI documentation auto-generated
+- Config parameter that determines if web API runs automatically alongside normal bot listener mode
+
+### Implementation Notes
+- Created `src/zos/api/` module with:
+  - `app.py`: FastAPI application factory with CORS and error handling
+  - `dependencies.py`: FastAPI dependency injection for DB and repositories
+  - `models.py`: Pydantic response models for all endpoints
+  - `routers/`: Individual routers for each endpoint group
+- Added `ApiConfig` to `config.py` with `enabled`, `host`, `port`, `cors_origins`
+- Modified `__main__.py` to run API server concurrently with Discord client
+- Added standalone entry point `python -m zos.api` for API-only mode
+- Comprehensive tests in `tests/test_api.py`
 
 ### Manual Testing Checkpoint
 ```bash
@@ -689,15 +701,27 @@ uv run python -m zos.cli insights list --scope public
 - User interaction analysis
 - Dyad relationship tracking
 - Social graph insights
+- Integrates insights from the following other Layers if present
+  - Channel Digest Layer
+  - User Profile Layer
+  - Emoji Semantics Layer
 
 13.2 **User Profile Layer**
 - Individual user understanding
 - Communication style analysis
 - Interest tracking
+- Keep some persistent data schema
+  - Known names
+  - Pronouns and gender identity
+  - Occupation and background information
 
 13.3 **Emoji Semantics Layer**
 - Server-specific emoji meaning inference
 - Reaction pattern analysis
+- Integrates insights from the following other Layers if present
+  - Channel Digest Layer
+  - User Profile Layer
+  - Social Dynamics Layer
 
 13.4 **Cross-Layer Integration**
 - Layers referencing other layers' insights

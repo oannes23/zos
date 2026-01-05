@@ -76,6 +76,21 @@ enabled_layers:
   # - channel_digest
   # - social_dynamics
 
+# Web API Configuration
+api:
+  # Enable API server alongside Discord bot
+  enabled: false
+
+  # Bind address (use 0.0.0.0 for all interfaces)
+  host: "127.0.0.1"
+
+  # Port to listen on
+  port: 8000
+
+  # CORS origins (empty = CORS disabled)
+  cors_origins: []
+    # - "http://localhost:3000"
+
 # LLM Provider Configuration
 llm:
   # Default provider to use (openai, anthropic, ollama, or a generic provider name)
