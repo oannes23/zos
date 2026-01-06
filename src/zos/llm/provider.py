@@ -122,4 +122,4 @@ class LLMProvider(ABC):
 
         Override in subclasses that maintain persistent connections.
         """
-        pass
+        return

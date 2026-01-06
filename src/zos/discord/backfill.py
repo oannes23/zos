@@ -74,8 +74,7 @@ async def backfill_channel(
             continue
 
         # Determine thread/channel relationship
-        is_thread = isinstance(channel, discord.Thread)
-        if is_thread:
+        if isinstance(channel, discord.Thread):
             thread_id = channel_id
             parent_channel_id = channel.parent_id
         else:

@@ -324,4 +324,4 @@ Outputs JSON/YAML only. No fancy UI.
 
 ---
 
-**Status:** Phases 1-10 complete. Core reflection pipeline and introspection API work end-to-end. Proceeding to Phase 11 (Conversational Layer).
+**Status:** Phases 1-11 complete. Core reflection pipeline, introspection API, and conversational layer work end-to-end. Zos can now respond to mentions, replies, DMs, and keyword triggers with configurable rate limiting.

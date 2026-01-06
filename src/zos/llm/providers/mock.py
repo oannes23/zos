@@ -182,9 +182,9 @@ class MockProvider(LLMProvider):
 
     def estimate_cost(
         self,
-        model: str,
-        prompt_tokens: int,
-        completion_tokens: int,
+        _model: str,
+        _prompt_tokens: int,
+        _completion_tokens: int,
     ) -> float | None:
         """Mock cost estimation (always returns 0)."""
         return 0.0

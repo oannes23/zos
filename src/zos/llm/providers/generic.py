@@ -1,6 +1,8 @@
 """Generic HTTP LLM provider for arbitrary REST APIs."""
 
-from typing import Any
+import contextlib
+import json
+from typing import Any, cast
 
 import httpx
 import jinja2
@@ -153,8 +155,7 @@ class GenericHTTPProvider(LLMProvider):
             template = self._jinja_env.from_string(self.config.request_template)
             rendered = template.render(**context)
             # Parse the rendered JSON
-            import json
-            return json.loads(rendered)
+            return cast(dict[str, Any], json.loads(rendered))
         except jinja2.TemplateError as e:
             raise LLMError(f"Failed to render request template: {e}") from e
         except Exception as e:
@@ -231,28 +232,22 @@ class GenericHTTPProvider(LLMProvider):
             finish_reason = "stop"
 
             if self.config.response_prompt_tokens_path:
-                try:
+                with contextlib.suppress(KeyError, IndexError, ValueError):
                     prompt_tokens = int(
                         extract_path(data, self.config.response_prompt_tokens_path)
                     )
-                except (KeyError, IndexError, ValueError):
-                    pass
 
             if self.config.response_completion_tokens_path:
-                try:
+                with contextlib.suppress(KeyError, IndexError, ValueError):
                     completion_tokens = int(
                         extract_path(data, self.config.response_completion_tokens_path)
                     )
-                except (KeyError, IndexError, ValueError):
-                    pass
 
             if self.config.response_finish_reason_path:
-                try:
+                with contextlib.suppress(KeyError, IndexError, ValueError):
                     finish_reason = str(
                         extract_path(data, self.config.response_finish_reason_path)
                     )
-                except (KeyError, IndexError, ValueError):
-                    pass
 
             return LLMResponse(
                 content=content,
@@ -270,18 +265,18 @@ class GenericHTTPProvider(LLMProvider):
 
     def estimate_cost(
         self,
-        model: str,
-        prompt_tokens: int,
-        completion_tokens: int,
+        _model: str,
+        _prompt_tokens: int,
+        _completion_tokens: int,
     ) -> float | None:
         """Estimate cost in USD.
 
         Generic providers don't have known pricing, so this always returns None.
 
         Args:
-            model: Model identifier (ignored).
-            prompt_tokens: Input token count (ignored).
-            completion_tokens: Output token count (ignored).
+            _model: Model identifier (ignored).
+            _prompt_tokens: Input token count (ignored).
+            _completion_tokens: Output token count (ignored).
 
         Returns:
             None (pricing unknown for generic endpoints).

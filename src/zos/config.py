@@ -141,6 +141,113 @@ class ApiConfig(BaseModel):
     )
 
 
+class TriggerConfig(BaseModel):
+    """Configuration for conversation triggers."""
+
+    respond_to_mentions: bool = Field(
+        default=True,
+        description="Respond when directly @mentioned",
+    )
+    respond_to_replies: bool = Field(
+        default=True,
+        description="Respond when users reply to Zos's messages",
+    )
+    respond_to_keywords: bool = Field(
+        default=False,
+        description="Respond to configured keyword patterns",
+    )
+    keywords: list[str] = Field(
+        default_factory=list,
+        description="Keyword patterns to trigger responses (regex supported)",
+    )
+    respond_to_dm: bool = Field(
+        default=True,
+        description="Respond to direct messages",
+    )
+
+
+class RateLimitConfig(BaseModel):
+    """Configuration for response rate limiting."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable rate limiting",
+    )
+    max_responses_per_channel: int = Field(
+        default=5,
+        ge=1,
+        description="Maximum responses per channel in the window",
+    )
+    window_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Rate limit window in seconds",
+    )
+    cooldown_seconds: int = Field(
+        default=5,
+        ge=0,
+        description="Minimum seconds between responses in same channel",
+    )
+
+
+class ResponseConfig(BaseModel):
+    """Configuration for response generation."""
+
+    max_length: int = Field(
+        default=2000,
+        ge=1,
+        le=2000,
+        description="Maximum response length (Discord limit is 2000)",
+    )
+    max_tokens: int = Field(
+        default=500,
+        ge=1,
+        description="Maximum tokens to generate",
+    )
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="LLM temperature for response generation",
+    )
+    context_messages: int = Field(
+        default=20,
+        ge=1,
+        description="Number of recent messages to include as context",
+    )
+    include_insights: bool = Field(
+        default=True,
+        description="Include relevant insights in response context",
+    )
+    provider: str | None = Field(
+        default=None,
+        description="LLM provider override (uses global default if None)",
+    )
+    model: str | None = Field(
+        default=None,
+        description="Model override (uses provider default if None)",
+    )
+
+
+class ConversationConfig(BaseModel):
+    """Configuration for conversational behavior."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable conversational responses",
+    )
+    triggers: TriggerConfig = Field(default_factory=TriggerConfig)
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
+    response: ResponseConfig = Field(default_factory=ResponseConfig)
+    persona_prompt: str = Field(
+        default="You are Zos, a thoughtful and observant member of this Discord community. "
+        "You have been quietly observing conversations and have developed insights about "
+        "the community dynamics. Respond naturally and conversationally, as a peer rather "
+        "than an assistant. Be concise but helpful.",
+        description="System prompt defining Zos's conversational persona",
+    )
+
+
 class ZosConfig(BaseSettings):
     """Root configuration for Zos."""
 
@@ -165,6 +272,7 @@ class ZosConfig(BaseSettings):
         default_factory=list, description="List of enabled layer names"
     )
     api: ApiConfig = Field(default_factory=ApiConfig)
+    conversation: ConversationConfig = Field(default_factory=ConversationConfig)
 
 
 def load_config(config_path: Path | None = None) -> ZosConfig:

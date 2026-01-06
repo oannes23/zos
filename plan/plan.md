@@ -578,7 +578,7 @@ open http://localhost:8000/docs
 
 ---
 
-## Phase 11: Conversational Layer
+## Phase 11: Conversational Layer ✅ COMPLETE
 
 **Goal:** Enable Zos to participate in conversations based on context and triggers.
 
@@ -610,12 +610,33 @@ open http://localhost:8000/docs
 - Rate-limited spontaneous participation
 - Response quality baseline
 
+### Implementation Notes
+- Created `src/zos/conversation/` module with:
+  - `triggers.py`: TriggerDetector for mention/reply/keyword/DM detection
+  - `rate_limiter.py`: Per-channel rate limiting with cooldown
+  - `responder.py`: Context assembly and LLM response generation
+  - `handler.py`: ConversationHandler orchestrating the full pipeline
+- Added `ConversationConfig` to `config.py` with:
+  - `TriggerConfig`: Enable/disable mention, reply, DM, keyword triggers
+  - `RateLimitConfig`: Max responses, window, cooldown settings
+  - `ResponseConfig`: Max length, tokens, temperature, context settings
+  - `persona_prompt`: Customizable system prompt for Zos's personality
+- Integrated handler into Discord client's `on_message` event
+- Added CLI commands: `conversation status`, `conversation test`
+- Comprehensive tests in `tests/test_conversation.py`
+
 ### Manual Testing Checkpoint
 ```bash
 # 1. Run tests
 uv run pytest tests/test_conversation.py
 
-# 2. Start bot and test in Discord
+# 2. Check conversation configuration
+uv run python -m zos.cli conversation status
+
+# 3. Test response generation (requires LLM config)
+uv run python -m zos.cli conversation test "Hello Zos!"
+
+# 4. Start bot and test in Discord
 uv run python -m zos
 ```
 **In Discord, test:**

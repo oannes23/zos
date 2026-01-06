@@ -172,6 +172,9 @@ def cmd_llm_test(args: argparse.Namespace) -> None:
         return
 
     # Create provider instance
+    from zos.llm.provider import LLMProvider
+
+    provider: LLMProvider
     try:
         if provider_name == "openai":
             from zos.llm.providers.openai import OpenAIProvider
@@ -733,6 +736,154 @@ def cmd_runs_show(args: argparse.Namespace) -> None:
             print("\nNo trace entries found.")
 
 
+def cmd_conversation_status(_args: argparse.Namespace) -> None:
+    """Show conversation configuration status."""
+    config = get_config()
+    conv = config.conversation
+
+    print("\nConversation Configuration")
+    print("=" * 50)
+    print(f"Enabled: {'Yes' if conv.enabled else 'No'}")
+
+    if not conv.enabled:
+        print("\nConversation is disabled. Enable it in config to use.")
+        return
+
+    print("\nTriggers:")
+    print(f"  Mentions: {'Yes' if conv.triggers.respond_to_mentions else 'No'}")
+    print(f"  Replies: {'Yes' if conv.triggers.respond_to_replies else 'No'}")
+    print(f"  DMs: {'Yes' if conv.triggers.respond_to_dm else 'No'}")
+    print(f"  Keywords: {'Yes' if conv.triggers.respond_to_keywords else 'No'}")
+    if conv.triggers.keywords:
+        print(f"    Patterns: {', '.join(conv.triggers.keywords)}")
+
+    print("\nRate Limiting:")
+    print(f"  Enabled: {'Yes' if conv.rate_limit.enabled else 'No'}")
+    print(f"  Max responses: {conv.rate_limit.max_responses_per_channel} per {conv.rate_limit.window_seconds}s")
+    print(f"  Cooldown: {conv.rate_limit.cooldown_seconds}s")
+
+    print("\nResponse Settings:")
+    print(f"  Max length: {conv.response.max_length} chars")
+    print(f"  Max tokens: {conv.response.max_tokens}")
+    print(f"  Temperature: {conv.response.temperature}")
+    print(f"  Context messages: {conv.response.context_messages}")
+    print(f"  Include insights: {'Yes' if conv.response.include_insights else 'No'}")
+    if conv.response.provider:
+        print(f"  Provider: {conv.response.provider}")
+    if conv.response.model:
+        print(f"  Model: {conv.response.model}")
+
+    print("\nOutput Channels:")
+    output_channels = config.discord.output_channels
+    if output_channels:
+        for ch_id in output_channels:
+            print(f"  - {ch_id}")
+    else:
+        print("  (all channels allowed - no restrictions)")
+
+
+def cmd_conversation_test(args: argparse.Namespace) -> None:
+    """Test conversation response generation."""
+    from zos.llm import Message, MessageRole
+    from zos.llm.resolver import get_available_providers
+
+    config = get_config()
+    conv = config.conversation
+
+    if not config.llm:
+        print("Error: LLM configuration not found in config")
+        return
+
+    # Use conversation settings or fall back to defaults
+    provider_name = conv.response.provider or config.llm.default_provider
+    model = conv.response.model
+
+    # Check if provider is configured
+    available = get_available_providers(config.llm)
+    if provider_name not in available and provider_name not in config.llm.generic:
+        print(f"Error: Provider '{provider_name}' is not configured")
+        print(f"Available providers: {', '.join(available) or '(none)'}")
+        return
+
+    # Create provider instance
+    from zos.llm.provider import LLMProvider
+
+    provider: LLMProvider
+    try:
+        if provider_name == "openai":
+            from zos.llm.providers.openai import OpenAIProvider
+
+            if not config.llm.openai:
+                print("Error: OpenAI provider not configured")
+                return
+            provider = OpenAIProvider(config.llm.openai)
+        elif provider_name == "anthropic":
+            from zos.llm.providers.anthropic import AnthropicProvider
+
+            if not config.llm.anthropic:
+                print("Error: Anthropic provider not configured")
+                return
+            provider = AnthropicProvider(config.llm.anthropic)
+        elif provider_name == "ollama":
+            from zos.llm.providers.ollama import OllamaProvider
+
+            if not config.llm.ollama:
+                print("Error: Ollama provider not configured")
+                return
+            provider = OllamaProvider(config.llm.ollama)
+        elif provider_name in config.llm.generic:
+            from zos.llm.providers.generic import GenericHTTPProvider
+
+            provider = GenericHTTPProvider(
+                config.llm.generic[provider_name],
+                provider_name,
+            )
+        else:
+            print(f"Error: Unknown provider '{provider_name}'")
+            return
+    except Exception as e:
+        print(f"Error creating provider: {e}")
+        return
+
+    # Build test prompt
+    user_message = args.message
+    messages = [
+        Message(role=MessageRole.SYSTEM, content=conv.persona_prompt),
+        Message(role=MessageRole.USER, content=f"TestUser said: {user_message}\n\nRespond naturally."),
+    ]
+
+    print("\nTesting conversation response...")
+    print(f"Provider: {provider_name}")
+    print(f"Model: {model or provider.default_model}")
+    print(f"Persona: {conv.persona_prompt[:100]}...")
+    print("-" * 50)
+    print(f"User message: {user_message}")
+    print("-" * 50)
+
+    async def do_test() -> None:
+        try:
+            response = await provider.complete(
+                messages,
+                model=model,
+                max_tokens=conv.response.max_tokens,
+                temperature=conv.response.temperature,
+            )
+
+            print(f"\nResponse ({len(response.content)} chars):")
+            print("-" * 50)
+            print(response.content)
+            print("-" * 50)
+            print(f"Tokens: {response.prompt_tokens} + {response.completion_tokens} = {response.prompt_tokens + response.completion_tokens}")
+
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            if hasattr(provider, "close"):
+                await provider.close()
+
+    asyncio.run(do_test())
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -940,6 +1091,27 @@ def create_parser() -> argparse.ArgumentParser:
     )
     insights_show_parser.set_defaults(func=cmd_insights_show)
 
+    # conversation command
+    conversation_parser = subparsers.add_parser("conversation", help="Conversation management")
+    conversation_subparsers = conversation_parser.add_subparsers(
+        dest="subcommand", help="Conversation subcommands"
+    )
+
+    # conversation status
+    conversation_status_parser = conversation_subparsers.add_parser(
+        "status", help="Show conversation configuration status"
+    )
+    conversation_status_parser.set_defaults(func=cmd_conversation_status)
+
+    # conversation test
+    conversation_test_parser = conversation_subparsers.add_parser(
+        "test", help="Test conversation response generation"
+    )
+    conversation_test_parser.add_argument(
+        "message", help="Test message to respond to"
+    )
+    conversation_test_parser.set_defaults(func=cmd_conversation_test)
+
     return parser
 
 
@@ -974,6 +1146,10 @@ def main() -> None:
 
     if args.command == "insights" and args.subcommand is None:
         parser.parse_args(["insights", "--help"])
+        return
+
+    if args.command == "conversation" and args.subcommand is None:
+        parser.parse_args(["conversation", "--help"])
         return
 
     if hasattr(args, "func"):

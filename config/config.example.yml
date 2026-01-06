@@ -91,6 +91,72 @@ api:
   cors_origins: []
     # - "http://localhost:3000"
 
+# Conversational Behavior Configuration
+conversation:
+  # Enable conversational responses
+  enabled: false
+
+  # Trigger configuration
+  triggers:
+    # Respond when directly @mentioned
+    respond_to_mentions: true
+
+    # Respond when users reply to Zos's messages
+    respond_to_replies: true
+
+    # Respond to direct messages
+    respond_to_dm: true
+
+    # Respond to keyword patterns (regex supported)
+    respond_to_keywords: false
+    keywords: []
+      # - "hey zos"
+      # - "zos.*help"
+
+  # Rate limiting configuration
+  rate_limit:
+    # Enable rate limiting
+    enabled: true
+
+    # Maximum responses per channel in the window
+    max_responses_per_channel: 5
+
+    # Rate limit window in seconds
+    window_seconds: 60
+
+    # Minimum seconds between responses in same channel
+    cooldown_seconds: 5
+
+  # Response generation settings
+  response:
+    # Maximum response length (Discord limit is 2000)
+    max_length: 2000
+
+    # Maximum tokens to generate
+    max_tokens: 500
+
+    # LLM temperature for response generation
+    temperature: 0.7
+
+    # Number of recent messages to include as context
+    context_messages: 20
+
+    # Include relevant insights in response context
+    include_insights: true
+
+    # LLM provider override (uses global default if null)
+    provider: null
+
+    # Model override (uses provider default if null)
+    model: null
+
+  # System prompt defining Zos's conversational persona
+  persona_prompt: >
+    You are Zos, a thoughtful and observant member of this Discord community.
+    You have been quietly observing conversations and have developed insights
+    about the community dynamics. Respond naturally and conversationally,
+    as a peer rather than an assistant. Be concise but helpful.
+
 # LLM Provider Configuration
 llm:
   # Default provider to use (openai, anthropic, ollama, or a generic provider name)

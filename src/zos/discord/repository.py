@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from zos.logging import get_logger
 
@@ -217,7 +217,7 @@ class MessageRepository:
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = 100,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Fetch messages for a channel within a time range.
 
         Args:
@@ -238,7 +238,7 @@ class MessageRepository:
             FROM messages
             WHERE channel_id = ? AND is_deleted = 0
         """
-        params: list = [channel_id]
+        params: list[Any] = [channel_id]
 
         if since:
             query += " AND created_at >= ?"
@@ -259,7 +259,7 @@ class MessageRepository:
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = 100,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Fetch messages by a user within a time range.
 
         Args:
@@ -280,7 +280,7 @@ class MessageRepository:
             FROM messages
             WHERE author_id = ? AND is_deleted = 0
         """
-        params: list = [user_id]
+        params: list[Any] = [user_id]
 
         if since:
             query += " AND created_at >= ?"
@@ -302,7 +302,7 @@ class MessageRepository:
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = 100,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Fetch messages by a user in a specific channel.
 
         Args:
@@ -324,7 +324,7 @@ class MessageRepository:
             FROM messages
             WHERE channel_id = ? AND author_id = ? AND is_deleted = 0
         """
-        params: list = [channel_id, user_id]
+        params: list[Any] = [channel_id, user_id]
 
         if since:
             query += " AND created_at >= ?"
@@ -346,7 +346,7 @@ class MessageRepository:
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = 100,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Fetch messages where either user participated (for dyad context).
 
         This is useful for understanding the interaction between two users.
@@ -370,7 +370,7 @@ class MessageRepository:
             FROM messages
             WHERE (author_id = ? OR author_id = ?) AND is_deleted = 0
         """
-        params: list = [user_id_1, user_id_2]
+        params: list[Any] = [user_id_1, user_id_2]
 
         if since:
             query += " AND created_at >= ?"
@@ -392,7 +392,7 @@ class MessageRepository:
         user_ids: list[int] | None = None,
         scope: str = "public",
         limit: int = 100,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Fetch messages for LLM context assembly with filtering.
 
         This method provides flexible filtering for building LLM context.
@@ -416,7 +416,7 @@ class MessageRepository:
             FROM messages
             WHERE is_deleted = 0 AND created_at >= ?
         """
-        params: list = [since.isoformat()]
+        params: list[Any] = [since.isoformat()]
 
         if scope:
             query += " AND visibility_scope = ?"

@@ -26,6 +26,8 @@ uv run python -m zos.cli insights list                 # List recent insights
 uv run python -m zos.cli insights list --topic channel:123  # Filter by topic
 uv run python -m zos.cli insights show <insight_id>    # Show insight details
 uv run python -m zos.cli insights show <insight_id> --full  # Show with payload and sources
+uv run python -m zos.cli conversation status           # Show conversation config status
+uv run python -m zos.cli conversation test "Hello!"    # Test conversation response
 uv run python -m zos.api                               # Run standalone API server
 ```
 
@@ -63,8 +65,9 @@ src/zos/           # Main application
   layer/           # Layer execution engine (schema, executor, nodes)
   scheduler/       # Run scheduling (APScheduler, run management)
   insights/        # Insights storage (reflection outputs with source tracking)
+  conversation/    # Conversational responses (triggers, rate limiting, response generation)
   api/             # FastAPI web server (introspection endpoints)
-  cli/             # CLI tools (salience, budget, llm, layer, runs, insights)
+  cli/             # CLI tools (salience, budget, llm, layer, runs, insights, conversation)
 tests/             # pytest tests
 config/            # config.example.yml
 plan/              # Architecture docs

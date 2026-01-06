@@ -3,7 +3,6 @@
 import asyncio
 import random
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
 
 import httpx
 
@@ -12,8 +11,6 @@ from zos.llm.config import RetryConfig
 from zos.logging import get_logger
 
 logger = get_logger("llm.retry")
-
-T = TypeVar("T")
 
 
 class RetryableError(Exception):
@@ -69,13 +66,10 @@ def is_retryable_error(error: Exception, config: RetryConfig) -> bool:
         return error.response.status_code in config.retryable_status_codes
 
     # Network errors are retryable
-    if isinstance(error, (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout)):
-        return True
-
-    return False
+    return isinstance(error, (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout))
 
 
-async def with_retry(
+async def with_retry[T](
     fn: Callable[[], Awaitable[T]],
     config: RetryConfig,
     operation_name: str = "operation",

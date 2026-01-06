@@ -57,11 +57,7 @@ class PromptLoader:
         Returns:
             Path to the prompt template file.
         """
-        if version:
-            filename = f"{prompt_name}_v{version}.j2"
-        else:
-            filename = f"{prompt_name}.j2"
-
+        filename = f"{prompt_name}_v{version}.j2" if version else f"{prompt_name}.j2"
         return self.layers_dir / layer_name / "prompts" / filename
 
     def prompt_exists(

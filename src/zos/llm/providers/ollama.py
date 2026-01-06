@@ -162,18 +162,18 @@ class OllamaProvider(LLMProvider):
 
     def estimate_cost(
         self,
-        model: str,
-        prompt_tokens: int,
-        completion_tokens: int,
+        _model: str,
+        _prompt_tokens: int,
+        _completion_tokens: int,
     ) -> float | None:
         """Estimate cost in USD.
 
         Ollama runs locally, so cost is always 0.
 
         Args:
-            model: Model identifier (ignored).
-            prompt_tokens: Input token count (ignored).
-            completion_tokens: Output token count (ignored).
+            _model: Model identifier (ignored).
+            _prompt_tokens: Input token count (ignored).
+            _completion_tokens: Output token count (ignored).
 
         Returns:
             0.0 (local models have no API cost).
