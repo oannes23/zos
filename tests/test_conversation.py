@@ -622,3 +622,93 @@ class TestConversationHandler:
 
         assert result.responded is False
         assert "conversation disabled" in result.error
+
+    @pytest.mark.asyncio
+    async def test_handler_dm_uses_separate_context_limit(
+        self,
+        conversation_config: ConversationConfig,
+        mock_db,
+        mock_message_repo,
+        mock_insight_repo,
+        mock_llm_client,
+    ):
+        """Test that DMs use dm_context_messages setting."""
+        from zos.conversation.handler import ConversationHandler
+        from zos.conversation.triggers import TriggerType
+
+        # Set different limits
+        conversation_config.response.context_messages = 10
+        conversation_config.response.dm_context_messages = 50
+
+        handler = ConversationHandler(
+            config=conversation_config,
+            output_channels=[],  # DMs bypass this
+            bot_user_id=12345,
+            db=mock_db,
+            message_repo=mock_message_repo,
+            insight_repo=mock_insight_repo,
+            llm_client=mock_llm_client,
+        )
+
+        # Create a DM message
+        message = MagicMock()
+        message.id = 123456
+        message.author.id = 99999
+        message.author.bot = False
+        message.author.display_name = "TestUser"
+        message.guild = None  # DM
+        message.channel.id = 88888
+        message.channel.name = "DM"
+        message.content = "Hello!"
+        message.mentions = []
+        message.reference = None
+        message.reply = AsyncMock()
+        message.channel.send = AsyncMock()
+
+        result = await handler.handle_message(message)
+
+        # Verify it was a DM trigger
+        assert result.trigger_result is not None
+        assert result.trigger_result.trigger_type == TriggerType.DM
+
+    @pytest.mark.asyncio
+    async def test_handler_dm_bypasses_output_channels(
+        self,
+        conversation_config: ConversationConfig,
+        mock_db,
+        mock_message_repo,
+        mock_insight_repo,
+        mock_llm_client,
+    ):
+        """Test that DMs bypass output channel restrictions."""
+        from zos.conversation.handler import ConversationHandler
+
+        handler = ConversationHandler(
+            config=conversation_config,
+            output_channels=[123],  # Specific channel required
+            bot_user_id=12345,
+            db=mock_db,
+            message_repo=mock_message_repo,
+            insight_repo=mock_insight_repo,
+            llm_client=mock_llm_client,
+        )
+
+        # Create a DM message (not in output_channels)
+        message = MagicMock()
+        message.id = 123456
+        message.author.id = 99999
+        message.author.bot = False
+        message.author.display_name = "TestUser"
+        message.guild = None  # DM - should bypass output_channels check
+        message.channel.id = 99999  # Not in output_channels
+        message.channel.name = "DM"
+        message.content = "Hello!"
+        message.mentions = []
+        message.reference = None
+        message.reply = AsyncMock()
+        message.channel.send = AsyncMock()
+
+        result = await handler.handle_message(message)
+
+        # DM should be responded to despite channel restrictions
+        assert result.responded is True

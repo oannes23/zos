@@ -1,0 +1,61 @@
+name: social_dynamics
+description: Weekly analysis of user relationships and interaction patterns
+
+schedule: "0 5 * * 0"  # 5 AM Sundays (after user_profile layer)
+
+targets:
+  categories:
+    - dyad
+  min_salience: 5.0  # Lower threshold - relationships form gradually
+  max_targets: 50
+
+salience_rules:
+  spend_per_target: 2.0
+  spend_on_output: 0.0
+
+model_defaults:
+  provider: null
+  model: null
+  temperature: 0.7
+  max_tokens: 1500
+
+max_lookback_hours: 336  # 2 weeks
+
+pipeline:
+  for_each: target
+  nodes:
+    - type: fetch_messages
+      name: get_interaction_messages
+      lookback_hours: 336
+      max_messages: 150
+      scope: public
+
+    - type: fetch_insights
+      name: get_prior_dynamics
+      max_insights: 3
+      layer: social_dynamics
+
+    - type: fetch_insights
+      name: get_user_profiles
+      max_insights: 10
+      layer: user_profile
+      topic_category_override: user
+
+    - type: fetch_insights
+      name: get_channel_context
+      max_insights: 5
+      layer: channel_digest
+      topic_category_override: channel
+
+    - type: llm_call
+      name: analyze_relationship
+      prompt: analyze
+      system_prompt: system
+
+    - type: store_insight
+      name: save_dynamics
+      include_payload: true
+
+    - type: output
+      name: log_output
+      destination: log

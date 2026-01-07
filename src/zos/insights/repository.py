@@ -118,6 +118,7 @@ class InsightRepository:
         limit: int = 10,
         since: datetime | None = None,
         scope: str | None = None,
+        layer: str | list[str] | None = None,
     ) -> list[Insight]:
         """Get insights for a topic.
 
@@ -126,6 +127,7 @@ class InsightRepository:
             limit: Maximum number of insights to return.
             since: Only return insights created after this time.
             scope: Filter by scope ('public', 'dm', or None for all).
+            layer: Filter by layer name(s). Single string or list.
 
         Returns:
             List of Insight objects, ordered by created_at descending.
@@ -140,6 +142,71 @@ class InsightRepository:
         if scope and scope != "all":
             conditions.append("sources_scope_max = ?")
             params.append(scope)
+
+        if layer:
+            if isinstance(layer, str):
+                conditions.append("layer = ?")
+                params.append(layer)
+            else:
+                placeholders = ",".join("?" for _ in layer)
+                conditions.append(f"layer IN ({placeholders})")
+                params.extend(layer)
+
+        params.append(limit)
+
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT * FROM insights
+            WHERE {where_clause}
+            ORDER BY created_at DESC
+            LIMIT ?
+        """
+
+        rows = self.db.execute(query, tuple(params)).fetchall()
+        return [self._row_to_insight(row) for row in rows]
+
+    def get_insights_by_category(
+        self,
+        category: str,
+        *,
+        limit: int = 10,
+        since: datetime | None = None,
+        scope: str | None = None,
+        layer: str | list[str] | None = None,
+    ) -> list[Insight]:
+        """Get insights for all topics in a category.
+
+        Args:
+            category: Topic category prefix (e.g., 'user', 'channel').
+            limit: Maximum number of insights to return.
+            since: Only return insights created after this time.
+            scope: Filter by scope ('public', 'dm', or None for all).
+            layer: Filter by layer name(s). Single string or list.
+
+        Returns:
+            List of Insight objects, ordered by created_at descending.
+        """
+        # Topic keys are formatted as "category:..." so we match the prefix
+        prefix = f"{category}:"
+        conditions = ["topic_key LIKE ?"]
+        params: list[str | int] = [f"{prefix}%"]
+
+        if since:
+            conditions.append("created_at >= ?")
+            params.append(since.isoformat())
+
+        if scope and scope != "all":
+            conditions.append("sources_scope_max = ?")
+            params.append(scope)
+
+        if layer:
+            if isinstance(layer, str):
+                conditions.append("layer = ?")
+                params.append(layer)
+            else:
+                placeholders = ",".join("?" for _ in layer)
+                conditions.append(f"layer IN ({placeholders})")
+                params.extend(layer)
 
         params.append(limit)
 

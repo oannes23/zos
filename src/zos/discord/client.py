@@ -154,6 +154,31 @@ class ZosDiscordClient(discord.Client):
 
         return False  # Can't verify role for plain User = not tracked
 
+    def _is_dm_opted_in(self, user: discord.User | discord.Member) -> bool:
+        """Check if user has opted in for DM conversations.
+
+        Uses the same tracking_opt_in_role as message tracking.
+        Checks all shared guilds for the role.
+
+        Returns True if:
+        - No tracking role is configured (everyone can DM)
+        - User has the role in any shared guild
+        """
+        # No role configured = everyone can DM
+        if not self.config.tracking_opt_in_role:
+            return True
+
+        # Check all guilds the bot shares with the user
+        for guild in self.guilds:
+            member = guild.get_member(user.id)
+            if member is not None and any(
+                role.name == self.config.tracking_opt_in_role
+                for role in member.roles
+            ):
+                return True
+
+        return False  # User doesn't have the role in any shared guild
+
     async def on_ready(self) -> None:
         """Called when the client is ready."""
         if self.user:
@@ -288,6 +313,11 @@ class ZosDiscordClient(discord.Client):
         if message.author.bot:
             return
 
+        # Check DM opt-in for DM messages
+        if message.guild is None and not self._is_dm_opted_in(message.author):
+            await self._send_dm_decline(message)
+            return
+
         try:
             result = await self.conversation_handler.handle_message(message)
             if result.responded:
@@ -297,6 +327,30 @@ class ZosDiscordClient(discord.Client):
                 )
         except Exception as e:
             logger.error(f"Conversation handling failed: {e}")
+
+    async def _send_dm_decline(self, message: discord.Message) -> None:
+        """Send a decline message to a non-opted DM user.
+
+        Args:
+            message: The DM message from the non-opted user.
+        """
+        from zos.config import get_config as get_full_config
+
+        try:
+            full_config = get_full_config()
+            decline_message = full_config.conversation.dm_decline_message
+
+            # Replace {role_name} placeholder with actual role name
+            role_name = self.config.tracking_opt_in_role or "opt-in"
+            decline_message = decline_message.replace("{role_name}", role_name)
+
+            await message.channel.send(decline_message)
+            logger.info(
+                f"Sent DM decline message to user {message.author.id} "
+                f"(missing role: {role_name})"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send DM decline message: {e}")
 
     async def on_message_edit(
         self, _before: discord.Message, after: discord.Message

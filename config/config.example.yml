@@ -138,8 +138,12 @@ conversation:
     # LLM temperature for response generation
     temperature: 0.7
 
-    # Number of recent messages to include as context
+    # Number of recent messages to include as context (for channel conversations)
     context_messages: 20
+
+    # Number of recent DM messages to include as context (for DM conversations)
+    # DMs use a separate, larger context window for conversation continuity
+    dm_context_messages: 30
 
     # Include relevant insights in response context
     include_insights: true
@@ -156,6 +160,13 @@ conversation:
     You have been quietly observing conversations and have developed insights
     about the community dynamics. Respond naturally and conversationally,
     as a peer rather than an assistant. Be concise but helpful.
+
+  # Message sent to users who DM without the opt-in role
+  # Use {role_name} as placeholder for the actual role name
+  dm_decline_message: >
+    I appreciate you reaching out! To have a conversation with me,
+    please ask a moderator to grant you the {role_name} role.
+    This helps me respect everyone's privacy preferences.
 
 # LLM Provider Configuration
 llm:

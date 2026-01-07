@@ -170,16 +170,31 @@ class Responder:
         channel_name = getattr(message.channel, "name", "DM")
         author_name = message.author.display_name
 
+        # Determine if this is a DM conversation
+        is_dm = trigger_result.trigger_type == TriggerType.DM
+
+        # Use appropriate context limit for DMs vs channels
+        context_limit = (
+            self.config.response.dm_context_messages
+            if is_dm
+            else self.config.response.context_messages
+        )
+
         # Fetch recent messages from the channel
         messages = self._fetch_recent_messages(
             channel_id,
-            limit=self.config.response.context_messages,
+            limit=context_limit,
         )
 
         # Fetch relevant insights (if enabled)
         insights: list[dict[str, Any]] = []
         if self.config.response.include_insights:
-            insights = self._fetch_relevant_insights(channel_id, message.author.id)
+            # Pass is_dm to filter insights appropriately
+            insights = self._fetch_relevant_insights(
+                channel_id,
+                message.author.id,
+                is_dm=is_dm,
+            )
 
         return ConversationContext(
             messages=messages,
@@ -232,16 +247,19 @@ class Responder:
         self,
         channel_id: int,
         user_id: int,
+        is_dm: bool = False,
     ) -> list[dict[str, Any]]:
         """Fetch relevant insights for context.
 
         Args:
             channel_id: The channel ID.
             user_id: The user ID who triggered.
+            is_dm: Whether this is a DM conversation (affects privacy filtering).
 
         Returns:
             List of insight dicts.
         """
+        from zos.layer.privacy import PrivacyEnforcer
         from zos.topics.topic_key import TopicKey
 
         # Fetch insights for the channel and user
@@ -265,6 +283,7 @@ class Responder:
                     "topic": insight.topic_key,
                     "summary": insight.summary,
                     "created_at": insight.created_at,
+                    "sources_scope_max": insight.sources_scope_max,
                 })
         except Exception as e:
             logger.debug(f"Failed to fetch channel insights: {e}")
@@ -281,11 +300,20 @@ class Responder:
                     "topic": insight.topic_key,
                     "summary": insight.summary,
                     "created_at": insight.created_at,
+                    "sources_scope_max": insight.sources_scope_max,
                 })
         except Exception as e:
             logger.debug(f"Failed to fetch user insights: {e}")
 
-        return insights
+        # Filter insights by privacy scope
+        # For public conversations, exclude DM-derived insights
+        # For DM conversations, include all insights
+        output_scope = "dm" if is_dm else "public"
+        filtered_insights = PrivacyEnforcer.filter_insights_for_scope(
+            insights, output_scope
+        )
+
+        return filtered_insights
 
     async def _call_llm(
         self,

@@ -17,12 +17,14 @@ logger = get_logger("layer.nodes.fetch_insights")
 
 
 class FetchInsightsNode(BaseNode):
-    """Fetch existing insights for the current topic.
+    """Fetch existing insights for the current topic or category.
 
     Retrieves insights from the database for the current topic,
-    applying filters based on configuration.
+    applying filters based on configuration. Supports cross-layer
+    integration via layer filtering and category override.
 
-    Stores the insights in context as "insights".
+    Stores the insights in context. The key is based on the node name
+    if provided, otherwise "insights".
     """
 
     config: FetchInsightsConfig
@@ -32,7 +34,7 @@ class FetchInsightsNode(BaseNode):
         return "fetch_insights"
 
     async def execute(self, context: PipelineContext) -> NodeResult:
-        """Fetch insights for the current topic.
+        """Fetch insights for the current topic or category.
 
         Args:
             context: Pipeline context.
@@ -41,11 +43,6 @@ class FetchInsightsNode(BaseNode):
             NodeResult with list of insights.
         """
         topic = context.current_topic
-
-        if topic is None:
-            logger.debug("fetch_insights: no current topic, returning empty list")
-            context.set("insights", [])
-            return NodeResult.ok(data=[])
 
         # Create repository
         repo = InsightRepository(context.db)
@@ -58,13 +55,34 @@ class FetchInsightsNode(BaseNode):
         # Determine scope filter
         scope = self.config.scope if self.config.scope != "all" else None
 
-        # Fetch insights
-        insights = repo.get_insights(
-            topic_key=topic,
-            limit=self.config.max_insights,
-            since=since,
-            scope=scope,
-        )
+        # Get layer filter
+        layer = self.config.layer
+
+        # Fetch insights based on configuration
+        if self.config.topic_category_override:
+            # Fetch from all topics in the specified category
+            insights = repo.get_insights_by_category(
+                category=self.config.topic_category_override,
+                limit=self.config.max_insights,
+                since=since,
+                scope=scope,
+                layer=layer,
+            )
+            fetch_description = f"category={self.config.topic_category_override}"
+        elif topic is None:
+            logger.debug("fetch_insights: no current topic, returning empty list")
+            context.set(self._get_context_key(), [])
+            return NodeResult.ok(data=[])
+        else:
+            # Fetch for the current topic
+            insights = repo.get_insights(
+                topic_key=topic,
+                limit=self.config.max_insights,
+                since=since,
+                scope=scope,
+                layer=layer,
+            )
+            fetch_description = f"topic={topic.key}"
 
         # Convert to dicts for context
         insight_dicts = [
@@ -82,11 +100,31 @@ class FetchInsightsNode(BaseNode):
             for i in insights
         ]
 
-        context.set("insights", insight_dicts)
+        # Store with descriptive key based on node name
+        context_key = self._get_context_key()
+        context.set(context_key, insight_dicts)
 
+        layer_desc = f", layer={layer}" if layer else ""
         logger.debug(
-            f"Fetched {len(insights)} insights for {topic.key} "
-            f"(limit={self.config.max_insights}, scope={self.config.scope})"
+            f"Fetched {len(insights)} insights for {fetch_description} "
+            f"(limit={self.config.max_insights}, scope={self.config.scope}{layer_desc}) "
+            f"-> context['{context_key}']"
         )
 
         return NodeResult.ok(data=insight_dicts)
+
+    def _get_context_key(self) -> str:
+        """Get the context key for storing insights.
+
+        Uses the node name if provided, otherwise defaults to "insights".
+        This allows multiple fetch_insights nodes to store results
+        in different keys.
+        """
+        if self.config.name:
+            # Convert node name to snake_case context key
+            # e.g., "get_prior_profile" -> "prior_profile" or "get_user_profiles" -> "user_profiles"
+            name = self.config.name
+            if name.startswith("get_"):
+                name = name[4:]
+            return name
+        return "insights"

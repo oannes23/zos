@@ -1,0 +1,81 @@
+Analyze emoji and reaction usage patterns in this channel to understand their meanings and social functions.
+
+{% if messages_text %}
+## Recent Messages with Reactions (Past 2 Weeks)
+
+{{ messages_text }}
+{% else %}
+No messages with reactions found in the analysis period.
+{% endif %}
+
+{% if reaction_summary %}
+## Reaction Statistics
+
+{{ reaction_summary }}
+{% endif %}
+
+{% if prior_emoji_analysis %}
+## Previous Analysis
+
+{% for insight in prior_emoji_analysis %}
+{{ insight.summary }}
+{% if insight.payload and insight.payload.emoji_dictionary %}
+
+Previous Emoji Dictionary:
+{% for emoji, data in insight.payload.emoji_dictionary.items() %}
+- {{ emoji }}: {{ data.meaning | default('unknown') }} (confidence: {{ data.confidence | default(0) }})
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if user_context %}
+## User Context
+
+Information about active users in this channel:
+{% for insight in user_context %}
+- {{ insight.summary[:150] }}...
+{% endfor %}
+{% endif %}
+
+{% if channel_context %}
+## Channel Context
+
+Recent channel activity context:
+{% for insight in channel_context %}
+- {{ insight.summary[:150] }}...
+{% endfor %}
+{% endif %}
+
+---
+
+Please provide:
+
+1. **Emoji Overview**: General observations about emoji/reaction culture in this channel
+2. **Custom Emoji Meanings**: For any custom server emojis, infer their likely meaning from usage context
+3. **Reaction Semantics**: How reactions are typically used (approval, humor, agreement, etc.)
+4. **Popular Reactions**: Most commonly used reactions and what they typically signify
+5. **User Patterns**: Notable individual patterns in emoji usage (if any)
+6. **Trends**: Changes in emoji usage patterns since last analysis (if applicable)
+
+Format the structured emoji data as JSON at the end of your response:
+
+```json
+{
+  "emoji_dictionary": {
+    ":emoji_name:": {
+      "meaning": "inferred meaning",
+      "usage": "approval/humor/agreement/custom",
+      "confidence": 0.0-1.0
+    }
+  },
+  "top_reactions": [
+    {
+      "emoji": ":emoji:",
+      "count": 0,
+      "primary_use": "description of primary use"
+    }
+  ],
+  "channel_emoji_culture": "brief description of emoji culture in this channel"
+}
+```

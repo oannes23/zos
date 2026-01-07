@@ -93,6 +93,10 @@ class FetchMessagesConfig(BaseNodeConfig):
         default="public",
         description="Visibility scope filter",
     )
+    include_reactions: bool = Field(
+        default=False,
+        description="Include reaction data with messages",
+    )
 
 
 class FetchInsightsConfig(BaseNodeConfig):
@@ -112,6 +116,14 @@ class FetchInsightsConfig(BaseNodeConfig):
         default=None,
         ge=1,
         description="Only fetch insights from the last N hours (None for all time)",
+    )
+    layer: str | list[str] | None = Field(
+        default=None,
+        description="Filter by layer name(s). Single string or list for multiple.",
+    )
+    topic_category_override: str | None = Field(
+        default=None,
+        description="Fetch insights from all topics in this category instead of current topic.",
     )
 
 

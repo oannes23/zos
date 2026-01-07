@@ -884,6 +884,143 @@ def cmd_conversation_test(args: argparse.Namespace) -> None:
     asyncio.run(do_test())
 
 
+def cmd_privacy_status(_args: argparse.Namespace) -> None:
+    """Show privacy and DM configuration status."""
+    config = get_config()
+    conv = config.conversation
+    discord = config.discord
+
+    print("\nPrivacy & DM Configuration")
+    print("=" * 50)
+
+    # Tracking role
+    role = discord.tracking_opt_in_role
+    if role:
+        print(f"Opt-in Role: {role}")
+        print("  (Users need this role to be tracked and use DMs)")
+    else:
+        print("Opt-in Role: (not configured)")
+        print("  (All users can be tracked and use DMs)")
+
+    # DM settings
+    print("\nDM Conversation Settings:")
+    print(f"  DM Trigger Enabled: {'Yes' if conv.triggers.respond_to_dm else 'No'}")
+    print(f"  DM Context Messages: {conv.response.dm_context_messages}")
+    print(f"  Channel Context Messages: {conv.response.context_messages}")
+
+    # Decline message
+    print("\nDM Decline Message:")
+    decline_msg = conv.dm_decline_message.replace("{role_name}", role or "opt-in")
+    print(f"  \"{decline_msg[:80]}{'...' if len(decline_msg) > 80 else ''}\"")
+
+    # Privacy scope distribution
+    print("\nInsight Scope Distribution:")
+    init_db()
+    db = get_db()
+
+    query = """
+        SELECT sources_scope_max, COUNT(*) as count
+        FROM insights
+        GROUP BY sources_scope_max
+    """
+    rows = db.execute(query).fetchall()
+
+    if rows:
+        total = sum(row["count"] for row in rows)
+        for row in rows:
+            scope = row["sources_scope_max"]
+            count = row["count"]
+            pct = (count / total * 100) if total > 0 else 0
+            print(f"  {scope:<10} {count:>6} ({pct:.1f}%)")
+        print(f"  {'Total':<10} {total:>6}")
+    else:
+        print("  (no insights yet)")
+
+
+def cmd_privacy_audit(args: argparse.Namespace) -> None:
+    """Audit privacy scope distribution and DM-derived insights."""
+    init_db()
+    db = get_db()
+
+    print("\nPrivacy Audit Report")
+    print("=" * 50)
+
+    # Message scope distribution
+    print("\nMessage Visibility Scope:")
+    msg_query = """
+        SELECT visibility_scope, COUNT(*) as count
+        FROM messages
+        WHERE is_deleted = 0
+        GROUP BY visibility_scope
+    """
+    msg_rows = db.execute(msg_query).fetchall()
+    if msg_rows:
+        msg_total = sum(row["count"] for row in msg_rows)
+        for row in msg_rows:
+            scope = row["visibility_scope"]
+            count = row["count"]
+            pct = (count / msg_total * 100) if msg_total > 0 else 0
+            print(f"  {scope:<10} {count:>8} ({pct:.1f}%)")
+    else:
+        print("  (no messages)")
+
+    # Insight scope distribution
+    print("\nInsight Sources Scope:")
+    insight_query = """
+        SELECT sources_scope_max, COUNT(*) as count
+        FROM insights
+        GROUP BY sources_scope_max
+    """
+    insight_rows = db.execute(insight_query).fetchall()
+    if insight_rows:
+        insight_total = sum(row["count"] for row in insight_rows)
+        for row in insight_rows:
+            scope = row["sources_scope_max"]
+            count = row["count"]
+            pct = (count / insight_total * 100) if insight_total > 0 else 0
+            print(f"  {scope:<10} {count:>8} ({pct:.1f}%)")
+    else:
+        print("  (no insights)")
+
+    # List DM-derived insights
+    if args.show_dm:
+        print("\nDM-Derived Insights (most recent):")
+        print("-" * 50)
+        dm_query = """
+            SELECT insight_id, topic_key, created_at, summary
+            FROM insights
+            WHERE sources_scope_max = 'dm'
+            ORDER BY created_at DESC
+            LIMIT ?
+        """
+        dm_rows = db.execute(dm_query, (args.limit,)).fetchall()
+        if dm_rows:
+            for row in dm_rows:
+                summary = row["summary"][:50] + "..." if len(row["summary"]) > 50 else row["summary"]
+                summary = summary.replace("\n", " ")
+                print(f"  {row['insight_id'][:8]}... {row['topic_key']:<20} {summary}")
+        else:
+            print("  (no DM-derived insights)")
+
+    # Check for potential leaks
+    print("\nPrivacy Check:")
+    # Look for insights that might have been derived from DMs but tagged as public
+    # This is a heuristic check
+    leak_query = """
+        SELECT COUNT(*) as count
+        FROM insights
+        WHERE sources_scope_max = 'public'
+        AND (summary LIKE '%DM%' OR summary LIKE '%private message%')
+    """
+    leak_row = db.execute(leak_query).fetchone()
+    potential_leaks = leak_row["count"] if leak_row else 0
+    if potential_leaks > 0:
+        print(f"  Warning: {potential_leaks} public insights mention 'DM' or 'private message'")
+        print("  These may need manual review.")
+    else:
+        print("  No obvious DM references in public insights.")
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -1112,6 +1249,30 @@ def create_parser() -> argparse.ArgumentParser:
     )
     conversation_test_parser.set_defaults(func=cmd_conversation_test)
 
+    # privacy command
+    privacy_parser = subparsers.add_parser("privacy", help="Privacy and DM management")
+    privacy_subparsers = privacy_parser.add_subparsers(
+        dest="subcommand", help="Privacy subcommands"
+    )
+
+    # privacy status
+    privacy_status_parser = privacy_subparsers.add_parser(
+        "status", help="Show privacy and DM configuration status"
+    )
+    privacy_status_parser.set_defaults(func=cmd_privacy_status)
+
+    # privacy audit
+    privacy_audit_parser = privacy_subparsers.add_parser(
+        "audit", help="Audit privacy scope distribution"
+    )
+    privacy_audit_parser.add_argument(
+        "--show-dm", action="store_true", help="Show DM-derived insights"
+    )
+    privacy_audit_parser.add_argument(
+        "--limit", "-l", type=int, default=10, help="Limit for DM insights list (default: 10)"
+    )
+    privacy_audit_parser.set_defaults(func=cmd_privacy_audit)
+
     return parser
 
 
@@ -1150,6 +1311,10 @@ def main() -> None:
 
     if args.command == "conversation" and args.subcommand is None:
         parser.parse_args(["conversation", "--help"])
+        return
+
+    if args.command == "privacy" and args.subcommand is None:
+        parser.parse_args(["privacy", "--help"])
         return
 
     if hasattr(args, "func"):

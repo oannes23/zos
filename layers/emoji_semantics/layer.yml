@@ -1,0 +1,61 @@
+name: emoji_semantics
+description: Weekly analysis of emoji usage patterns and meaning inference
+
+schedule: "0 6 * * 0"  # 6 AM Sundays (after social_dynamics layer)
+
+targets:
+  categories:
+    - channel
+  min_salience: 20.0  # Higher threshold - focus on active channels
+  max_targets: 15
+
+salience_rules:
+  spend_per_target: 2.0
+  spend_on_output: 0.0
+
+model_defaults:
+  provider: null
+  model: null
+  temperature: 0.7
+  max_tokens: 2000
+
+max_lookback_hours: 336  # 2 weeks
+
+pipeline:
+  for_each: target
+  nodes:
+    - type: fetch_messages
+      name: get_messages_with_reactions
+      lookback_hours: 336
+      max_messages: 300
+      scope: public
+      include_reactions: true
+
+    - type: fetch_insights
+      name: get_prior_emoji_analysis
+      max_insights: 3
+      layer: emoji_semantics
+
+    - type: fetch_insights
+      name: get_user_context
+      max_insights: 10
+      layer: user_profile
+      topic_category_override: user
+
+    - type: fetch_insights
+      name: get_channel_context
+      max_insights: 3
+      layer: channel_digest
+
+    - type: llm_call
+      name: analyze_emoji
+      prompt: analyze
+      system_prompt: system
+
+    - type: store_insight
+      name: save_emoji_semantics
+      include_payload: true
+
+    - type: output
+      name: log_output
+      destination: log

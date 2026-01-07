@@ -1,0 +1,71 @@
+Analyze the interactions between these two users and characterize their relationship dynamics.
+
+{% if messages_text %}
+## Recent Interactions (Past 2 Weeks)
+
+{{ messages_text }}
+{% else %}
+No recent interaction messages found between these users.
+{% endif %}
+
+{% if prior_dynamics %}
+## Previous Analysis
+
+{% for insight in prior_dynamics %}
+{{ insight.summary }}
+{% if insight.payload and insight.payload.relationship %}
+
+Previous Relationship Data:
+- Type: {{ insight.payload.relationship.type | default('unknown') }}
+- Strength: {{ insight.payload.relationship.strength | default('unknown') }}
+- Primary Context: {{ insight.payload.relationship.primary_context | default('unknown') }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if user_profiles %}
+## User Profiles
+
+Context about the individuals involved:
+{% for insight in user_profiles %}
+- {{ insight.summary[:200] }}...
+{% endfor %}
+{% endif %}
+
+{% if channel_context %}
+## Channel Context
+
+Recent activity in channels where these users interact:
+{% for insight in channel_context %}
+- {{ insight.summary[:150] }}...
+{% endfor %}
+{% endif %}
+
+---
+
+Please provide:
+
+1. **Relationship Summary**: A 2-3 sentence description of the relationship between these users
+2. **Interaction Style**: How they typically communicate with each other (formal/casual, supportive/challenging, etc.)
+3. **Shared Interests**: Topics or activities they engage in together
+4. **Relationship Strength**: Assessment of how connected they appear (weak/moderate/strong)
+5. **Notable Patterns**: Any recurring themes, inside jokes, collaborative behaviors, or friction points
+6. **Changes**: How the relationship has evolved since the last analysis (if applicable)
+
+Format the structured relationship data as JSON at the end of your response:
+
+```json
+{
+  "relationship": {
+    "type": "type of relationship (e.g., collaborators, mutual supporters, debate partners, casual acquaintances)",
+    "strength": "weak/moderate/strong",
+    "primary_context": "main channel or topic where they interact",
+    "shared_interests": ["list of shared interests"],
+    "interaction_frequency": "rare/occasional/frequent"
+  },
+  "confidence": {
+    "type": 0.0-1.0,
+    "strength": 0.0-1.0
+  }
+}
+```

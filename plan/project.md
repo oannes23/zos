@@ -324,4 +324,4 @@ Outputs JSON/YAML only. No fancy UI.
 
 ---
 
-**Status:** Phases 1-11 complete. Core reflection pipeline, introspection API, and conversational layer work end-to-end. Zos can now respond to mentions, replies, DMs, and keyword triggers with configurable rate limiting.
+**Status:** Phases 1-12 complete. Core reflection pipeline, introspection API, conversational layer, and DM privacy controls work end-to-end. Zos can respond to mentions, replies, DMs (with opt-in role verification), and keyword triggers with configurable rate limiting. DM-derived insights are privacy-tagged and excluded from public outputs.

@@ -655,7 +655,7 @@ uv run python -m zos
 
 ---
 
-## Phase 12: DM Handling & Privacy
+## Phase 12: DM Handling & Privacy ✅ COMPLETE
 
 **Goal:** Implement private DM conversations with appropriate privacy controls.
 
@@ -686,6 +686,14 @@ uv run python -m zos
 - Privacy guarantees enforced
 - Audit trail for DM-derived insights
 
+### Implementation Notes
+- Added `dm_context_messages` (default 30) and `dm_decline_message` to config
+- Added `_is_dm_opted_in()` to Discord client - checks `tracking_opt_in_role` across shared guilds
+- Completed `PrivacyEnforcer` with `filter_insights_for_scope()`, `redact_dm_content()`, `validate_output_privacy()`
+- Updated `Responder` to use DM-specific context limits and filter insights by privacy scope
+- Added CLI commands: `privacy status`, `privacy audit`
+- Comprehensive tests in `tests/test_dm.py` and `tests/test_privacy.py`
+
 ### Manual Testing Checkpoint
 ```bash
 # 1. Run tests
@@ -703,6 +711,10 @@ uv run python -m zos
 # 3. Verify privacy enforcement
 uv run python -m zos.cli insights list --scope public
 # Should not contain any raw DM text
+
+# 4. Check privacy status
+uv run python -m zos.cli privacy status
+uv run python -m zos.cli privacy audit
 ```
 **Expected behavior:**
 - DM conversations work for opted-in users
@@ -712,7 +724,7 @@ uv run python -m zos.cli insights list --scope public
 
 ---
 
-## Phase 13: Additional Reflection Layers
+## Phase 13: Additional Reflection Layers ✅ COMPLETE
 
 **Goal:** Implement remaining planned reflection layers.
 
@@ -753,18 +765,45 @@ uv run python -m zos.cli insights list --scope public
 - Richer insight generation
 - Demonstrated layer composability
 
+### Implementation Notes
+- Extended `FetchInsightsConfig` in `src/zos/layer/schema.py` with:
+  - `layer`: Filter insights by layer name(s)
+  - `topic_category_override`: Fetch insights from all topics in a category
+- Extended `FetchMessagesConfig` with `include_reactions: bool`
+- Extended `InsightRepository` with `layer` filter and `get_insights_by_category()` method
+- Added `get_reactions_for_messages()` to `MessageRepository`
+- Updated `FetchInsightsNode` to support cross-layer fetching with dynamic context keys
+- Updated `FetchMessagesNode` to attach reactions and build `reaction_summary`
+- Created three new layers:
+  - `layers/user_profile/` - Daily user profile analysis (4 AM)
+  - `layers/social_dynamics/` - Weekly relationship analysis (5 AM Sundays)
+  - `layers/emoji_semantics/` - Weekly emoji/reaction patterns (6 AM Sundays)
+- Each layer has: `layer.yml`, `prompts/system.j2`, `prompts/analyze.j2`, `README.md`
+- Comprehensive tests:
+  - `tests/test_cross_layer_integration.py` (21 tests)
+  - `tests/test_user_profile.py` (17 tests)
+  - `tests/test_social_dynamics.py` (18 tests)
+  - `tests/test_emoji_semantics.py` (18 tests)
+
 ### Manual Testing Checkpoint
 ```bash
 # 1. Run all layer tests
-uv run pytest tests/test_layers/
+uv run pytest tests/test_user_profile.py tests/test_social_dynamics.py tests/test_emoji_semantics.py tests/test_cross_layer_integration.py
 
-# 2. Run each new layer
-uv run python -m zos.cli layer run social_dynamics
+# 2. Validate layers
+uv run python -m zos.cli layer validate user_profile
+uv run python -m zos.cli layer validate social_dynamics
+uv run python -m zos.cli layer validate emoji_semantics
+
+# 3. Run each new layer
 uv run python -m zos.cli layer run user_profile
+uv run python -m zos.cli layer run social_dynamics
 uv run python -m zos.cli layer run emoji_semantics
 
-# 3. Verify cross-layer insight references
-uv run python -m zos.cli insights list --has-derived-from
+# 4. Verify insights
+uv run python -m zos.cli insights list --layer user_profile
+uv run python -m zos.cli insights list --layer social_dynamics
+uv run python -m zos.cli insights list --layer emoji_semantics
 ```
 **Expected behavior:**
 - Each layer produces meaningful insights

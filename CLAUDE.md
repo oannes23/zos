@@ -19,6 +19,9 @@ uv run python -m zos.cli layer list                    # List available layers
 uv run python -m zos.cli layer validate channel_digest # Validate a layer definition
 uv run python -m zos.cli layer dry-run channel_digest  # Dry-run a layer
 uv run python -m zos.cli layer run channel_digest      # Run a layer manually
+uv run python -m zos.cli layer run user_profile        # Run user profile layer
+uv run python -m zos.cli layer run social_dynamics     # Run social dynamics layer
+uv run python -m zos.cli layer run emoji_semantics     # Run emoji semantics layer
 uv run python -m zos.cli runs list                     # List recent runs
 uv run python -m zos.cli runs show <run_id>            # Show run details
 uv run python -m zos.cli runs show <run_id> --trace    # Show run with execution trace
@@ -28,6 +31,9 @@ uv run python -m zos.cli insights show <insight_id>    # Show insight details
 uv run python -m zos.cli insights show <insight_id> --full  # Show with payload and sources
 uv run python -m zos.cli conversation status           # Show conversation config status
 uv run python -m zos.cli conversation test "Hello!"    # Test conversation response
+uv run python -m zos.cli privacy status                # Show privacy/DM configuration
+uv run python -m zos.cli privacy audit                 # Audit privacy scope distribution
+uv run python -m zos.cli privacy audit --show-dm       # Show DM-derived insights
 uv run python -m zos.api                               # Run standalone API server
 ```
 
@@ -74,7 +80,10 @@ plan/              # Architecture docs
   project.md       # Full spec
   plan.md          # Implementation phases
 layers/            # Reflection layer definitions (YAML + prompts)
-  channel_digest/  # Example layer for channel summaries
+  channel_digest/  # Daily channel summaries
+  user_profile/    # Daily user profile analysis
+  social_dynamics/ # Weekly relationship analysis
+  emoji_semantics/ # Weekly emoji/reaction patterns
 ```
 
 ## Key Files

@@ -437,3 +437,41 @@ class MessageRepository:
 
         rows = self.db.execute(query, tuple(params)).fetchall()
         return [dict(row) for row in rows]
+
+    def get_reactions_for_messages(
+        self,
+        message_ids: list[int],
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Fetch reactions for a list of messages.
+
+        Args:
+            message_ids: List of message IDs to fetch reactions for.
+
+        Returns:
+            Dictionary mapping message_id to list of reaction dicts.
+            Each reaction dict has: emoji, user_id, user_name, created_at.
+        """
+        if not message_ids:
+            return {}
+
+        placeholders = ",".join("?" for _ in message_ids)
+        query = f"""
+            SELECT message_id, emoji, user_id, user_name, created_at
+            FROM reactions
+            WHERE message_id IN ({placeholders}) AND is_removed = 0
+            ORDER BY message_id, created_at
+        """
+        rows = self.db.execute(query, tuple(message_ids)).fetchall()
+
+        result: dict[int, list[dict[str, Any]]] = {}
+        for row in rows:
+            msg_id = row["message_id"]
+            if msg_id not in result:
+                result[msg_id] = []
+            result[msg_id].append({
+                "emoji": row["emoji"],
+                "user_id": row["user_id"],
+                "user_name": row["user_name"],
+                "created_at": row["created_at"],
+            })
+        return result

@@ -1,0 +1,55 @@
+name: user_profile
+description: Daily analysis of individual user behavior and profile building
+
+schedule: "0 4 * * *"  # 4 AM daily (after channel_digest at 3 AM)
+
+targets:
+  categories:
+    - user
+  min_salience: 15.0  # Higher threshold - only active users
+  max_targets: 30
+
+salience_rules:
+  spend_per_target: 1.5
+  spend_on_output: 0.0
+
+model_defaults:
+  provider: null
+  model: null
+  temperature: 0.6  # Lower for consistent profile extraction
+  max_tokens: 1500
+
+max_lookback_hours: 168  # 1 week
+
+pipeline:
+  for_each: target
+  nodes:
+    - type: fetch_messages
+      name: get_user_messages
+      lookback_hours: 168
+      max_messages: 200
+      scope: public
+
+    - type: fetch_insights
+      name: get_prior_profile
+      max_insights: 1
+      layer: user_profile
+
+    - type: fetch_insights
+      name: get_channel_context
+      max_insights: 5
+      layer: channel_digest
+      topic_category_override: channel
+
+    - type: llm_call
+      name: analyze_profile
+      prompt: analyze
+      system_prompt: system
+
+    - type: store_insight
+      name: save_profile
+      include_payload: true
+
+    - type: output
+      name: log_output
+      destination: log

@@ -1,0 +1,66 @@
+Analyze the following messages from this user and update their profile.
+
+{% if messages_text %}
+## Recent Messages (Past Week)
+
+{{ messages_text }}
+{% else %}
+No new messages from this user in the analysis period.
+{% endif %}
+
+{% if prior_profile %}
+## Previous Profile
+
+{% for insight in prior_profile %}
+{{ insight.summary }}
+{% if insight.payload and insight.payload.profile %}
+
+Current Known Data:
+- Names: {{ insight.payload.profile.known_names | default([]) | join(', ') or 'unknown' }}
+- Pronouns: {{ insight.payload.profile.pronouns | default('unknown') }}
+- Occupation: {{ insight.payload.profile.occupation | default('unknown') }}
+- Interests: {{ insight.payload.profile.interests | default([]) | join(', ') or 'none recorded' }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if channel_context %}
+## Channel Context
+
+Recent activity in channels this user participates in:
+{% for insight in channel_context %}
+- {{ insight.summary[:150] }}...
+{% endfor %}
+{% endif %}
+
+---
+
+Please provide:
+
+1. **Profile Summary**: A 2-3 sentence description of this user based on their messages
+2. **Communication Style**: How they typically communicate (formal/casual, verbose/concise, etc.)
+3. **Interests**: Topics they frequently discuss or engage with
+4. **Profile Updates**: Any new information about:
+   - Known names or nicknames (only if clearly stated by the user)
+   - Pronouns (only if clearly stated by the user)
+   - Occupation/background (only if shared by the user)
+5. **Notable Changes**: Any shifts in behavior or new topics since last analysis
+
+Format the structured profile data as JSON at the end of your response:
+
+```json
+{
+  "profile": {
+    "known_names": ["list of names/nicknames used"],
+    "pronouns": "pronouns if stated, otherwise null",
+    "occupation": "occupation if shared, otherwise null",
+    "interests": ["list of interests"],
+    "communication_style": "brief description"
+  },
+  "confidence": {
+    "names": 0.0-1.0,
+    "pronouns": 0.0-1.0,
+    "occupation": 0.0-1.0
+  }
+}
+```

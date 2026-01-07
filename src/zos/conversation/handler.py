@@ -103,6 +103,18 @@ class HandleResult:
             error=response_result.error,
         )
 
+    @classmethod
+    def dm_declined(
+        cls,
+        trigger_result: TriggerResult | None = None,
+    ) -> HandleResult:
+        """Create a result for declined DM due to missing opt-in role."""
+        return cls(
+            responded=False,
+            trigger_result=trigger_result,
+            error="DM declined: user missing opt-in role",
+        )
+
 
 class ConversationHandler:
     """Main handler for conversational interactions.

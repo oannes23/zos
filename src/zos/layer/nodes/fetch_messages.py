@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -27,6 +28,7 @@ class FetchMessagesNode(BaseNode):
     - dyad_in_channel: Messages involving both users in channel
 
     Stores the messages in context as "messages".
+    Optionally includes reactions when include_reactions is True.
     """
 
     config: FetchMessagesConfig
@@ -66,15 +68,67 @@ class FetchMessagesNode(BaseNode):
                 m for m in messages if m.get("visibility_scope") == self.config.scope
             ]
 
+        # Include reactions if configured
+        if self.config.include_reactions and messages:
+            messages = self._attach_reactions(context, messages)
+
         # Store in context for downstream nodes
         context.set("messages", messages)
 
+        reactions_info = ""
+        if self.config.include_reactions:
+            reactions_info = ", include_reactions=True"
+
         logger.debug(
             f"Fetched {len(messages)} messages for {topic.key} "
-            f"(lookback={self.config.lookback_hours}h, scope={self.config.scope})"
+            f"(lookback={self.config.lookback_hours}h, scope={self.config.scope}{reactions_info})"
         )
 
         return NodeResult.ok(data=messages)
+
+    def _attach_reactions(
+        self,
+        context: PipelineContext,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Attach reactions to messages and build reaction summary.
+
+        Args:
+            context: Pipeline context.
+            messages: List of message dicts.
+
+        Returns:
+            Messages with reactions attached.
+        """
+        repo = context.message_repo
+        message_ids = [m["message_id"] for m in messages]
+
+        # Fetch all reactions for these messages
+        reactions_by_msg = repo.get_reactions_for_messages(message_ids)
+
+        # Attach reactions to each message
+        for msg in messages:
+            msg_id = msg["message_id"]
+            msg["reactions"] = reactions_by_msg.get(msg_id, [])
+
+        # Build reaction summary for context
+        all_reactions: list[str] = []
+        for reactions in reactions_by_msg.values():
+            all_reactions.extend(r["emoji"] for r in reactions)
+
+        emoji_counts = Counter(all_reactions)
+        reaction_summary = "\n".join(
+            f"  {emoji}: {count}" for emoji, count in emoji_counts.most_common(20)
+        )
+        if reaction_summary:
+            reaction_summary = f"Reaction counts:\n{reaction_summary}"
+        else:
+            reaction_summary = "No reactions in this period."
+
+        context.set("reaction_summary", reaction_summary)
+        context.set("reaction_counts", dict(emoji_counts))
+
+        return messages
 
     def _fetch_for_topic(
         self,

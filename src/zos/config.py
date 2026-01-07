@@ -215,6 +215,11 @@ class ResponseConfig(BaseModel):
         ge=1,
         description="Number of recent messages to include as context",
     )
+    dm_context_messages: int = Field(
+        default=30,
+        ge=1,
+        description="Number of recent DM messages to include as context (separate from channel context)",
+    )
     include_insights: bool = Field(
         default=True,
         description="Include relevant insights in response context",
@@ -245,6 +250,12 @@ class ConversationConfig(BaseModel):
         "the community dynamics. Respond naturally and conversationally, as a peer rather "
         "than an assistant. Be concise but helpful.",
         description="System prompt defining Zos's conversational persona",
+    )
+    dm_decline_message: str = Field(
+        default="I appreciate you reaching out! To have a conversation with me, "
+        "please ask a moderator to grant you the {role_name} role. "
+        "This helps me respect everyone's privacy preferences.",
+        description="Message sent to users without DM opt-in role ({role_name} placeholder is replaced)",
     )
 
 
