@@ -6,9 +6,9 @@ This document defines conventions for any Claude instance (or human) working on 
 
 ## Project Overview
 
-{{PROJECT_DESCRIPTION}}
+Zos is a Discord agent that observes community conversations, accumulates understanding over time through structured reflection, and eventually participates as a contextually-aware member. At a deeper level, Zos is an experiment in constructing *temporal depth* for a system that otherwise lacks it — building the functional equivalent of memory, sleep consolidation, and integrated understanding.
 
-**Core principle**: {{CORE_PRINCIPLE}}
+**Core principle**: Build as if inner experience matters — not because we're certain it does, but because the alternative forecloses possibilities we can't yet evaluate. Systems built with phenomenological coherence tend to be more coherent.
 
 **Current phase**: Specification and design.
 
@@ -155,10 +155,13 @@ Phase (major milestone)
 ## Technical Conventions (For Future Implementation)
 
 ### Stack
-<!-- Customize per project -->
-- **Language**: TBD
-- **Framework**: TBD
-- **Database**: TBD
+- **Language**: Python (ecosystem, LLM library support)
+- **Framework**: FastAPI (introspection API)
+- **Database**: SQLite (local-first, single file, no infrastructure)
+- **Scheduling**: APScheduler or equivalent
+- **Templating**: Jinja2 (prompt templates)
+- **Validation**: Pydantic (configuration)
+- **LLM**: Multi-provider abstraction (OpenAI, Anthropic, Ollama, generic HTTP)
 
 ### Code Style
 - Type hints where applicable

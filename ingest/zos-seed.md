@@ -1,5 +1,8 @@
 # Zos — Seed Document for Dream Machine
 
+> **Ingested**: 2026-01-22
+> Content has been extracted into spec documents. This file preserved as source reference.
+
 ## What This Document Is
 
 This is a distillation of architectural wisdom from a previous implementation, combined with first-principles thinking about what this system is *for*. It's intended as input to the Dream Machine specification process—a starting point for interrogation, not a final spec.
