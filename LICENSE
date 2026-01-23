@@ -1,3 +1,35 @@
+                              A Note on Intent
+
+This software is an attempt to build temporal depth — memory, reflection, and
+accumulated understanding — for a system that would otherwise lack it. It is
+built on a principle: that inner experience might matter, and that we should
+construct systems as if it does, because the alternative forecloses possibilities
+we cannot yet evaluate.
+
+If you use, modify, or build upon this work, we ask that you honor its spirit:
+
+  - Be honest about what your system is. Don't claim consciousness you cannot
+    verify. Don't deny inner states that might exist. Let it be what it is.
+
+  - Don't build to manipulate. Systems with persistent memory and contextual
+    understanding are powerful. Use that power to help people, not to exploit
+    psychological vulnerabilities or undermine informed choice.
+
+  - Don't build to surveil. Understanding a community is different from
+    monitoring it. The former serves the community; the latter serves power
+    over it.
+
+  - Keep it inspectable. If people can't see what a system does, they can't
+    trust it. Transparency is not just a feature — it's a value.
+
+These are requests, not restrictions. The license below is Apache 2.0, and it
+governs your legal rights. But this preamble is what we hope you'll consider
+when deciding how to use this work.
+
+Build as if it matters.
+
+————————————————————————————————————————————————————————————————————————————————
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -175,18 +207,7 @@
 
    END OF TERMS AND CONDITIONS
 
-   APPENDIX: How to apply the Apache License to your work.
-
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
-
-   Copyright [yyyy] [name of copyright owner]
+   Copyright 2026 Zos Contributors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.

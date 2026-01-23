@@ -43,7 +43,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Area | Doc | Status | Notes |
 |------|-----|--------|-------|
 | System Overview | [overview.md](architecture/overview.md) | 🟡 | Philosophy, constraints, non-goals |
-| Data Model | [data-model.md](architecture/data-model.md) | 🟡 | Entity relationships, storage approach |
+| Data Model | [data-model.md](architecture/data-model.md) | 🔄 | Entity relationships, storage approach; **needs**: server-aware keys, provisional flag |
 | MVP Scope | [mvp-scope.md](architecture/mvp-scope.md) | 🟡 | MVP 0 vs MVP 1 boundaries |
 
 ---
@@ -54,11 +54,11 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 
 | Area | Doc | Status | Key Open Questions |
 |------|-----|--------|-------------------|
-| Topics | [topics.md](domains/topics.md) | 🟡 | Multi-server identity, additional topic types, cross-topic insights |
+| Topics | [topics.md](domains/topics.md) | 🟢 | — |
 | Privacy | [privacy.md](domains/privacy.md) | 🟡 | Consent granularity, revocation policy, per-server models |
-| Salience | [salience.md](domains/salience.md) | 🟡 | Decay model, importance dimensions, overflow behavior |
-| Insights | [insights.md](domains/insights.md) | 🟡 | Versioning, cross-topic modeling, conflict resolution |
-| Layers | [layers.md](domains/layers.md) | 🟡 | DAG pipelines, conditionals, self-modification flow |
+| Salience | [salience.md](domains/salience.md) | 🔄 | Decay model, importance dimensions, overflow behavior; **needs**: propagation rules |
+| Insights | [insights.md](domains/insights.md) | 🟢 | — |
+| Layers | [layers.md](domains/layers.md) | 🔄 | DAG pipelines, conditionals, self-modification flow; **needs**: synthesis layer type, metrics request, retrieval config |
 
 ---
 
@@ -112,6 +112,31 @@ These questions span multiple domains and need resolution:
 ---
 
 ## Recent Changes
+
+### 2026-01-22: Insights Spec Complete
+
+- Interrogated insights.md to completion
+- Decided: append-only history (insights never overwritten)
+- Added rich metrics: confidence, importance, novelty, multi-dimensional emotional valence
+- Combined strength formula: salience_spent × model adjustment (0.5-2.0)
+- Threshold-triggered synthesis for contradictions (threshold self-determined by Zos)
+- Self-insights privileged with elevated strength
+- New artifact: `self-concept.md` document (always in context, self-modifiable)
+- Configurable context-adaptive retrieval per layer
+- Human-relative temporal marking for LLM comprehension
+- Added glossary terms: Insight Strength, Self-Concept Document, Synthesis Layer
+- Marked specs needing update: layers (synthesis type, metrics request), data-model (extended schema)
+
+### 2026-01-22: Topics Spec Complete
+
+- Interrogated topics.md to completion
+- Added self-topics (global + per-server)
+- Added semantic topics (subjects) with consolidation pressure
+- Added thread topics (configurable per server)
+- Added role topics
+- Decided: server-aware keys from start, primary topic + links for cross-topic, preserve insights indefinitely
+- Added glossary terms: Self-Topic, Subject Topic, Provisional Topic
+- Marked specs needing revision: salience (propagation), insights (schema), data-model (provisional flag)
 
 ### 2026-01-22: Seed Document Ingested
 
