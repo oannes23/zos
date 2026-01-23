@@ -77,6 +77,14 @@ dyad:<a>:<b>                 # Global relationship understanding
 |---------|---------|---------|
 | `server:<id>:subject:<name>` | `server:123:subject:api_redesign` | An emergent theme or subject of discussion |
 
+#### Emoji Topics
+
+| Pattern | Example | Meaning |
+|---------|---------|---------|
+| `server:<id>:emoji:<emoji_id>` | `server:123:emoji:984521357` | A custom emoji's cultural meaning and usage |
+
+Emoji topics track custom emoji culture: usage patterns, who uses the emoji, common contexts, and emergent semantic meaning. Created on first use. Part of tri-level emoji culture modeling. See [observation.md](observation.md) for details.
+
 #### Contextual Self Topics
 
 | Pattern | Example | Meaning |
@@ -299,6 +307,7 @@ Topics fall into categories for budgeting, targeting, and querying:
 - **user_in_channel**: Person-space combinations (server-scoped only)
 - **dyad_in_channel**: Relationships in context (server-scoped only)
 - **subjects**: Semantic topics (`server:*:subject:*`)
+- **emojis**: Custom emoji culture (`server:*:emoji:*`)
 - **self**: Self-understanding (`self:*` and `server:*:self:*`)
 
 ---
@@ -381,12 +390,13 @@ This is specified in detail in [salience.md](salience.md).
 
 | Spec | Implication |
 |------|-------------|
-| [salience.md](salience.md) | Salience propagation to global topics; budget groups include global user/dyad |
+| [observation.md](observation.md) | Observation creates emoji topics; respects topic key format |
+| [salience.md](salience.md) | Salience propagation to global topics; budget groups include global user/dyad; emoji topics need budget group |
 | [insights.md](insights.md) | Insight schema needs `global_refs` field for synthesis tracking |
 | [privacy.md](privacy.md) | Global topics inform but don't surface cross-server; output filter handles |
 | [layers.md](layers.md) | User/dyad reflection needs synthesis step to global; DM reflection attaches to global directly |
-| [data-model.md](../architecture/data-model.md) | Topic table needs global vs server-scoped distinction; synthesis tracking |
+| [data-model.md](../architecture/data-model.md) | Topic table needs global vs server-scoped distinction; synthesis tracking; emoji topic type |
 
 ---
 
-_Last updated: 2026-01-22_
+_Last updated: 2026-01-23 — Added emoji topic type_

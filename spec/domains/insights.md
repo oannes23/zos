@@ -1,7 +1,7 @@
 # Insights — Domain Specification
 
 **Status**: 🟢 Complete
-**Last interrogated**: 2026-01-22 (updated for global refs, quarantine)
+**Last interrogated**: 2026-01-23 (updated for social_texture category)
 **Last verified**: —
 **Depends on**: Topics, Privacy (scope), Salience
 **Depended on by**: Layers (produce and consume insights), Self-Concept
@@ -146,7 +146,7 @@ Paradoxes can coexist until resolution is needed.
 |-------|------|----------|-------|
 | `id` | string | yes | ULID (sortable, unique) |
 | `topic_key` | string | yes | Primary topic this insight is about |
-| `category` | string | yes | Type of insight (e.g., `user_reflection`, `dyad_observation`, `synthesis`) |
+| `category` | string | yes | Type of insight (see [Insight Categories](#insight-categories) below) |
 | `content` | string | yes | The actual understanding (natural language) |
 | `sources_scope_max` | enum | yes | `public`, `dm`, or `derived` |
 | `created_at` | timestamp | yes | When generated |
@@ -198,6 +198,100 @@ Paradoxes can coexist until resolution is needed.
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `synthesis_source_ids` | list[string] | no | IDs of insights combined in this synthesis (only for category=`synthesis`) |
+
+---
+
+## Insight Categories
+
+The `category` field indicates what type of understanding this insight represents.
+
+### Reflection Categories (Semantic Understanding)
+
+| Category | Attaches To | What It Represents |
+|----------|-------------|-------------------|
+| `user_reflection` | User topics | Understanding about an individual's thoughts, interests, patterns |
+| `dyad_observation` | Dyad topics | Relationship observations — how two people interact |
+| `channel_reflection` | Channel topics | Space patterns — what happens in a channel, its culture |
+| `subject_reflection` | Subject topics | Semantic topic understanding — what a subject means to the community |
+| `self_reflection` | Self topics | Zos's self-understanding |
+| `synthesis` | Any topic | Consolidated understanding from multiple sources/insights |
+
+### Social Texture Category (Expression Patterns)
+
+| Category | Attaches To | What It Represents |
+|----------|-------------|-------------------|
+| `social_texture` | User, Emoji, or Server topics | *How* people communicate, not *what* they say |
+
+**Social texture** insights capture expression patterns:
+- **On User topics**: Individual expression style — emoji preferences, reaction tendencies, formality, verbosity
+- **On Emoji topics**: Cultural meaning — what this emoji means in this community, who uses it, in what contexts
+- **On Server topics**: Community norms — overall emoji culture, reaction patterns, communication style
+
+### Social Texture Decisions
+
+#### Valence Required
+
+- **Decision**: Social texture insights have the same valence requirement as all other insights
+- **Rationale**: "How did it feel to notice this pattern?" is meaningful. Even analytical observations have affective texture.
+- **Implications**: Consistent validation across all insight types
+
+#### Generated During Reflection
+
+- **Decision**: Social texture insights are generated during scheduled reflection, not real-time during observation
+- **Rationale**: Observation accumulates data (reactions, emoji usage); reflection layers analyze patterns and produce insights. Same as other insight types.
+- **Implications**: Need a social texture reflection layer (or include texture analysis in user/channel layers)
+
+#### Standalone + Referenced
+
+- **Decision**: Social texture insights exist independently AND are included as context when reflecting on users/dyads
+- **Rationale**: Expression patterns are their own form of understanding AND inform how we understand people
+- **Implications**: User reflection retrieves texture insights about that user as context
+
+#### Same Strength Formula
+
+- **Decision**: Social texture uses the same strength formula (salience spent × model adjustment) as other insights
+- **Rationale**: Texture insights compete on merit. Important patterns earn high strength; routine observations earn less.
+- **Implications**: No special-casing in retrieval or storage
+
+#### No Sub-Categories
+
+- **Decision**: Single `social_texture` category with no sub-types
+- **Rationale**: Keep it simple. The content describes whether it's about emoji, reactions, or style.
+- **Implications**: Simple category validation; flexible content
+
+### Social Texture Examples
+
+**User texture insight:**
+```json
+{
+  "topic_key": "server:123:user:456",
+  "category": "social_texture",
+  "content": "Alice uses custom emojis heavily and tends toward the server's inside-joke reactions. Her reaction-to-message ratio is high — she's more of a reactor than a poster. Her messages tend to be brief and informal.",
+  "valence_warmth": 0.6,
+  "valence_curiosity": 0.4
+}
+```
+
+**Emoji texture insight:**
+```json
+{
+  "topic_key": "server:123:emoji:984521357",
+  "category": "social_texture",
+  "content": "The :pepethink: emoji has evolved from its original meaning. In this server it's used almost exclusively for genuine puzzlement, not the ironic skepticism common elsewhere. Mostly used by the engineering subset.",
+  "valence_curiosity": 0.7
+}
+```
+
+**Server texture insight:**
+```json
+{
+  "topic_key": "server:123",
+  "category": "social_texture",
+  "content": "This server has unusually high reaction engagement — almost every message gets at least one reaction. The culture is affirming; heart reactions outnumber all others 3:1. Very little negative reaction usage.",
+  "valence_warmth": 0.8,
+  "valence_joy": 0.5
+}
+```
 
 ---
 
@@ -430,11 +524,12 @@ When triggered:
 
 | Spec | Implication |
 |------|-------------|
-| [topics.md](topics.md) | Self-topics get special retrieval; topic-key format confirmed; global refs computed from server-scoped keys |
-| [salience.md](salience.md) | Salience consumed on insight creation; strength uses salience_spent |
-| [layers.md](layers.md) | Layers request metrics; retrieval preferences in layer config; synthesis layer produces `synthesis_source_ids` |
+| [observation.md](observation.md) | Observation provides reaction/emoji data that informs social_texture insights |
+| [topics.md](topics.md) | Self-topics get special retrieval; emoji topics can have texture insights; global refs computed from server-scoped keys |
+| [salience.md](salience.md) | Salience consumed on insight creation; strength uses salience_spent; Culture budget group for emoji topic reflection |
+| [layers.md](layers.md) | Layers request metrics; retrieval preferences in layer config; texture layer or texture analysis in user/channel layers |
 | [privacy.md](privacy.md) | Quarantine flag for privacy gate role removal; scope tracking unchanged |
-| [data-model.md](../architecture/data-model.md) | Extended schema with metrics, valence, cross-links, conflict fields, quarantine flag, synthesis_source_ids |
+| [data-model.md](../architecture/data-model.md) | Extended schema with metrics, valence, cross-links, conflict fields, quarantine flag, synthesis_source_ids, social_texture category |
 
 ---
 
@@ -450,4 +545,4 @@ This needs its own mini-spec or section in architecture.
 
 ---
 
-_Last updated: 2026-01-22 — Valence requirement added (at least one); contradiction threshold operationalized (self-concept storage)_
+_Last updated: 2026-01-23 — Social texture category added with full specification_

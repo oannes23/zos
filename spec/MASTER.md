@@ -43,7 +43,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Area | Doc | Status | Notes |
 |------|-----|--------|-------|
 | System Overview | [overview.md](architecture/overview.md) | 🟢 | Philosophy, constraints, non-goals, system wants/concerns |
-| Data Model | [data-model.md](architecture/data-model.md) | 🟢 | Entity relationships, storage approach — synced with all domain specs |
+| Data Model | [data-model.md](architecture/data-model.md) | 🟢 | Entity relationships, storage approach — synced with observation and chattiness |
 | MVP Scope | [mvp-scope.md](architecture/mvp-scope.md) | 🟢 | MVP 0/1 scope, validation criteria, architectural preparation |
 
 ---
@@ -54,6 +54,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 
 | Area | Doc | Status | Key Open Questions |
 |------|-----|--------|-------------------|
+| Observation | [observation.md](domains/observation.md) | 🟢 | — |
 | Topics | [topics.md](domains/topics.md) | 🟢 | — |
 | Privacy | [privacy.md](domains/privacy.md) | 🟢 | — |
 | Salience | [salience.md](domains/salience.md) | 🟢 | — |
@@ -82,17 +83,19 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 ## Dependency Graph
 
 ```
-Topics (primitive — canonical keys for everything)
+Observation (raw input — capture and enrichment)
     │
-    ├──► Salience (tracks attention budget per topic)
-    │
-    ├──► Privacy (scopes attach to topics, messages, insights)
-    │
-    └──► Insights (persist to topics)
+    └──► Topics (primitive — canonical keys for everything)
               │
-              └──► Layers (produce insights, consume salience)
+              ├──► Salience (tracks attention budget per topic)
+              │
+              ├──► Privacy (scopes attach to topics, messages, insights)
+              │
+              └──► Insights (persist to topics)
                         │
-                        └──► Chattiness (governs expression, integrates all)
+                        └──► Layers (produce insights, consume salience, consume observed data)
+                                  │
+                                  └──► Chattiness (governs expression, integrates all)
 ```
 
 ---
@@ -117,6 +120,105 @@ See [future/self-modification.md](future/self-modification.md) for the vision do
 ---
 
 ## Recent Changes
+
+### 2026-01-23: Chattiness Spec Updated — Reaction as Output Modality
+
+- Added reaction as a new output type, replacing acknowledgment layer
+- **Reactions replace acknowledgment**: Text "I see this" was inauthentic; emoji reactions are more honest
+- **Six impulse pools**: Address, Insight, Conversational, Curiosity, Reaction (presence removed)
+- **Parallel output**: Reactions can fire alongside speech (react AND respond)
+- **No review**: Reactions are trusted — fast, authentic, low-stakes
+- **Lower economics**: Lower threshold, lower spend than speech
+- **Learn from community**: Emoji choice based on observed server culture (social_texture)
+- **Privacy boundary**: Never react to `<chat>` users
+- **No meta-reactions**: Don't react to reactions on own messages
+- Added Reaction as Output section with full specification
+- Updated all pool references and configuration
+- Added glossary term: Reaction Pool
+
+### 2026-01-23: Insights Spec Updated — Social Texture Category
+
+- Added `social_texture` category to insights.md
+- **Attaches to**: User topics (individual expression), Emoji topics (cultural meaning), Server topics (community norms)
+- **Valence**: Required (same as all insights)
+- **Generation**: During scheduled reflection, not real-time
+- **Strength**: Same formula as other insights
+- **Relationship**: Standalone AND referenced in other reflection
+- **Sub-categories**: None — keep it simple
+- Added Insight Categories section with full documentation
+- Added examples for user, emoji, and server texture insights
+
+### 2026-01-23: Salience Spec Updated for Observation Integration
+
+- Updated salience.md with reaction-based earning and emoji topics
+- **Reaction earning**: Author + Reactor + Dyad all earn 0.5× base weight (maximum relationship signal)
+- **Emoji topics**: Earn on each use, propagate to user topic (emoji as self-expression)
+- **Media/link boost**: 1.2× multiplier for messages containing media or links
+- **Culture budget**: New 10% allocation for emoji topics; reduced Social from 35% to 30%
+- **Reaction weight**: Bumped from 0.3× to 0.5× (reactions are meaningful gestures)
+- Added reaction earning algorithm and media/link earning algorithm
+- Added emoji to propagation table (emoji → user)
+- Added emoji cap (60) to prevent spam dominance
+- Added glossary terms: Culture Budget, Reaction Earning
+
+### 2026-01-23: Data Model Synced with Observation and Chattiness
+
+- Updated data-model.md with all new entities from observation.md and chattiness.md
+- **Reaction entity**: Full reaction tracking (user_id, emoji, message_id) for relationship inference
+- **MediaAnalysis entity**: Vision analysis results with phenomenological descriptions
+- **LinkAnalysis entity**: Fetched link content and summaries (including YouTube transcripts)
+- **ChattinessLedger entity**: Three-dimensional impulse tracking (pool × channel × topic)
+- **SpeechPressure entity**: Global threshold modifier after Zos speaks
+- **ConversationLog entity**: Zos's own messages for conversation context
+- **DraftHistory entity**: Discarded drafts for "things I almost said"
+- Added emoji topic type: `server:<id>:emoji:<emoji_id>`
+- Added `social_texture` insight category for expression pattern insights
+- Updated Message with `has_media`, `has_links` flags
+- Added server chattiness configuration schema
+- Extended indexing strategy for new entities
+- Added derived views: current_impulse, current_speech_pressure, reaction_patterns, emoji_usage
+
+### 2026-01-23: Observation Domain Created
+
+- Created new domain spec: `observation.md`
+- **Batch polling model**: Zos "checks in" periodically rather than event-driven. Mirrors human Discord usage; creates space for future attention allocation.
+- **Reaction tracking**: Hybrid — full user+emoji+message for opted-in users; aggregate only for `<chat>` users
+- **Dual-fetch timing**: Fresh reactions at conversation impulse, settled at reflection
+- **Relationship inference**: Detect who reacts to whom, feed into dyad understanding
+- **Vision analysis**: Real-time inline, phenomenological voice ("I see...")
+- **Link handling**: Fetch and summarize; YouTube gets transcript extraction
+- **Long videos**: Metadata only for >30 min (TLDW principle)
+- **Emoji culture**: Tri-level modeling (server topics, aggregate metrics, user traits)
+- **Edits/deletes**: Latest state only — respect "unsaying"
+- **Configuration**: Full hierarchy (global → server → channel)
+- **Non-goal**: Voice/audio analysis explicitly excluded for MVP
+- Added glossary terms: Observation, Batch Polling, Phenomenological Description, Social Texture, TLDW Principle
+- Marked specs needing revision: data-model (new entities), salience (reaction earning), insights (social texture category), topics (emoji topic type)
+
+### 2026-01-22: Chattiness Synced with Conversation Layers
+
+- Updated chattiness.md to sync with conversation layer architecture
+- **Per-pool impulse tracking**: Five separate pools (address, insight, conversational, curiosity, presence)
+- **Global speech pressure**: Soft constraint raising threshold after Zos speaks
+- **Pool-to-layer mapping**: Each impulse pool triggers its corresponding conversation layer
+- **Curiosity triggers**: Contradictions, knowledge gaps, and explicit cues
+- **Presence triggers**: Low-stakes relevance (noticing without substantive response)
+- **Multi-pool priority**: Address > Question > Participation > Insight > Acknowledgment
+- Updated ledger schema for per-pool tracking
+- Added per-pool configuration and enable/disable per server
+
+### 2026-01-22: Layers Spec Updated — Conversation Layers
+
+- Added conversation layer architecture to layers.md
+- **Two modes of cognition**: Reflection (scheduled → insights) and Conversation (impulse-triggered → speech)
+- **Five conversation layer types**: Response, Insight-sharing, Participation, Question, Acknowledgment
+- **Trigger determines layer**: What caused the impulse maps to which layer runs
+- **No immediate insights**: Conversation logs exchange, processes during reflection
+- **Draft history**: Discarded drafts inform future responses ("things I almost said")
+- **Priority flagging**: High-valence exchanges flagged for priority reflection
+- **Limited chaining**: Response can trigger follow-up (question, acknowledgment)
+- Added glossary terms: Conversation Layer, Reflection Layer, Draft History, Priority Flagging
+- Spec remains 🟢 Complete
 
 ### 2026-01-22: Chattiness Domain Complete
 
@@ -343,8 +445,8 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-01-22 — All specs now at 🟢. MVP 0 scope fully defined. Ready for implementation planning._
+_2026-01-23 — All domain specs complete. Observation integration finished._
 
-## Pending Domain Specs
+## Pending Updates
 
-*None — all domains complete.*
+*None — all specs complete.*

@@ -2,8 +2,8 @@
 
 **Status**: 🟢 Complete
 **Last verified**: —
-**Last synced**: 2026-01-22 (reconciled with domain specs)
-**Depends on**: Topics, Privacy, Salience, Insights, Layers
+**Last synced**: 2026-01-23 (reconciled with observation and chattiness specs)
+**Depends on**: Observation, Topics, Privacy, Salience, Insights, Layers, Chattiness
 
 ---
 
@@ -16,21 +16,29 @@ This document defines the core entities, their relationships, and storage approa
 ## Entity Relationship Summary
 
 ```
-Server ─────< Channel ─────< Message
+Server ─────< Channel ─────< Message ─────< Reaction
+   │              │              │
+   │              │              ├────< MediaAnalysis
+   │              │              │
+   │              │              └────< LinkAnalysis
    │              │
    │              └────< Thread (optional per server)
    │
-   ├── ServerConfig (privacy_gate_role, disabled_layers, threads_as_topics)
+   ├── ServerConfig (privacy_gate_role, disabled_layers, threads_as_topics, chattiness)
    │
    └────< UserServerTracking (for global topic warming)
 
-Topic (server-scoped and global)
+Topic (server-scoped and global, including emoji topics)
    │
    ├──── SalienceLedger (earn/spend/decay/propagate)
    │
    └────< Insight ◄─── LayerRun
 
 User (Discord entity, tracked via first_dm_acknowledged)
+
+ChattinessLedger (pool × channel × topic impulse tracking)
+   │
+   └────< SpeechPressure (global threshold modifier after speaking)
 ```
 
 ---
@@ -48,11 +56,29 @@ User (Discord entity, tracked via first_dm_acknowledged)
 | privacy_gate_role | string | no | Role ID required for identity tracking (null = all tracked) |
 | disabled_layers | json | no | Array of layer names opted out |
 | threads_as_topics | bool | yes | Whether threads get their own topics (default: true) |
+| chattiness_config | json | no | Chattiness settings (threshold bounds, output channel, pool enables) |
 | created_at | timestamp | yes | When first seen |
 
 **Relationships**:
 - Has many: Channels, UserServerTracking entries
 - Referenced by: Topic keys (`server:<id>:...`)
+
+### Server Chattiness Config Schema
+
+```json
+{
+  "threshold_min": 30,
+  "threshold_max": 80,
+  "output_channel": null,
+  "pools_enabled": {
+    "address": true,
+    "insight": true,
+    "conversational": true,
+    "curiosity": true,
+    "presence": false
+  }
+}
+```
 
 ---
 
@@ -119,16 +145,93 @@ User (Discord entity, tracked via first_dm_acknowledged)
 | content | string | yes | Message text |
 | created_at | timestamp | yes | Discord timestamp |
 | visibility_scope | enum | yes | `public` or `dm` |
-| reactions | json | no | Reaction counts |
+| reactions_aggregate | json | no | Reaction counts for quick access (denormalized) |
 | reply_to_id | string | no | ID of message being replied to |
 | thread_id | string | no | Thread ID if in a thread |
+| has_media | bool | yes | Whether message contains images/videos (default: false) |
+| has_links | bool | yes | Whether message contains URLs (default: false) |
 | ingested_at | timestamp | yes | When we processed it |
 
 **Relationships**:
 - Belongs to: Channel, Server (optional)
+- Has many: Reactions, MediaAnalysis, LinkAnalysis
 - Referenced by: Insights (as source context)
 
 **Note**: `author_id` always stores the real Discord user ID. Anonymization to `<chat_N>` happens at context assembly time based on server's `privacy_gate_role`.
+
+---
+
+### Reaction
+
+**Purpose**: Full reaction tracking for relationship inference.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| message_id | string | yes | Which message was reacted to |
+| user_id | string | yes | Who reacted (real Discord ID) |
+| emoji | string | yes | Emoji used (Unicode or custom emoji ID) |
+| is_custom | bool | yes | Whether this is a server custom emoji |
+| server_id | string | no | Server where reaction occurred (for custom emoji topics) |
+| created_at | timestamp | yes | When reaction was added |
+
+**Relationships**:
+- Belongs to: Message
+- Links to: User, potentially Emoji Topic (`server:<id>:emoji:<emoji_id>`)
+
+**Privacy note**: For users without privacy gate role, reactions are tracked in `Message.reactions_aggregate` only (aggregate counts), not in this table.
+
+---
+
+### MediaAnalysis
+
+**Purpose**: Vision analysis results for images and videos.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| message_id | string | yes | Which message contained this media |
+| media_type | enum | yes | `image`, `video`, `gif`, `embed` |
+| url | string | yes | Original media URL |
+| filename | string | no | Original filename if available |
+| width | int | no | Width in pixels |
+| height | int | no | Height in pixels |
+| duration_seconds | int | no | For video/gif (null for images) |
+| description | string | yes | Phenomenological description ("I see...") |
+| analyzed_at | timestamp | yes | When analysis completed |
+| analysis_model | string | no | Which vision model was used |
+
+**Relationships**:
+- Belongs to: Message
+
+**Note**: Raw media files are not stored — only descriptions. Zos remembers what it saw, not the actual files.
+
+---
+
+### LinkAnalysis
+
+**Purpose**: Fetched link content and summaries.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| message_id | string | yes | Which message contained this link |
+| url | string | yes | Full URL |
+| domain | string | yes | Extracted domain for pattern analysis |
+| content_type | enum | yes | `article`, `video`, `image`, `audio`, `other` |
+| title | string | no | Page/video title |
+| summary | string | no | Brief content summary |
+| is_youtube | bool | yes | Whether this is a YouTube link (special handling) |
+| duration_seconds | int | no | For video content |
+| transcript_available | bool | no | Whether transcript was fetched (YouTube) |
+| fetched_at | timestamp | no | When content was retrieved |
+| fetch_failed | bool | yes | Whether fetch attempt failed (default: false) |
+| fetch_error | string | no | Error message if fetch failed |
+
+**Relationships**:
+- Belongs to: Message
+
+**Note**: Videos > 30 minutes get metadata only (TLDW principle). Transcript extraction for YouTube content when available.
 
 ---
 
@@ -139,7 +242,7 @@ User (Discord entity, tracked via first_dm_acknowledged)
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | key | string | yes | Primary key (see Topic Key Format below) |
-| category | enum | yes | `user`, `channel`, `thread`, `role`, `dyad`, `user_in_channel`, `dyad_in_channel`, `subject`, `self` |
+| category | enum | yes | `user`, `channel`, `thread`, `role`, `dyad`, `user_in_channel`, `dyad_in_channel`, `subject`, `emoji`, `self` |
 | is_global | bool | yes | True if no server prefix (e.g., `user:123` vs `server:A:user:123`) |
 | provisional | bool | yes | True if auto-created and pending consolidation review (default: false) |
 | created_at | timestamp | yes | First seen |
@@ -166,6 +269,7 @@ User (Discord entity, tracked via first_dm_acknowledged)
 - `server:<id>:user_in_channel:<channel>:<user>` — person's presence in a channel
 - `server:<id>:dyad_in_channel:<channel>:<a>:<b>` — relationship in a channel
 - `server:<id>:subject:<name>` — emergent theme
+- `server:<id>:emoji:<emoji_id>` — custom emoji cultural meaning
 - `server:<id>:self:zos` — contextual self-understanding
 
 ---
@@ -306,6 +410,99 @@ User (Discord entity, tracked via first_dm_acknowledged)
 
 ---
 
+### ChattinessLedger
+
+**Purpose**: Full transaction history for impulse tracking across five pools.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| pool | enum | yes | `address`, `insight`, `conversational`, `curiosity`, `presence` |
+| channel_id | string | no | Channel scope (null for global pool-level) |
+| topic_key | string | no | Topic scope (null for channel-level only) |
+| transaction_type | enum | yes | `earn`, `spend`, `decay`, `flood` |
+| amount | float | yes | Delta (positive for earn/flood, negative for spend/decay) |
+| trigger | string | no | What caused this (message_id, ping, insight_id, etc.) |
+| created_at | timestamp | yes | When |
+
+**Relationships**:
+- May link to: Channel, Topic
+
+**Note**: Three-dimensional tracking: pool × channel × topic. Allows queries like "impulse in #general for user topics" or "total address impulse across all channels."
+
+### Chattiness Transaction Types
+
+| Type | Direction | Cause |
+|------|-----------|-------|
+| `earn` | positive | Activity trigger (message, mention of relevant topic, etc.) |
+| `spend` | negative | Speech consumed the impulse |
+| `decay` | negative | Time-based decay |
+| `flood` | positive | Overwhelming trigger (direct ping, DM) |
+
+---
+
+### SpeechPressure
+
+**Purpose**: Track global speech pressure (threshold modifier after Zos speaks).
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| amount | float | yes | Pressure added (positive) or decayed (negative) |
+| trigger | string | no | Which layer/output caused this |
+| server_id | string | no | Server where speech occurred (null for global) |
+| created_at | timestamp | yes | When |
+
+**Usage**: Current pressure = `SUM(amount) WHERE created_at > NOW() - pressure_decay_window`
+
+Pressure decays over time (configurable, default 30 minutes to baseline). Higher pressure raises effective threshold for all impulse pools.
+
+---
+
+### ConversationLog
+
+**Purpose**: Track Zos's own messages for conversation context and reflection.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| message_id | string | yes | Discord message ID of Zos's message |
+| channel_id | string | yes | Where sent |
+| server_id | string | no | Server (null for DMs) |
+| content | string | yes | What Zos said |
+| layer_name | string | yes | Which conversation layer produced this |
+| trigger_type | string | yes | What triggered the response (ping, impulse, etc.) |
+| impulse_pool | enum | yes | Which pool drove the speech |
+| impulse_spent | float | yes | How much impulse was consumed |
+| priority_flagged | bool | yes | Whether flagged for priority reflection (default: false) |
+| created_at | timestamp | yes | When sent |
+
+**Relationships**:
+- Links to: Channel, Message (Zos's own)
+
+---
+
+### DraftHistory
+
+**Purpose**: Track discarded drafts for "things I almost said" context.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| channel_id | string | yes | Conversation context |
+| thread_id | string | no | Thread context if applicable |
+| content | string | yes | The discarded draft |
+| layer_name | string | yes | Which layer generated it |
+| discard_reason | string | no | Why it was discarded (review fail, self-censored, etc.) |
+| created_at | timestamp | yes | When generated |
+
+**Relationships**:
+- Scoped to: Channel/Thread conversation
+
+**Note**: Drafts are cleared between conversation threads. They inform subsequent generation within the same conversation.
+
+---
+
 ## Storage Approach
 
 ### MVP 0
@@ -353,6 +550,17 @@ User (Discord entity, tracked via first_dm_acknowledged)
 | LayerRun | `(layer_name, started_at)` | Audit queries |
 | LayerRun | `(status)` | Find dry runs, failures |
 | UserServerTracking | `(user_id)` | Check how many servers a user is in |
+| Reaction | `(message_id)` | Fetch reactions for a message |
+| Reaction | `(user_id, created_at)` | Fetch user's reaction history |
+| Reaction | `(emoji, server_id)` | Emoji usage patterns per server |
+| MediaAnalysis | `(message_id)` | Fetch media for a message |
+| LinkAnalysis | `(message_id)` | Fetch links for a message |
+| LinkAnalysis | `(domain, created_at)` | Domain sharing patterns |
+| ChattinessLedger | `(pool, channel_id, created_at)` | Impulse calculation per pool/channel |
+| ChattinessLedger | `(pool, topic_key, created_at)` | Impulse calculation per pool/topic |
+| SpeechPressure | `(created_at)` | Current pressure calculation |
+| ConversationLog | `(channel_id, created_at)` | Zos's messages in a conversation |
+| DraftHistory | `(channel_id, thread_id, created_at)` | Drafts for a conversation |
 
 ---
 
@@ -399,6 +607,62 @@ SELECT
 FROM insights;
 ```
 
+### Current Impulse per Pool
+
+```sql
+CREATE VIEW current_impulse AS
+SELECT
+    pool,
+    channel_id,
+    topic_key,
+    SUM(amount) as impulse
+FROM chattiness_ledger
+GROUP BY pool, channel_id, topic_key;
+```
+
+### Current Speech Pressure
+
+```sql
+-- Pressure within decay window (default 30 minutes)
+CREATE VIEW current_speech_pressure AS
+SELECT
+    server_id,
+    SUM(amount) as pressure
+FROM speech_pressure
+WHERE created_at > datetime('now', '-30 minutes')
+GROUP BY server_id;
+```
+
+### Reaction Patterns (for relationship inference)
+
+```sql
+-- Who reacts to whose messages
+CREATE VIEW reaction_patterns AS
+SELECT
+    r.user_id as reactor_id,
+    m.author_id as author_id,
+    r.server_id,
+    COUNT(*) as reaction_count,
+    COUNT(DISTINCT r.emoji) as emoji_variety
+FROM reactions r
+JOIN messages m ON r.message_id = m.id
+GROUP BY r.user_id, m.author_id, r.server_id;
+```
+
+### Emoji Usage per Server
+
+```sql
+CREATE VIEW emoji_usage AS
+SELECT
+    server_id,
+    emoji,
+    is_custom,
+    COUNT(*) as use_count,
+    COUNT(DISTINCT user_id) as unique_users
+FROM reactions
+GROUP BY server_id, emoji, is_custom;
+```
+
 ---
 
 ## Migration Strategy
@@ -442,6 +706,7 @@ TOPIC_KEY_PATTERNS = [
     r'^server:\d+:user_in_channel:\d+:\d+$',         # user in channel
     r'^server:\d+:dyad_in_channel:\d+:\d+:\d+$',     # dyad in channel
     r'^server:\d+:subject:\w+$',                     # subject
+    r'^server:\d+:emoji:\d+$',                       # emoji
     r'^server:\d+:self:\w+$',                        # server self
 ]
 ```
@@ -461,4 +726,23 @@ This document includes Zos's conflict threshold as explicit self-knowledge.
 
 ---
 
-_Last updated: 2026-01-22 — Full rewrite to sync with domain specs_
+## Insight Categories
+
+The `category` field on Insight indicates what type of understanding this represents:
+
+### Reflection Categories (from scheduled layers)
+- `user_reflection` — understanding about an individual
+- `dyad_observation` — relationship observations
+- `channel_reflection` — space/channel patterns
+- `subject_reflection` — semantic topic understanding
+- `self_reflection` — Zos's self-understanding
+- `synthesis` — consolidated understanding from multiple sources
+
+### Social Texture Category (from observation analysis)
+- `social_texture` — expression patterns, emoji usage, reaction tendencies, communication style
+
+Social texture insights track *how* people communicate, not just *what* they say. These are generated during observation analysis and may attach to user, server, or emoji topics.
+
+---
+
+_Last updated: 2026-01-23 — Added observation entities (Reaction, MediaAnalysis, LinkAnalysis), chattiness entities (ChattinessLedger, SpeechPressure, ConversationLog, DraftHistory), emoji topic type, social_texture insight category_

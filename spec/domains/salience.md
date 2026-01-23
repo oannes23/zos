@@ -1,9 +1,9 @@
 # Salience — Domain Specification
 
 **Status**: 🟢 Complete
-**Last interrogated**: 2026-01-22 (updated for global topics, privacy gate)
+**Last interrogated**: 2026-01-23 (updated for observation integration, reaction earning, emoji topics, culture budget)
 **Last verified**: —
-**Depends on**: Topics (need topic keys to track salience against)
+**Depends on**: Topics (need topic keys to track salience against), Observation (reaction/media signals)
 **Depended on by**: Layers (salience determines what gets reflected on), Insights (salience spent on creation)
 
 ---
@@ -38,10 +38,11 @@ Topics don't decay while active. After a configurable threshold (e.g., 7 days of
 ### Budget Groups
 
 Topics are organized into budget groups for allocation:
-- **Social**: server-scoped users, dyads, user_in_channel, dyad_in_channel
-- **Global**: cross-server user/dyad topics (`user:<id>`, `dyad:<a>:<b>`)
-- **Spaces**: channels, threads
-- **Semantic**: subjects, roles
+- **Social**: server-scoped users, dyads, user_in_channel, dyad_in_channel (30%)
+- **Global**: cross-server user/dyad topics (`user:<id>`, `dyad:<a>:<b>`) (15%)
+- **Spaces**: channels, threads (30%)
+- **Semantic**: subjects, roles (20%)
+- **Culture**: emoji topics (10%)
 - **Self**: self:zos and server-specific self-topics (separate pool, doesn't compete)
 
 Groups are extensible — new groupings can be added as the topic taxonomy evolves.
@@ -143,6 +144,30 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 - **Rationale**: Very active server shouldn't starve reflection on quieter servers.
 - **Implications**: Server is a first-class entity in salience; cross-server effects TBD
 
+### Reaction-Based Earning
+
+- **Decision**: Reactions earn salience for message author, reactor, and their dyad. All three receive 0.5× base weight.
+- **Rationale**: Reactions are meaningful social gestures that create relationship signal. Maximum relationship inference from minimal interaction. The author is receiving attention, the reactor is giving attention, and their relationship is strengthened.
+- **Implications**: Full reaction tracking enables rich salience earning; channels also propagate from reactions
+
+### Emoji Topic Salience
+
+- **Decision**: Emoji topics (`server:<id>:emoji:<id>`) earn salience on each use, at 0.5× base weight. Usage propagates to the user topic.
+- **Rationale**: Emojis are cultural artifacts whose significance is reflected in usage patterns. The person using an emoji is expressing themselves, so their user topic should warm.
+- **Implications**: Emoji topics compete in Culture budget group; high-use emojis become reflection priorities
+
+### Media/Link Boost
+
+- **Decision**: Messages containing media (images, videos) or links earn 1.2× base weight.
+- **Rationale**: Sharing content is a social signal — it takes more effort than plain text and often represents something the person wants others to see.
+- **Implications**: `has_media` and `has_links` flags on Message enable this boost
+
+### Culture Budget Group
+
+- **Decision**: Create a new "Culture" budget group for emoji topics, allocated 10% of reflection budget. Reduce Social from 35% to 30% to accommodate.
+- **Rationale**: Cultural artifacts deserve their own attention pool. Emojis carry meaning and understanding them enriches social understanding without competing directly with user/dyad reflection.
+- **Implications**: New budget allocation; emoji reflection happens on its own cadence
+
 ---
 
 ## Propagation Model
@@ -161,6 +186,7 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 | `server:X:dyad_in_channel` | dyad, channel, both users |
 | `server:X:subject:<name>` | (no propagation — subjects are emergent) |
 | `server:X:role:<id>` | (no propagation — roles are categorical) |
+| `server:X:emoji:<id>` | user who used the emoji (emoji as self-expression) |
 | `server:X:self:zos` | (no propagation — self is separate) |
 
 #### Global Topics
@@ -228,6 +254,63 @@ def warm_global_topic_if_needed(user_id: str, server_id: str):
     if len(servers_seen) >= 2:
         # Initial warming earn
         earn_salience(global_topic, config.initial_global_warmth)
+```
+
+### Reaction Earning Algorithm
+
+When a reaction is observed:
+
+```python
+def earn_from_reaction(reaction: Reaction, message: Message):
+    """Earn salience from a reaction. Author, reactor, dyad, channel, and emoji all earn."""
+
+    base_amount = config.weights.reaction  # 0.5
+    server_id = message.server_id
+
+    # 1. Message author earns (attention received)
+    author_topic = get_topic(f"server:{server_id}:user:{message.author_id}")
+    earn_salience(author_topic, base_amount)
+
+    # 2. Reactor earns (active engagement)
+    reactor_topic = get_topic(f"server:{server_id}:user:{reaction.user_id}")
+    earn_salience(reactor_topic, base_amount)
+
+    # 3. Author-Reactor dyad earns (relationship signal)
+    dyad_key = make_dyad_key(server_id, message.author_id, reaction.user_id)
+    dyad_topic = get_topic(dyad_key)
+    earn_salience(dyad_topic, base_amount)
+
+    # 4. Channel propagates (handled by normal propagation from above)
+
+    # 5. Emoji topic earns (cultural usage)
+    if reaction.is_custom:
+        emoji_topic = get_or_create_topic(f"server:{server_id}:emoji:{reaction.emoji}")
+        earn_salience(emoji_topic, base_amount)
+
+        # Emoji usage also propagates to reactor's user topic (emoji as self-expression)
+        # This happens via propagation rules in earn_salience()
+```
+
+### Media/Link Earning
+
+When a message with media or links is observed:
+
+```python
+def earn_from_message(message: Message):
+    """Earn salience from a message, with media/link boost."""
+
+    base_amount = config.weights.message  # 1.0
+
+    # Apply media/link boost
+    if message.has_media or message.has_links:
+        base_amount *= config.weights.media_boost_factor  # 1.2
+
+    author_topic = get_topic(f"server:{message.server_id}:user:{message.author_id}")
+    earn_salience(author_topic, base_amount)
+
+    # Channel also earns directly
+    channel_topic = get_topic(f"server:{message.server_id}:channel:{message.channel_id}")
+    earn_salience(channel_topic, base_amount)
 ```
 
 ### Example
@@ -330,6 +413,7 @@ salience:
     dyad_in_channel: 50
     subject: 100
     role: 80
+    emoji: 60          # Lower cap to prevent emoji spam dominance
     server_self: 150
 
     # Global
@@ -340,11 +424,13 @@ salience:
   # Earning weights
   weights:
     message: 1.0
-    reaction: 0.3
+    reaction: 0.5              # Reactions are meaningful gestures (bumped from 0.3)
     mention: 2.0
     reply: 1.5
     thread_create: 2.0
-    dm_message: 1.5       # DMs earn slightly more (direct engagement)
+    dm_message: 1.5            # DMs earn slightly more (direct engagement)
+    emoji_use: 0.5             # Each emoji reaction/usage
+    media_boost_factor: 1.2    # Multiplier for messages with media/links
 
   # Propagation
   propagation_factor: 0.3        # Normal propagation to warm related topics
@@ -362,10 +448,11 @@ salience:
 
   # Budget allocation per group (percentages, must sum to 1.0)
   budget:
-    social: 0.35     # server-scoped users, dyads, user_in_channel, dyad_in_channel
+    social: 0.30     # server-scoped users, dyads, user_in_channel, dyad_in_channel (reduced from 0.35)
     global: 0.15     # global users, global dyads
     spaces: 0.30     # channels, threads
     semantic: 0.20   # subjects, roles
+    culture: 0.10    # emoji topics (new)
     # self has separate budget, not in this allocation
 
   # Self budget (separate pool)
@@ -415,12 +502,20 @@ GROUP BY topic_key;
 
 | Spec | Implication |
 |------|-------------|
-| [topics.md](topics.md) | Topic categories map to budget groups; need `get_related_topics()` for global/server hierarchy; `get_servers_with_activity()` for warming |
-| [insights.md](insights.md) | Insight creation triggers salience spend; `salience_spent` field populated from this |
-| [layers.md](layers.md) | Layers use selection algorithm; need to report tokens_used for spending; global topics can be selected for reflection |
-| [privacy.md](privacy.md) | `<chat>` messages contribute to channel salience; quarantined user topics decay normally |
-| [data-model.md](../architecture/data-model.md) | Salience ledger table with full transaction history; track servers_seen per user for warming |
+| [observation.md](observation.md) | Observation provides reaction data; media/link flags on messages |
+| [topics.md](topics.md) | Topic categories map to budget groups; emoji topics in Culture group; need `get_related_topics()` for emoji→user propagation |
+| [insights.md](insights.md) | Insight creation triggers salience spend; `salience_spent` field populated from this; social_texture insights for emoji culture |
+| [layers.md](layers.md) | Layers use selection algorithm; need to report tokens_used for spending; Culture group needs reflection layer |
+| [privacy.md](privacy.md) | `<chat>` messages contribute to channel salience; quarantined user topics decay normally; reactions from `<chat>` users not tracked individually |
+| [data-model.md](../architecture/data-model.md) | Salience ledger table with full transaction history; Reaction table enables earning; has_media/has_links flags for boost |
 
 ---
 
-_Last updated: 2026-01-22_
+## Glossary Additions
+
+- **Culture Budget**: The 10% budget allocation for emoji topics and other cultural artifacts.
+- **Reaction Earning**: When someone reacts to a message, salience is earned by the message author (attention received), reactor (active engagement), their dyad (relationship signal), and the emoji topic if custom (cultural usage).
+
+---
+
+_Last updated: 2026-01-23 — Reaction earning, emoji topics, culture budget group, media/link boost_

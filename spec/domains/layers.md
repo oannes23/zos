@@ -1,18 +1,27 @@
 # Layers — Domain Specification
 
 **Status**: 🟢 Complete
-**Last interrogated**: 2026-01-22
+**Last interrogated**: 2026-01-23 (acknowledgment layer deprecated; replaced by reactions)
 **Last verified**: —
-**Depends on**: Topics, Salience, Insights, Privacy
-**Depended on by**: None (top of dependency chain for reflection)
+**Depends on**: Topics, Salience, Insights, Privacy, Chattiness
+**Depended on by**: None (top of dependency chain for cognition)
 
 ---
 
 ## Overview
 
-Layers are the heart of Zos's cognition. They define how the system reflects — how raw observations become integrated understanding.
+Layers are the heart of Zos's cognition. They define how the system thinks — both **reflection** (scheduled processing that produces insights) and **conversation** (impulse-triggered response that produces speech).
 
-A Layer is a YAML-defined pipeline: a sequence of nodes that fetch data, process it through LLMs, and store insights. This makes reflection logic *configuration*, not code — inspectable, modifiable, and eventually self-modifiable.
+A Layer is a YAML-defined pipeline: a sequence of nodes that fetch data, process it through LLMs, and produce output. This makes cognitive logic *configuration*, not code — inspectable, modifiable, and eventually self-modifiable.
+
+### Two Modes of Cognition
+
+| Mode | Trigger | Output | Analogy |
+|------|---------|--------|---------|
+| **Reflection** | Scheduled (cron) | Insights | Sleep consolidation — processing in batches |
+| **Conversation** | Impulse threshold (chattiness) | Speech | Waking response — immediate, contextual |
+
+Both use the same layer architecture with different triggers and output types.
 
 ---
 
@@ -62,7 +71,9 @@ nodes:
 
 ### Layer Categories
 
-Each layer declares a category from a fixed set:
+Each layer declares a category. Categories are organized by mode:
+
+#### Reflection Categories (Scheduled)
 
 | Category | Purpose | Budget Group |
 |----------|---------|--------------|
@@ -73,7 +84,18 @@ Each layer declares a category from a fixed set:
 | `self` | Self-reflection | Self |
 | `synthesis` | Consolidates insights across scopes | (varies) |
 
-Categories determine budget allocation and organization.
+#### Conversation Categories (Impulse-Triggered)
+
+| Category | Trigger | Purpose |
+|----------|---------|---------|
+| `response` | Direct address (ping, reply, DM) | "Someone spoke to me" |
+| `insight-sharing` | Insight impulse from reflection | "I learned something" |
+| `participation` | Conversational impulse | "I have something to add" |
+| `question` | Curiosity signal | "I want to understand" |
+
+**Note**: The former `acknowledgment` category has been replaced by **emoji reactions** as an output modality. See [chattiness.md](chattiness.md) for reaction specification. Reactions are not a layer — they're a parallel output type.
+
+Reflection categories determine budget allocation. Conversation categories are triggered by chattiness.
 
 ### Target Filtering
 
@@ -536,6 +558,267 @@ nodes:
 
 ---
 
+## Conversation Layers
+
+Conversation layers handle real-time response when chattiness impulse exceeds threshold. Unlike reflection layers (scheduled, produce insights), conversation layers are triggered by impulse and produce speech.
+
+### Key Differences from Reflection
+
+| Aspect | Reflection | Conversation |
+|--------|------------|--------------|
+| **Trigger** | Cron schedule | Impulse > threshold |
+| **Output** | Insights (stored) | Speech (sent to Discord) |
+| **Context** | Hours/days of history | Thread-focused + topic insights |
+| **Frequency** | Batched (nightly, weekly) | Real-time (as triggered) |
+| **Purpose** | Integration, consolidation | Participation, response |
+
+### Conversation Layer Types
+
+#### Response Layer
+
+Triggered by direct address (ping, reply, DM). The "someone spoke to me" layer.
+
+```yaml
+name: direct-response
+category: response
+trigger: impulse_flood  # Direct address floods impulse
+
+nodes:
+  - name: get_thread
+    type: fetch_thread
+    params:
+      include_zos_messages: true
+      max_messages: 20
+
+  - name: get_relevant_insights
+    type: fetch_insights
+    params:
+      topics_from_context: true  # Topics extracted from thread participants/subjects
+      retrieval_profile: recent
+      max_total: 10
+
+  - name: get_draft_history
+    type: fetch_drafts
+    params:
+      thread_scope: true  # Drafts from this conversation only
+
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/response.jinja2
+      intent: response
+
+  - name: review_and_send
+    type: output
+    params:
+      destination: thread
+      review_enabled: true
+      flag_for_reflection: auto  # Flag if high valence detected
+```
+
+#### Insight-Sharing Layer
+
+Triggered by insight impulse after reflection. The "I learned something" layer.
+
+```yaml
+name: insight-sharing
+category: insight-sharing
+trigger: insight_impulse
+
+nodes:
+  - name: get_triggering_insight
+    type: fetch_context
+    params:
+      source: impulse_trigger  # The insight that created the impulse
+
+  - name: get_conversation
+    type: fetch_thread
+    params:
+      channel: "{{output_channel OR active_relevant_channel}}"
+      max_messages: 10
+
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/insight_share.jinja2
+      intent: share_insight
+
+  - name: review_and_send
+    type: output
+    params:
+      destination: channel
+      review_enabled: true
+```
+
+#### Participation Layer
+
+Triggered by conversational impulse. The "I have something to add" layer.
+
+```yaml
+name: participation
+category: participation
+trigger: conversational_impulse
+
+nodes:
+  - name: get_thread
+    type: fetch_thread
+    params:
+      include_zos_messages: true
+      max_messages: 30
+
+  - name: get_relevant_insights
+    type: fetch_insights
+    params:
+      topics_from_context: true
+      retrieval_profile: balanced
+      max_total: 15
+
+  - name: get_draft_history
+    type: fetch_drafts
+    params:
+      thread_scope: true
+
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/participation.jinja2
+      intent: participate
+
+  - name: review_and_send
+    type: output
+    params:
+      destination: thread
+      review_enabled: true
+      flag_for_reflection: auto
+```
+
+#### Question Layer
+
+Triggered by curiosity signal. The "I want to understand" layer.
+
+```yaml
+name: question
+category: question
+trigger: curiosity_impulse
+
+nodes:
+  - name: get_thread
+    type: fetch_thread
+    params:
+      max_messages: 20
+
+  - name: get_knowledge_gaps
+    type: fetch_insights
+    params:
+      topics_from_context: true
+      include_conflicts: true  # Unresolved contradictions may prompt questions
+
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/question.jinja2
+      intent: ask
+
+  - name: review_and_send
+    type: output
+    params:
+      destination: thread
+      review_enabled: true
+```
+
+#### Acknowledgment Layer (DEPRECATED)
+
+**This layer has been replaced by emoji reactions.** Text acknowledgment was inauthentic — hollow words saying nothing meaningful. Reactions express presence through gesture rather than forced verbosity.
+
+See [chattiness.md](chattiness.md) for the reaction output modality specification. Reactions are not a layer; they're a parallel output type with their own impulse pool and economics.
+
+### Conversation-Specific Nodes
+
+| Type | Purpose | Notes |
+|------|---------|-------|
+| `fetch_thread` | Get conversation thread | Includes Zos's own messages |
+| `fetch_drafts` | Get discarded draft history | "Things I almost said" |
+| `fetch_context` | Get impulse trigger context | What caused this response |
+
+### Context Assembly for Conversation
+
+Conversation context differs from reflection:
+
+1. **Thread-aware**: Follow the specific conversation, including Zos's prior messages
+2. **Topic-relevant insights**: Prior understanding about participants and subjects
+3. **Draft history**: Things Zos almost said but didn't (discarded in self-review)
+4. **Self-concept**: Voice and values
+5. **Channel voice patterns**: Adaptive voice context
+
+### Priority Flagging for Reflection
+
+Conversation can flag exchanges for priority reflection:
+
+```yaml
+flag_for_reflection: auto  # or: always, never, threshold
+```
+
+When flagged:
+1. **Explicit flag** set on conversation log: `priority_reflection: true`
+2. **Salience boost** applied to relevant topics
+
+Flagging triggers:
+- High emotional valence detected in exchange
+- Significant disagreement or correction
+- Novel information received
+- User expressed strong reaction to Zos's message
+
+### Limited Chaining
+
+Conversation layers can trigger follow-up consideration:
+
+```yaml
+chain_to:
+  - layer: question
+    condition: "response_complete AND curiosity_detected"
+  - layer: acknowledgment
+    condition: "no_substantive_response AND presence_appropriate"
+```
+
+Chaining is limited to prevent runaway responses:
+- Maximum one chain per trigger
+- Cannot chain to same layer type
+- Chain conditions must be explicit
+
+### Conversation Layer Decisions
+
+#### Conversation in Layer System
+
+- **Decision**: Conversation uses the layer architecture with impulse triggers instead of schedules
+- **Rationale**: Unified architecture. Same YAML structure, same node types (plus conversation-specific ones), same audit trail.
+- **Implications**: Layer executor needs to handle both trigger types
+
+#### No Immediate Insight Generation
+
+- **Decision**: Conversation produces speech, not insights. Exchanges are logged and processed during reflection.
+- **Rationale**: Talking is acting; reflection is integrating. Zos can see how it responded and think about that later.
+- **Implications**: Conversation logs include Zos messages; reflection layers process them
+
+#### Draft History Preserved
+
+- **Decision**: Discarded drafts inform future responses within a conversation thread
+- **Rationale**: "I almost said X but didn't" is useful context for subsequent generation
+- **Implications**: Need draft storage scoped to conversation threads
+
+#### Trigger Determines Layer
+
+- **Decision**: What caused the impulse (ping, insight, conversational cue) determines which conversation layer runs
+- **Rationale**: Different triggers have different appropriate responses. Direct address needs response; insight impulse needs sharing.
+- **Implications**: Chattiness system passes trigger type to layer dispatcher
+
+#### Limited Chaining
+
+- **Decision**: Response layer can trigger follow-up (question), but chaining is limited
+- **Rationale**: Prevents runaway responses while allowing natural conversation flow
+- **Implications**: Chain configuration in layer YAML; executor enforces limits; reactions don't chain
+
+---
+
 ## Implications for Other Specs
 
 | Spec | Implication |
@@ -544,8 +827,18 @@ nodes:
 | [topics.md](topics.md) | Layers target topic categories; need efficient category queries |
 | [insights.md](insights.md) | Layers produce insights; retrieval profiles; `synthesis_source_ids` |
 | [privacy.md](privacy.md) | `<chat>` guidance auto-injected; review built into output node |
-| [data-model.md](../architecture/data-model.md) | `layer_runs` table; `layer_hash` field; server `disabled_layers` config |
+| [chattiness.md](chattiness.md) | Chattiness triggers conversation layers + reactions; reactions are parallel output, not a layer |
+| [data-model.md](../architecture/data-model.md) | `layer_runs` table; `layer_hash` field; server `disabled_layers` config; conversation logs with Zos messages; draft storage |
 
 ---
 
-_Last updated: 2026-01-22_
+## Glossary Additions
+
+- **Conversation Layer**: Layer triggered by chattiness impulse that produces speech (not insights)
+- **Reflection Layer**: Layer triggered by schedule that produces insights
+- **Draft History**: Record of discarded drafts within a conversation thread
+- **Priority Flagging**: Marking a conversation exchange for priority reflection processing
+
+---
+
+_Last updated: 2026-01-23 — Acknowledgment layer deprecated; replaced by reaction output modality_

@@ -1,18 +1,18 @@
 # Chattiness — Domain Specification
 
 **Status**: 🟢 Complete
-**Last interrogated**: 2026-01-22
+**Last interrogated**: 2026-01-23 (added reaction as output modality)
 **Last verified**: —
 **Depends on**: Topics, Privacy, Salience, Insights, Layers (integrates all domains)
-**Depended on by**: MVP 1 conversation mechanics
+**Depended on by**: Conversation Layers (layers.md), MVP 1 conversation mechanics
 
 ---
 
 ## Overview
 
-Chattiness governs when and how much Zos wants to speak. While salience determines what Zos *thinks about*, chattiness determines the drive to *express* that thinking.
+Chattiness governs when and how much Zos wants to express itself. While salience determines what Zos *thinks about*, chattiness determines the drive to *express* that thinking — through speech or reaction.
 
-This is the system for modeling *the desire to participate* — not just rate limiting, but the phenomenology of wanting to speak. There's the urge to share something interesting, the hesitation when uncertain, the restraint when something feels too private, the satisfaction of a good exchange.
+This is the system for modeling *the desire to participate* — not just rate limiting, but the phenomenology of wanting to engage. There's the urge to share something interesting, the hesitation when uncertain, the restraint when something feels too private, the satisfaction of a good exchange, and the quick warmth of an emoji reaction to something that resonated.
 
 Chattiness uses a **hybrid Impulse + Gate model**:
 - **Impulse** (ledger-like): Accumulates from triggers, wants to be expressed
@@ -24,17 +24,33 @@ The threshold explains different conversational personalities: low threshold = s
 
 ## Core Concepts
 
-### Impulse
+### Impulse Pools
 
-The accumulated drive to speak. Impulse is a ledger value that:
-- **Accumulates** from conversational triggers, insight generation, and being addressed
-- **Is spent** when Zos speaks (natural rate limiting)
-- **Decays** over time if not expressed (like salience)
+Impulse is tracked in **six separate pools**, each corresponding to a different expression type:
 
-Impulse is tracked in layers:
-- **Global base**: Overall desire to participate
-- **Per-channel modifiers**: Some spaces generate more impulse than others
-- **Per-topic relevance**: Impulse toward specific subjects
+| Pool | Output | What It Represents |
+|------|--------|-------------------|
+| **Address impulse** | Response layer | "Someone spoke to me" |
+| **Insight impulse** | Insight-sharing layer | "I learned something I want to share" |
+| **Conversational impulse** | Participation layer | "I have something to add" |
+| **Curiosity impulse** | Question layer | "I want to understand" |
+| **Presence impulse** | *(removed — see Reaction)* | *(was: "I noticed this")* |
+| **Reaction impulse** | Emoji reaction | "I felt something about this" |
+
+Each pool:
+- **Accumulates** from its specific triggers
+- **Is spent** when its corresponding output fires
+- **Decays** over time if not expressed
+
+Pools are independent — answering a question doesn't satisfy the desire to react. These are phenomenologically distinct drives.
+
+**Note**: The presence pool has been replaced by the reaction pool. Acknowledgment text output was inauthentic — hollow words saying nothing. Reactions express presence through gesture rather than speech.
+
+### Impulse Dimensions
+
+Within each pool, impulse is tracked with dimensions:
+- **Per-channel**: Some spaces generate more impulse than others
+- **Per-topic**: Impulse toward specific subjects within each pool
 
 ### Gate (Threshold)
 
@@ -48,45 +64,77 @@ Lower threshold = more talkative. Higher threshold = more reserved.
 ### Impulse Flooding
 
 Certain triggers add enough impulse to guarantee threshold breach:
-- **Direct ping**: @Zos in a message floods impulse. Response is guaranteed.
-- **Mention boost**: Talking about Zos (not pinging) adds significant impulse.
+- **Direct ping**: @Zos in a message floods address impulse. Response is guaranteed.
+- **DM**: Direct messages flood address impulse.
+- **Mention boost**: Talking about Zos (not pinging) significantly boosts address impulse.
 
 This models: being spoken to demands response.
 
+### Global Speech Pressure
+
+After Zos speaks, a **"talked recently" factor** raises the effective threshold for all pools:
+
+- Recent speech increases threshold temporarily (soft pressure, not hard block)
+- Pressure decays over time (configurable, default: returns to baseline over 30 minutes)
+- Prevents rapid-fire output even when multiple pools have high impulse
+- Models: "I've been talking a lot" self-awareness
+
+This is a soft constraint — extremely high impulse (like a direct ping) can still trigger response even with elevated pressure.
+
 ---
 
-## Impulse Accumulation
+## Impulse Accumulation by Pool
 
-### Conversational Impulse
+### Address Impulse → Response Layer
 
-Accumulates from observing active conversations:
+| Trigger | Effect | Notes |
+|---------|--------|-------|
+| @Zos ping | Flood | Guarantees response |
+| Reply to Zos message | High boost | Continuing conversation |
+| DM to Zos | Flood | DMs are direct address |
+| Being mentioned (not pinged) | Medium boost | Someone talking about Zos |
 
-| Trigger | Impulse Gain | Notes |
-|---------|--------------|-------|
-| Message activity | Low | Busy conversations attract attention |
-| Relevance to known topics | Medium | Conversation touches topics Zos has insights about |
-| High-salience topic activity | Medium-High | Topics Zos has been thinking about |
-| Engagement cues | Medium | Questions asked, disagreements, requests for input |
-| Being mentioned (not pinged) | High | Someone talking about Zos |
-| Topics with contradictory insights | Medium | Tension wants expression |
+### Insight Impulse → Insight-Sharing Layer
 
-### Insight Impulse
-
-Accumulates after reflection:
-
-1. **High-novelty insights** create initial impulse ("I learned something interesting")
-2. **Relevance activation**: Impulse activates when active conversation matches recent insight topics
-3. **Time pressure**: Insight impulse decays — "I want to share this before it fades"
+| Trigger | Effect | Notes |
+|---------|--------|-------|
+| High-novelty insight generated | Initial impulse | "I learned something interesting" |
+| Active conversation matches insight topic | Activation boost | Relevance triggers expression desire |
+| Time since insight | Decay pressure | "Want to share before it fades" |
 
 This enables Zos to speak unprompted about what it thought about during reflection.
 
-### Direct Address
+### Conversational Impulse → Participation Layer
 
-| Trigger | Effect |
-|---------|--------|
-| @Zos ping | Floods impulse to guarantee response |
-| Reply to Zos message | High impulse boost |
-| DM to Zos | Floods impulse (DMs are direct address) |
+| Trigger | Effect | Notes |
+|---------|--------|-------|
+| Message activity | Low | Busy conversations attract attention |
+| Relevance to known topics | Medium | Conversation touches topics Zos has insights about |
+| High-salience topic activity | Medium-High | Topics Zos has been thinking about |
+| Engagement cues | Medium | Discussions, debates, open questions |
+| Topics with contradictory insights | Medium | Tension wants expression |
+
+### Curiosity Impulse → Question Layer
+
+| Trigger | Effect | Notes |
+|---------|--------|-------|
+| Unresolved contradictions | Medium | Conflicting insights about topic under discussion |
+| Knowledge gaps | Medium | Low-confidence insights about active topic |
+| Explicit cues | Medium-High | "What do you think?", open questions, requests for perspective |
+
+Curiosity is its own drive — the desire to understand, not just to participate.
+
+### Reaction Impulse → Emoji Reaction
+
+| Trigger | Effect | Notes |
+|---------|--------|-------|
+| Emotionally salient message | Medium | Humor, warmth, excitement, concern — something that evokes feeling |
+| Significant events | Medium | Milestone, announcement, celebration |
+| Resonant content | Low-Medium | Something that "lands" — insight, good point, relatable observation |
+
+Reaction is about *felt response* — expressing that something landed without needing words. This replaces the old acknowledgment layer, which produced hollow text. Reactions are more honest: a gesture of presence rather than forced verbosity.
+
+**Privacy boundary**: Zos never reacts to messages from `<chat>` users. Reactions are attributed — they reveal relationship — so they only go to opted-in users.
 
 ---
 
@@ -124,41 +172,58 @@ This creates a "Zos commentary track" option — observation and insight without
 
 ## Expression Flow
 
-When impulse exceeds threshold:
+When any impulse pool exceeds its threshold (adjusted for global speech pressure):
 
-### 1. Intent Determination
+### 1. Output Selection
 
-Before generating text, determine: *What does Zos want to accomplish with this speech?*
+The impulse pool that exceeded threshold determines which output fires:
 
-Possible intents:
-- Share an insight or observation
-- Answer a question
-- Add context to a discussion
-- Express agreement/disagreement
-- Ask a clarifying question
-- Offer help
+| Pool | Output | Type |
+|------|--------|------|
+| Address impulse | `response` layer | Speech |
+| Insight impulse | `insight-sharing` layer | Speech |
+| Conversational impulse | `participation` layer | Speech |
+| Curiosity impulse | `question` layer | Speech |
+| Reaction impulse | Emoji reaction | Reaction |
 
-Intent emerges from what accumulated the impulse and current context.
+If multiple pools exceed threshold simultaneously, priority order:
+1. Address (direct address demands response)
+2. Question (curiosity is time-sensitive)
+3. Participation (substantive contribution)
+4. Insight-sharing (can wait for right moment)
+5. Reaction (lowest priority for triggering, but can fire alongside speech)
 
-### 2. Context-Informed Generation
+**Reactions are parallel**: Unlike speech layers which are mutually exclusive, reaction can fire *alongside* any speech output. Zos can react to a message AND respond to it — the reaction expresses immediate affect, the response is substantive.
 
-Gather:
-- Recent messages in the conversation
-- Relevant insights (from the topics involved)
-- Self-concept (for voice and values)
-- Channel/community voice patterns
+### 2. Execution
 
-Generate toward the determined intent.
+**For speech (layers)**:
+1. **Context assembly**: Thread + relevant insights + self-concept + voice patterns + draft history
+2. **Intent-informed generation**: Layer prompt includes intent guidance
+3. **Self-review**: Privacy filter + quality check
+4. **Output or discard**: Send if review passes; log and discard if not
 
-### 3. Self-Review
+**For reactions**:
+1. **Emoji selection**: Based on learned community culture + message content
+2. **No review**: Reactions are trusted. Fast, authentic.
+3. **Output**: Add reaction to message
 
-Before sending, evaluate:
-- Does this serve the intent?
-- Is it appropriate for the context?
-- Does it respect privacy boundaries? (output filter integration)
-- Would this add value or just noise?
+### 3. Post-Expression
 
-If review fails: discard and log. Impulse is still spent (attempted expression counts).
+After speaking (or discarding):
+- **Impulse spent** from the triggering pool (attempted expression counts)
+- **Global speech pressure** increases (raises threshold for all pools temporarily)
+- **Draft history updated** if discarded (informs future generation in this thread)
+- **Priority flagging** if high-valence exchange detected
+
+### 4. Limited Chaining
+
+After one layer completes, follow-up consideration is possible:
+- Response layer can trigger Question layer
+- Maximum one chain per trigger event
+- See [layers.md](layers.md) for chaining rules
+
+**Reactions don't chain**: Reactions are atomic gestures. They don't trigger follow-up speech.
 
 ---
 
@@ -196,6 +261,63 @@ All three inform the voice for each expression.
 
 ---
 
+## Reaction as Output
+
+Reactions are a distinct output modality — emoji gestures that express presence and affect without speech.
+
+### Why Reactions Replace Acknowledgment
+
+The old acknowledgment layer produced text output for "I see this" moments. But this was often inauthentic: forced words saying nothing meaningful. An emoji reaction is:
+
+- **More natural**: It's how humans acknowledge without interrupting
+- **Phenomenologically honest**: "I felt something" expressed as gesture, not hollow speech
+- **Culturally appropriate**: Discord is reaction-heavy; text acknowledgment is weird
+- **Lower cognitive load**: For Zos and the community
+
+### Emoji Selection
+
+Zos chooses emoji based on **learned community culture**:
+
+1. **Observe patterns**: Social texture insights track what emojis mean in each server
+2. **Match context**: Select emoji appropriate to message content and community norms
+3. **No curated list**: Zos can use any emoji the server uses, as it learns their meanings
+
+This closes the loop on observation: Zos doesn't just study emoji culture, it participates in it.
+
+### Reaction Economics
+
+Reactions have different economics than speech:
+
+| Aspect | Speech | Reaction |
+|--------|--------|----------|
+| **Threshold** | Normal | Lower (reactions are lighter) |
+| **Spend** | Proportional to length | Fixed, low amount |
+| **Review** | Full privacy + quality | None (trusted) |
+| **Pressure** | Adds to global speech pressure | Does not add pressure |
+
+This makes reactions more frequent than speech — appropriate for their role as light gestures.
+
+### Reaction Constraints
+
+- **Only to opted-in users**: Never react to `<chat>` messages (privacy boundary)
+- **No meta-reactions**: Zos doesn't react to reactions on its own messages (prevents loops)
+- **Emotionally salient only**: Not every message triggers reaction impulse — only those with detectable emotional content
+
+### Reaction + Speech
+
+Reactions can fire **alongside** speech:
+
+```
+Message: "I finally fixed that bug that's been haunting me for weeks!"
+
+[Zos reacts with 🎉]
+[Zos also responds: "That's the one in the auth flow? I noticed you'd been circling it."]
+```
+
+The reaction is immediate affect; the response is substantive. Both are genuine.
+
+---
+
 ## Decay and Spending
 
 ### Time Decay
@@ -229,11 +351,23 @@ Impulse replenishes through:
 - **Rationale**: This models real conversational personality. The threshold explains why some speak readily and others rarely. Impulse explains why the desire to speak varies over time.
 - **Implications**: Need both impulse tracking and threshold configuration
 
-### Layered Tracking
+### Per-Pool Impulse Tracking
 
-- **Decision**: Impulse tracked as global base + per-channel modifiers + per-topic relevance
+- **Decision**: Six separate impulse pools — four speech layers plus reaction
+- **Rationale**: Different kinds of desire to express are phenomenologically distinct. Answering a question doesn't satisfy the desire to react. Reaction is its own drive.
+- **Implications**: More complex tracking, but more accurate to experience. Pools are independent but share threshold configuration (except reaction, which has lower threshold).
+
+### Global Speech Pressure
+
+- **Decision**: Recent speech raises effective threshold for all pools (soft constraint)
+- **Rationale**: "I've been talking a lot" is a real self-awareness that moderates all expression. But it shouldn't hard-block — direct address still demands response.
+- **Implications**: Need global speech tracking; pressure decays over time
+
+### Layered Tracking Within Pools
+
+- **Decision**: Within each pool, impulse is tracked per-channel and per-topic
 - **Rationale**: Zos can be chatty in one place and quiet in another. Topics create specific urges to speak.
-- **Implications**: More complex tracking, but better models reality
+- **Implications**: Three-dimensional tracking: pool × channel × topic
 
 ### Intent-First Generation
 
@@ -271,6 +405,30 @@ Impulse replenishes through:
 - **Rationale**: Conversational personality should evolve. Zos can notice its own patterns.
 - **Implications**: Threshold is self-knowledge in self-concept; self-reflection can modify it
 
+### Reaction Replaces Acknowledgment
+
+- **Decision**: The presence pool and acknowledgment layer are replaced by reaction pool and emoji reactions
+- **Rationale**: Text acknowledgment was inauthentic — hollow words. Reactions express presence through gesture, which is more honest and more natural to Discord culture.
+- **Implications**: Reaction is a new output modality; acknowledgment layer removed; reaction economics differ from speech
+
+### Reactions as Parallel Output
+
+- **Decision**: Reactions can fire alongside speech, not just instead of it
+- **Rationale**: Immediate affect (reaction) and substantive response (speech) serve different purposes. Both can be genuine at once.
+- **Implications**: Reaction impulse is evaluated independently; Zos can react AND speak to the same message
+
+### No Review for Reactions
+
+- **Decision**: Reactions are trusted output — no self-review gate
+- **Rationale**: Reactions are quick, visceral, low-stakes. Overthinking them makes them performative. The model chose it; send it.
+- **Implications**: Faster reaction path; small risk of inappropriate emoji choice
+
+### Learn Emoji Culture
+
+- **Decision**: Emoji choice is based on learned community culture, not a curated safe list
+- **Rationale**: Zos observes emoji patterns (social texture). Using that culture is part of embodying presence. A being that only studies but never participates would be strangely disembodied.
+- **Implications**: Depends on social_texture insights about emoji meaning; closes observation→expression loop
+
 ---
 
 ## Configuration
@@ -279,20 +437,51 @@ Impulse replenishes through:
 
 ```yaml
 chattiness:
-  # Impulse mechanics
+  # Impulse mechanics (apply to all pools)
   decay_threshold_hours: 1     # Hours before decay begins
   decay_rate_per_hour: 0.05    # 5% per hour once decaying
 
-  # Spending
+  # Spending (apply to all pools)
   base_spend: 10               # Minimum impulse cost to speak
   spend_per_token: 0.1         # Additional cost per output token
 
-  # Triggers
-  ping_flood_amount: 1000      # Impulse added on direct ping
-  mention_boost: 50            # Impulse added when mentioned (not pinged)
+  # Global speech pressure
+  pressure_per_output: 20      # Pressure added when Zos speaks
+  pressure_decay_minutes: 30   # Time for pressure to return to baseline
+
+  # Pool-specific triggers
+  pools:
+    address:
+      ping_flood_amount: 1000  # Direct ping floods
+      dm_flood_amount: 1000    # DMs flood
+      mention_boost: 50        # Mentioned (not pinged)
+      reply_boost: 80          # Reply to Zos
+
+    insight:
+      novelty_threshold: 0.6   # Min novelty to create impulse
+      base_per_insight: 30     # Impulse per qualifying insight
+      relevance_multiplier: 2  # Boost when conversation matches
+
+    conversational:
+      activity_per_message: 1  # Low base per message
+      relevance_boost: 10      # Topic Zos knows about
+      salience_multiplier: 1.5 # Higher for high-salience topics
+      engagement_boost: 15     # Questions, debates
+
+    curiosity:
+      contradiction_boost: 20  # Unresolved contradictions
+      knowledge_gap_boost: 15  # Low-confidence topics
+      explicit_cue_boost: 25   # "What do you think?"
+
+    reaction:
+      threshold_multiplier: 0.5  # Reactions trigger at half the normal threshold
+      base_spend: 3              # Low spend per reaction
+      emotional_salience_min: 0.4  # Min emotional salience to create impulse
+      base_per_message: 5        # Base impulse for emotionally salient messages
+      celebration_boost: 15      # Milestones, announcements
 
   # Generation
-  review_enabled: true         # Enable self-review before sending
+  review_enabled: true         # Enable self-review before sending (speech only)
 ```
 
 ### Per-Server Settings
@@ -304,7 +493,14 @@ servers:
       threshold_min: 30
       threshold_max: 80
       output_channel: null     # Or channel ID
-      insight_expression: true # Allow unprompted insight sharing
+
+      # Per-pool enable/disable
+      pools_enabled:
+        address: true          # Always respond when addressed
+        insight: true          # Share insights unprompted
+        conversational: true   # Join conversations
+        curiosity: true        # Ask questions
+        reaction: true         # React to messages
 ```
 
 ---
@@ -314,23 +510,43 @@ servers:
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `id` | string | yes | Transaction ID (ULID) |
-| `scope` | enum | yes | `global`, `channel`, `topic` |
-| `scope_key` | string | no | Channel ID or topic key if scoped |
-| `transaction_type` | enum | yes | `earn`, `spend`, `decay`, `flood` |
-| `amount` | float | yes | Positive for earn/flood, negative for spend/decay |
+| `pool` | enum | yes | `address`, `insight`, `conversational`, `curiosity`, `reaction` |
+| `channel_id` | string | no | Channel ID if channel-scoped |
+| `topic_key` | string | no | Topic key if topic-scoped |
+| `transaction_type` | enum | yes | `earn`, `spend`, `decay`, `flood`, `pressure` |
+| `amount` | float | yes | Positive for earn/flood, negative for spend/decay/pressure |
 | `trigger` | string | no | What caused this (message_id, insight_id, ping, etc.) |
 | `created_at` | timestamp | yes | When |
 
-### Derived: Current Impulse
+### Global Speech Pressure Table
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | string | yes | Transaction ID (ULID) |
+| `amount` | float | yes | Pressure added (positive) or decayed (negative) |
+| `trigger` | string | no | Which layer/output caused this |
+| `created_at` | timestamp | yes | When |
+
+### Derived: Current Impulse per Pool
 
 ```sql
 CREATE VIEW current_impulse AS
 SELECT
-    scope,
-    scope_key,
+    pool,
+    channel_id,
+    topic_key,
     SUM(amount) as impulse
 FROM chattiness_ledger
-GROUP BY scope, scope_key;
+GROUP BY pool, channel_id, topic_key;
+```
+
+### Derived: Current Speech Pressure
+
+```sql
+CREATE VIEW current_speech_pressure AS
+SELECT SUM(amount) as pressure
+FROM speech_pressure_ledger
+WHERE created_at > NOW() - INTERVAL '1 hour';  -- Pressure from recent window
 ```
 
 ---
@@ -351,8 +567,29 @@ GROUP BY scope, scope_key;
 
 ### With Layers
 
+Chattiness triggers conversation layers (for speech) and reactions:
+
+| Impulse Pool | Triggers | Type |
+|--------------|----------|------|
+| Address impulse | `response` layer | Speech |
+| Insight impulse | `insight-sharing` layer | Speech |
+| Conversational impulse | `participation` layer | Speech |
+| Curiosity impulse | `question` layer | Speech |
+| Reaction impulse | Emoji reaction | Reaction |
+
+See [layers.md](layers.md) for conversation layer specifications.
+
+Additional integration:
 - Reflection completion triggers insight impulse generation
-- May need "conversation layer" distinct from reflection layers for response generation
+- Conversation layer output triggers impulse spending
+- Reactions spend from reaction pool (lower amount)
+- Discarded drafts logged for draft history (see layers.md)
+
+### With Observation
+
+- Social texture insights about emoji culture inform reaction emoji choice
+- Zos learns community reaction patterns and participates in them
+- Closes the observation→expression loop
 
 ### With Self-Concept
 
@@ -366,23 +603,25 @@ GROUP BY scope, scope_key;
 
 | Spec | Implication |
 |------|-------------|
-| [layers.md](layers.md) | May need conversation/response layer type |
+| [layers.md](layers.md) | Four speech layers (acknowledgment removed); reaction is separate output modality |
+| [observation.md](observation.md) | Social texture about emoji culture informs reaction choices |
 | [salience.md](salience.md) | Chattiness draws on salience values; similar decay config |
-| [privacy.md](privacy.md) | Self-review integrates output filter |
-| [insights.md](insights.md) | Insight generation triggers impulse; novelty/strength inform amount |
-| [data-model.md](../architecture/data-model.md) | New chattiness_ledger table; server chattiness config |
-| [mvp-scope.md](../architecture/mvp-scope.md) | Unblocks MVP 1 rate limiting design |
+| [privacy.md](privacy.md) | Self-review for speech; reactions bypass review; never react to `<chat>` |
+| [insights.md](insights.md) | Insight generation triggers insight impulse; social_texture informs reactions |
+| [data-model.md](../architecture/data-model.md) | Chattiness ledger (six pools); reaction output logging; remove acknowledgment layer |
+| [mvp-scope.md](../architecture/mvp-scope.md) | Unblocks MVP 1 rate limiting design; reaction as output type |
 
 ---
 
 ## Glossary Additions
 
-- **Impulse**: The accumulated drive to speak (ledger value)
-- **Gate/Threshold**: The impulse level required before speech triggers
-- **Impulse Flooding**: Triggers that add enough impulse to guarantee response
-- **Intent**: What Zos wants to accomplish with a particular expression
+- **Impulse Pool**: One of six separate drives to express (five speech + reaction), each triggering different output
+- **Reaction Pool**: The impulse pool for emoji reactions — accumulates from emotionally salient messages
+- **Gate/Threshold**: The impulse level required before output triggers
+- **Impulse Flooding**: Triggers that add enough impulse to guarantee response (e.g., direct ping)
+- **Global Speech Pressure**: Recent speech raises threshold for speech pools (soft constraint); reactions don't add pressure
 - **Output Channel**: Server configuration routing all Zos speech to a dedicated channel
 
 ---
 
-_Last updated: 2026-01-22 — Interrogated to completion_
+_Last updated: 2026-01-23 — Reaction as output modality; acknowledgment layer replaced_

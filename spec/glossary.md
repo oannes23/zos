@@ -91,10 +91,32 @@ A topic created automatically (e.g., when an insight references a non-existent t
 
 ### Layer
 
-A YAML-defined reflection pipeline that runs on a schedule. Layers are declarative cognition — reflection logic as configuration, not code. This makes layers:
+A YAML-defined cognitive pipeline. Layers are declarative cognition — cognitive logic as configuration, not code. This makes layers:
 - **Inspectable**: you can read what the system does
 - **Modifiable**: change behavior without changing code
 - **Eventually self-modifiable**: the system can propose changes to its own cognition
+
+Layers come in two modes:
+- **Reflection layers**: Scheduled, produce insights (sleep consolidation analogy)
+- **Conversation layers**: Impulse-triggered, produce speech (waking response analogy)
+
+### Reflection Layer
+
+A layer triggered by schedule (cron) that produces insights. Reflection layers process batches of topics, integrating observations into understanding. Analogous to sleep consolidation.
+
+### Conversation Layer
+
+A layer triggered by chattiness impulse exceeding threshold that produces speech. Conversation layers respond in real-time, drawing on accumulated insights. Analogous to waking response.
+
+Types: Response (direct address), Insight-sharing (unprompted), Participation (joining conversation), Question (curiosity), Acknowledgment (presence without content).
+
+### Draft History
+
+Record of discarded drafts within a conversation thread. Preserved so that "things I almost said but didn't" can inform subsequent response generation. Cleared between conversation threads.
+
+### Priority Flagging
+
+Marking a conversation exchange for priority reflection processing. Triggered by high emotional valence, significant disagreement, novel information, or strong user reaction. Applies both an explicit flag and a salience boost to relevant topics.
 
 ### Insight
 
@@ -277,7 +299,21 @@ See [chattiness.md](domains/chattiness.md) for full specification.
 
 ### Impulse
 
-The accumulated drive to speak. A ledger value that accumulates from triggers, is spent when speaking, and decays over time. Tracked in layers: global base + per-channel modifiers + per-topic relevance.
+The accumulated drive to speak. Tracked in **five separate pools**, each corresponding to a conversation layer:
+
+| Pool | Layer | Drive |
+|------|-------|-------|
+| Address impulse | Response | "Someone spoke to me" |
+| Insight impulse | Insight-sharing | "I learned something" |
+| Conversational impulse | Participation | "I have something to add" |
+| Curiosity impulse | Question | "I want to understand" |
+| Presence impulse | Acknowledgment | "I noticed this" |
+
+Within each pool, impulse is tracked per-channel and per-topic.
+
+### Global Speech Pressure
+
+A soft constraint that raises the effective threshold for all impulse pools after Zos speaks. Models "I've been talking a lot" self-awareness. Decays over time (default: 30 minutes to baseline). Does not hard-block — extremely high impulse (direct ping) can still trigger response.
 
 ### Gate (Threshold)
 
@@ -299,6 +335,46 @@ Server configuration that routes all Zos speech to a dedicated channel (referenc
 
 A self-determined value stored in the self-concept document representing Zos's tolerance for unresolved contradictions. When the number of unresolved conflicts on a topic exceeds this threshold (or when conflicts are flagged as consequential), synthesis is triggered. The threshold is explicit self-knowledge — Zos can raise or lower it through self-reflection based on experience with premature or delayed resolution.
 
+### Observation
+
+The capture and enrichment of raw Discord events into meaningful context for cognition. Zos's "eyes and ears." Observation is not passive recording but *attentive presence* — Zos choosing to attend to its communities, noticing not just what is said but how it's expressed. See [observation.md](domains/observation.md).
+
+### Batch Polling
+
+Periodic check-in model for observation, contrasted with event-driven streaming. Zos "checks Discord" at intervals rather than being perpetually connected to the event stream. This mirrors human Discord usage patterns and creates architectural space for future attention allocation — Zos may eventually have other activities competing for attention.
+
+### Phenomenological Description
+
+First-person, experiential description of visual content. "I see a sunset photograph, warm oranges bleeding into purple. Feels contemplative." Contrasted with objective cataloguing ("Image: sunset, outdoor, warm color palette"). Consistent with building as if inner experience matters.
+
+### Social Texture
+
+Insight category (`social_texture`) for expression patterns — emoji usage, reaction tendencies, communication style. Tracks *how* people communicate, not just *what* they say. Can attach to User topics (individual expression), Emoji topics (cultural meaning), or Server topics (community norms). Generated during scheduled reflection; exists both standalone AND as context for other reflection.
+
+### TLDW Principle
+
+"Too Long, Didn't Watch" — threshold-based decision to capture metadata only for very long videos (>30 minutes), mirroring human behavior. Rather than processing a 2-hour documentary just because someone linked it, Zos notes it exists and moves on.
+
+### Emoji Topic
+
+A topic tracking a server's custom emoji: `server:<id>:emoji:<emoji_id>`. Emoji topics track usage patterns, who uses the emoji, common contexts, and emergent semantic meaning. Part of tri-level emoji culture modeling.
+
+### Culture Budget
+
+The 10% budget allocation for emoji topics and other cultural artifacts. Culture deserves its own attention pool so that understanding server emoji conventions doesn't compete directly with user or relationship reflection.
+
+### Reaction Earning
+
+When someone reacts to a message, salience is earned by multiple topics: the message author (attention received), the reactor (active engagement), their dyad (relationship signal), and the emoji topic if it's a custom emoji (cultural usage). Each recipient earns 0.5× base weight. This creates maximum relationship signal from minimal interaction.
+
+### Reaction Pool
+
+The impulse pool for emoji reactions. Accumulates from emotionally salient messages — content that evokes feeling (humor, warmth, excitement, significance). Has lower threshold and lower spend than speech pools, making reactions more frequent. Reactions are a distinct output modality that can fire alongside speech.
+
+### Reaction Output
+
+Emoji reactions as Zos output, replacing the old acknowledgment layer. Reactions express presence through gesture rather than hollow words. They are trusted (no self-review), fast, and informed by learned community emoji culture. Zos can react AND speak to the same message — reaction is immediate affect, speech is substantive response.
+
 ---
 
 ## Abbreviations
@@ -309,7 +385,8 @@ A self-determined value stored in the self-concept document representing Zos's t
 | TBD | To Be Determined |
 | DM | Direct Message |
 | LLM | Large Language Model |
+| TLDW | Too Long, Didn't Watch |
 
 ---
 
-_Last updated: 2026-01-22 — Chattiness domain terms added (Impulse, Gate, Impulse Flooding, Intent, Output Channel)_
+_Last updated: 2026-01-23 — Reaction output modality added (Reaction Pool, Reaction Output)_
