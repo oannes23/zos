@@ -1,7 +1,7 @@
 # Salience — Domain Specification
 
 **Status**: 🟢 Complete
-**Last interrogated**: 2026-01-22
+**Last interrogated**: 2026-01-22 (updated for global topics, privacy gate)
 **Last verified**: —
 **Depends on**: Topics (need topic keys to track salience against)
 **Depended on by**: Layers (salience determines what gets reflected on), Insights (salience spent on creation)
@@ -38,10 +38,11 @@ Topics don't decay while active. After a configurable threshold (e.g., 7 days of
 ### Budget Groups
 
 Topics are organized into budget groups for allocation:
-- **Social**: users, dyads, user_in_channel, dyad_in_channel
+- **Social**: server-scoped users, dyads, user_in_channel, dyad_in_channel
+- **Global**: cross-server user/dyad topics (`user:<id>`, `dyad:<a>:<b>`)
 - **Spaces**: channels, threads
 - **Semantic**: subjects, roles
-- **Self**: self:zos and server-specific self-topics (separate pool)
+- **Self**: self:zos and server-specific self-topics (separate pool, doesn't compete)
 
 Groups are extensible — new groupings can be added as the topic taxonomy evolves.
 
@@ -103,6 +104,39 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 - **Rationale**: Zos should always have space for self-reflection regardless of community activity.
 - **Implications**: Self-budget allocation is independent; self never competes with community for attention
 
+### Global Topics Budget Group
+
+- **Decision**: Global topics (`user:<id>`, `dyad:<a>:<b>`) have their own budget group, separate from server-scoped social topics.
+- **Rationale**: Cross-server/DM reflection should have dedicated resources and not compete with server-specific understanding.
+- **Implications**: New budget allocation for global group; global reflection happens independently of server reflection
+
+### Global Topic Warming (Warm-Only Rule)
+
+- **Decision**: Server-scoped activity only propagates to global topics if the global topic is already warm (salience > 0).
+- **Rationale**: Most users will only ever be seen in one server and never DM Zos. It's wasteful to maintain global salience for users who will never benefit from cross-server understanding.
+- **Warming triggers**:
+  - DM activity directly earns salience for global topic
+  - First activity in a *second* server triggers initial global salience earn
+- **Implications**: Global topics start cold and are warmed by DM or multi-server presence; follows existing warm-only propagation pattern
+
+### Bidirectional Global/Server Propagation
+
+- **Decision**: DM activity propagates DOWN to all server-scoped user topics.
+- **Rationale**: "Thinking about Alice in DMs makes me think about Alice everywhere." Cross-pollination of attention.
+- **Implications**: Global→server propagation uses the same factor as server→global; creates feedback loop for active DM users
+
+### Channel Salience from All Activity
+
+- **Decision**: Channels earn salience from all messages, including from `<chat>` (anonymous) users.
+- **Rationale**: A busy channel is busy regardless of who's talking. Channel salience reflects activity volume.
+- **Implications**: `<chat>` messages contribute to channel salience even though `<chat>` users have no individual salience
+
+### Quarantine and Salience
+
+- **Decision**: When a user's insights are quarantined (lost privacy gate role), their salience continues to decay normally.
+- **Rationale**: Natural forgetting. If they return much later, they start with low salience — memory has texture.
+- **Implications**: No special quarantine handling in salience; decay runs as usual; topic may reach zero and be pruned from active consideration
+
 ### Independent Per-Server Pools (MVP 2+)
 
 - **Decision**: When multi-server arrives, each server has independent salience economy.
@@ -115,22 +149,41 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 
 ### What Propagates to What
 
+#### Server-Scoped Topics
+
 | Source Topic | Propagates To |
 |--------------|---------------|
-| `user` | dyads involving this user, user_in_channel for this user |
-| `channel` | user_in_channel in this channel, threads in this channel |
-| `thread` | parent channel |
-| `dyad` | both users in the dyad |
-| `user_in_channel` | user, channel |
-| `dyad_in_channel` | dyad, channel, both users |
-| `subject` | (no propagation — subjects are emergent) |
-| `role` | (no propagation — roles are categorical) |
-| `self` | (no propagation — self is separate) |
+| `server:X:user:<id>` | dyads involving this user, user_in_channel for this user, **global `user:<id>` if warm** |
+| `server:X:channel:<id>` | user_in_channel in this channel, threads in this channel |
+| `server:X:thread:<id>` | parent channel |
+| `server:X:dyad:<a>:<b>` | both server-scoped users, **global `dyad:<a>:<b>` if warm** |
+| `server:X:user_in_channel` | user, channel |
+| `server:X:dyad_in_channel` | dyad, channel, both users |
+| `server:X:subject:<name>` | (no propagation — subjects are emergent) |
+| `server:X:role:<id>` | (no propagation — roles are categorical) |
+| `server:X:self:zos` | (no propagation — self is separate) |
+
+#### Global Topics
+
+| Source Topic | Propagates To |
+|--------------|---------------|
+| `user:<id>` | **all `server:X:user:<id>` topics** (downward), global dyads involving this user if warm |
+| `dyad:<a>:<b>` | **both global `user:<id>` topics**, all `server:X:dyad:<a>:<b>` topics (downward) |
+| `self:zos` | (no propagation — self is separate) |
+
+### Global Topic Warming
+
+Global topics start with salience = 0 (cold). They become warm when:
+
+1. **DM activity**: Direct messages earn salience directly to `user:<id>`
+2. **Second server activity**: First activity in a *second* server triggers initial earn for the global topic
+
+Once warm, server-scoped activity propagates to global topics using `global_propagation_factor`.
 
 ### Propagation Algorithm
 
 ```python
-def earn_salience(topic: Topic, amount: float):
+def earn_salience(topic: Topic, amount: float, source: str = None):
     """Earn salience for a topic, with propagation to related topics."""
 
     # 1. Apply to primary topic (up to cap)
@@ -144,7 +197,9 @@ def earn_salience(topic: Topic, amount: float):
     # 2. Normal propagation to warm related topics
     for related in get_related_topics(topic):
         if related.salience > 0:  # warm-only rule
-            propagated = amount * config.propagation_factor
+            # Use global_propagation_factor for server→global propagation
+            factor = config.global_propagation_factor if is_global(related) else config.propagation_factor
+            propagated = amount * factor
             earn_salience_no_propagate(related, propagated)  # no cascade
 
     # 3. Overflow spillover (additional, on top of normal propagation)
@@ -153,6 +208,26 @@ def earn_salience(topic: Topic, amount: float):
             if related.salience > 0:
                 spilled = overflow * config.spillover_factor
                 earn_salience_no_propagate(related, spilled)
+
+    # 4. Global→server downward propagation (for DM activity)
+    if is_global(topic) and topic.type in ("user", "dyad"):
+        for server_topic in get_server_scoped_topics(topic):
+            if server_topic.salience > 0:  # warm-only
+                propagated = amount * config.global_propagation_factor
+                earn_salience_no_propagate(server_topic, propagated)
+
+
+def warm_global_topic_if_needed(user_id: str, server_id: str):
+    """Warm a global user topic when seen in a second server."""
+    global_topic = get_topic(f"user:{user_id}")
+
+    if global_topic.salience > 0:
+        return  # Already warm
+
+    servers_seen = get_servers_with_activity(user_id)
+    if len(servers_seen) >= 2:
+        # Initial warming earn
+        earn_salience(global_topic, config.initial_global_warmth)
 ```
 
 ### Example
@@ -246,15 +321,21 @@ def apply_decay():
 salience:
   # Caps per topic category
   caps:
-    user: 100
+    # Server-scoped
+    server_user: 100
     channel: 150
     thread: 75
-    dyad: 80
+    server_dyad: 80
     user_in_channel: 60
     dyad_in_channel: 50
     subject: 100
     role: 80
-    self: 200  # Self has higher cap
+    server_self: 150
+
+    # Global
+    global_user: 120      # Slightly higher cap for cross-server accumulation
+    global_dyad: 100
+    self: 200             # Global self has highest cap
 
   # Earning weights
   weights:
@@ -263,10 +344,13 @@ salience:
     mention: 2.0
     reply: 1.5
     thread_create: 2.0
+    dm_message: 1.5       # DMs earn slightly more (direct engagement)
 
   # Propagation
-  propagation_factor: 0.3  # Normal propagation to warm related topics
-  spillover_factor: 0.5    # Overflow spillover (partial, some evaporates)
+  propagation_factor: 0.3        # Normal propagation to warm related topics
+  global_propagation_factor: 0.3 # Server↔global propagation (configurable separately)
+  spillover_factor: 0.5          # Overflow spillover (partial, some evaporates)
+  initial_global_warmth: 5.0     # Initial salience when global topic is warmed
 
   # Spending and retention
   cost_per_token: 0.001    # Salience cost per LLM token
@@ -278,9 +362,10 @@ salience:
 
   # Budget allocation per group (percentages, must sum to 1.0)
   budget:
-    social: 0.4      # users, dyads, user_in_channel, dyad_in_channel
-    spaces: 0.3      # channels, threads
-    semantic: 0.2    # subjects, roles
+    social: 0.35     # server-scoped users, dyads, user_in_channel, dyad_in_channel
+    global: 0.15     # global users, global dyads
+    spaces: 0.30     # channels, threads
+    semantic: 0.20   # subjects, roles
     # self has separate budget, not in this allocation
 
   # Self budget (separate pool)
@@ -296,11 +381,21 @@ salience:
 |-------|------|----------|-------|
 | `id` | string | yes | Transaction ID (ULID) |
 | `topic_key` | string | yes | Which topic |
-| `transaction_type` | enum | yes | `earn`, `spend`, `retain`, `decay`, `propagate`, `spillover` |
-| `amount` | float | yes | Positive for earn/retain, negative for spend/decay |
+| `transaction_type` | enum | yes | `earn`, `spend`, `retain`, `decay`, `propagate`, `spillover`, `warm` |
+| `amount` | float | yes | Positive for earn/retain/warm, negative for spend/decay |
 | `reason` | string | no | What caused this (message_id, layer_run_id, etc.) |
 | `source_topic` | string | no | For propagation/spillover: which topic triggered this |
 | `created_at` | timestamp | yes | When |
+
+### User Server Tracking
+
+For global topic warming, track which servers a user has been seen in:
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `user_id` | string | yes | Discord user ID |
+| `server_id` | string | yes | Discord server ID |
+| `first_seen_at` | timestamp | yes | When first activity occurred |
 
 ### Derived: Current Balance
 
@@ -320,10 +415,11 @@ GROUP BY topic_key;
 
 | Spec | Implication |
 |------|-------------|
-| [topics.md](topics.md) | Topic categories map to budget groups; need `get_related_topics()` function |
+| [topics.md](topics.md) | Topic categories map to budget groups; need `get_related_topics()` for global/server hierarchy; `get_servers_with_activity()` for warming |
 | [insights.md](insights.md) | Insight creation triggers salience spend; `salience_spent` field populated from this |
-| [layers.md](layers.md) | Layers use selection algorithm; need to report tokens_used for spending |
-| [data-model.md](../architecture/data-model.md) | Salience ledger table with full transaction history |
+| [layers.md](layers.md) | Layers use selection algorithm; need to report tokens_used for spending; global topics can be selected for reflection |
+| [privacy.md](privacy.md) | `<chat>` messages contribute to channel salience; quarantined user topics decay normally |
+| [data-model.md](../architecture/data-model.md) | Salience ledger table with full transaction history; track servers_seen per user for warming |
 
 ---
 

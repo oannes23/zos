@@ -43,7 +43,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Area | Doc | Status | Notes |
 |------|-----|--------|-------|
 | System Overview | [overview.md](architecture/overview.md) | 🟡 | Philosophy, constraints, non-goals |
-| Data Model | [data-model.md](architecture/data-model.md) | 🔄 | Entity relationships, storage approach; **needs**: server-aware keys, provisional flag |
+| Data Model | [data-model.md](architecture/data-model.md) | 🔄 | Entity relationships, storage approach; **needs**: server-aware keys, provisional flag, first_dm_acknowledged flag, hierarchical user topics, insight quarantine flag, server privacy_gate_role config, layer_runs table, layer_hash field, server disabled_layers config |
 | MVP Scope | [mvp-scope.md](architecture/mvp-scope.md) | 🟡 | MVP 0 vs MVP 1 boundaries |
 
 ---
@@ -55,10 +55,10 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Area | Doc | Status | Key Open Questions |
 |------|-----|--------|-------------------|
 | Topics | [topics.md](domains/topics.md) | 🟢 | — |
-| Privacy | [privacy.md](domains/privacy.md) | 🟡 | Consent granularity, revocation policy, per-server models |
+| Privacy | [privacy.md](domains/privacy.md) | 🟢 | — |
 | Salience | [salience.md](domains/salience.md) | 🟢 | — |
 | Insights | [insights.md](domains/insights.md) | 🟢 | — |
-| Layers | [layers.md](domains/layers.md) | 🔄 | DAG pipelines, conditionals, self-modification flow; **needs**: synthesis layer type, metrics request, retrieval config |
+| Layers | [layers.md](domains/layers.md) | 🟢 | — |
 
 ---
 
@@ -112,6 +112,106 @@ These questions span multiple domains and need resolution:
 ---
 
 ## Recent Changes
+
+### 2026-01-22: Layers Spec Complete
+
+- Fully interrogated layers.md with 19 decisions
+- Error handling: fail-forward (skip topic, don't degrade salience)
+- Conditional execution: target-filter expressions (clean separation of what vs how)
+- Self-modification: proposal only (MVP 2+, cannot self-execute)
+- Global synthesis: automatic post-hook after server reflection, always on
+- Layer versioning: content hash stored in layer_run record
+- Per-server layers: global default + server overrides
+- Review pass: built into output node (not separate node type)
+- Metrics request: structured JSON block
+- `<chat>` guidance: standard injection into all prompts
+- `<chat>` content: pure context only (no insights about anonymous users)
+- Self-concept updates: dedicated self-reflection layer with dual trigger (schedule + threshold)
+- New node types: `synthesize_to_global`, `update_self_concept`
+- Retrieval config: named profiles + inline overrides
+- Layer organization: fixed categories (user, dyad, channel, subject, self, synthesis)
+- Empty runs: logged as 'dry run'
+- Template organization: by category (prompts/user/, prompts/dyad/, etc.)
+- Prompt structure: flexible per layer (no enforced standard)
+- Added glossary terms: Layer Category, Target Filter, Retrieval Profile, Layer Run Record, Dry Run
+
+### 2026-01-22: Salience Spec Updated (Global Topics, Privacy Gate)
+
+- Re-interrogated salience.md for global topic propagation and privacy gate implications
+- New 'global' budget group for `user:<id>` and `dyad:<a>:<b>` topics (15% allocation)
+- Global topic warming: server→global propagation only if global is warm (salience > 0)
+- Warming triggers: DM activity, or first activity in second server
+- New `global_propagation_factor` config (default 0.3, tunable separately)
+- Bidirectional propagation: DM activity propagates DOWN to all server-scoped topics
+- Channels earn salience from all activity including `<chat>` messages
+- Quarantined user topics continue to decay normally (natural forgetting)
+- Added `warm` transaction type to ledger
+- Added user_server_tracking table for multi-server warming
+- Self budget remains separate from global group
+
+### 2026-01-22: Insights Spec Updated (Global Refs, Quarantine, Synthesis Tracking)
+
+- Re-interrogated insights.md for pending updates
+- Global refs computed at query time (not stored): `server:A:user:456` → `user:456`
+- Added `quarantined: bool` flag for privacy gate role removal
+- Quarantine excludes from ALL retrieval (introspection API only)
+- Quarantine applies to user, global user, and dyad insights involving the user
+- Added `synthesis_source_ids: list[string]` to track which insights were combined
+- Changed strength_adjustment range to 0.1 - 10.0 (was inconsistent 0.5-2.0)
+- Removed `expires_at` from MVP 0 schema (memory is sacred)
+- Clarified: `participants` list does not include `<chat>` placeholders
+- Clarified: `category` field indicates layer type (no separate field)
+
+### 2026-01-22: Privacy Spec Updated (Role-Based Privacy Gate)
+
+- Added role-based privacy gate per server
+- If `privacy_gate_role` empty (default): all users tracked
+- If set: only users with that role get identity tracking
+- Non-opted users become anonymous `<chat_N>`:
+  - No user topic, no salience, no dyads, no insights
+  - Messages appear in history with `<chat_N>` placeholder
+  - Numbered per conversation context to preserve structure
+- Storage: real user IDs stored; anonymization at context assembly
+- Gaining role: backfill-on-reflection (next reflection considers historical context)
+- Losing role: insights quarantined (restored if role re-gained)
+- Layer guidance: system prompt + inline `[anonymous - context only]` markers
+- `<chat>` @mentions Zos: completely ignored
+- Quarantined insights queryable via introspection API
+- Added glossary terms: Privacy Gate Role, Anonymous User, Quarantined Insight
+- Marked specs needing update: insights (quarantine flag), layers (<chat> guidance), data-model (quarantine flag, server privacy config)
+
+### 2026-01-22: Topics Spec Updated (Hierarchical Topics)
+
+- Re-interrogated topics.md to add hierarchical user/dyad topics
+- Added global topics: `user:<id>`, `dyad:<a>:<b>` (no prefix = global)
+- Server-scoped topics: `server:<id>:user:<id>`, `server:<id>:dyad:<a>:<b>`
+- DM insights attach directly to global topics
+- Automatic synthesis: after server reflection, synthesize to global topic
+- Server-specific insights preserved; synthesis is additive
+- Full context access: reflecting on server topic includes global topic insights
+- Compound topics (user_in_channel, dyad_in_channel) remain server-scoped only
+- Added insight metadata field: `global_refs` for synthesis tracking
+- Added glossary terms: Global Topic, Topic Synthesis
+- Marked specs needing update: salience (global topic propagation), insights (global_refs field), layers (synthesis step)
+
+### 2026-01-22: Privacy Spec Complete
+
+- Interrogated privacy.md to completion
+- Core philosophy shift: DM as implicit consent — Zos is treated as a being that remembers
+- Understanding vs. Expression: all sources inform understanding; discretion happens at output
+- First-contact acknowledgment (one-time) informs users their messages become part of understanding
+- Global consent scope (not per-server)
+- Scope tracking retained for audit/judgment but doesn't gate retrieval
+- Two-layer output filter: inline judgment + configurable review pass
+- Sensitivity = source-based + content-based evaluation
+- Hierarchical user identity: `user:<id>` (unified) + `server:<id>:user:<id>` (contextual)
+- DM insights → user level; server insights → user-in-server level
+- Cross-server knowledge informs but doesn't surface in other contexts
+- Server admin privacy lever = channel access control (not metadata flags)
+- Bots treated as users; bot status noted in profile during first reflection
+- No individual insight deletion
+- Added glossary terms: Implicit Consent, Output Filter, First-Contact Acknowledgment, User Topic (Hierarchical)
+- Marked specs needing update: topics (hierarchical users), layers (review pass node), data-model (first_dm_acknowledged flag)
 
 ### 2026-01-22: Salience Spec Complete
 
@@ -179,4 +279,4 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-01-22 — Seed document ingested._
+_2026-01-22 — Layers spec complete. All domain specs now at 🟢._

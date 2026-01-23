@@ -1,7 +1,7 @@
 # Insights — Domain Specification
 
 **Status**: 🟢 Complete
-**Last interrogated**: 2026-01-22
+**Last interrogated**: 2026-01-22 (updated for global refs, quarantine)
 **Last verified**: —
 **Depends on**: Topics, Privacy (scope), Salience
 **Depended on by**: Layers (produce and consume insights), Self-Concept
@@ -74,8 +74,8 @@ Paradoxes can coexist until resolution is needed.
 
 ### Combined Strength Formula
 
-- **Decision**: Strength = (salience spent) × (model adjustment factor, 0.001x - 10.0x)
-- **Rationale**: Objective signal (salience spent) combined with phenomenological signal (model's sense of significance). Neither alone is sufficient.
+- **Decision**: Strength = (salience spent) × (model adjustment factor, 0.1x - 10.0x)
+- **Rationale**: Objective signal (salience spent) combined with phenomenological signal (model's sense of significance). Neither alone is sufficient. Wide range (0.1-10.0) allows significant amplification of important insights or dampening of routine ones without being completely unbounded.
 - **Implications**: Need adjustment factor in schema; layers report significance alongside content
 
 ### Threshold-Triggered Synthesis
@@ -120,6 +120,24 @@ Paradoxes can coexist until resolution is needed.
 - **Rationale**: Many insights don't need cross-links. Populate when relevant.
 - **Implications**: Schema has optional fields; retrieval can filter by linked topics
 
+### Global Refs Computed
+
+- **Decision**: Global topic references are computed at query time, not stored
+- **Rationale**: For a server-scoped insight like `server:A:user:456`, the global ref `user:456` is deterministic. Storing it would be redundant.
+- **Implications**: Retrieval logic extracts global topic from server-scoped topic_key; synthesis queries work across both levels
+
+### Quarantine for Privacy Gate
+
+- **Decision**: Insights have a `quarantined` boolean flag for users who lost their privacy gate role
+- **Rationale**: When a user loses the role, their insights should become invisible to the system. Simple flag is sufficient; no need for reason/timestamp complexity.
+- **Implications**: Retrieval filters out quarantined insights; introspection API can still query them; re-gaining role clears the flag
+
+### No Expiration in MVP 0
+
+- **Decision**: Remove `expires_at` from MVP 0 schema. Memory is sacred; we don't auto-delete.
+- **Rationale**: Early development shouldn't build in memory decay. Can add later if storage becomes an issue.
+- **Implications**: All insights persist indefinitely; deletion is operator intervention only
+
 ---
 
 ## Insight Schema
@@ -128,20 +146,20 @@ Paradoxes can coexist until resolution is needed.
 |-------|------|----------|-------|
 | `id` | string | yes | ULID (sortable, unique) |
 | `topic_key` | string | yes | Primary topic this insight is about |
-| `category` | string | yes | Type of insight (e.g., `user_reflection`, `dyad_observation`) |
+| `category` | string | yes | Type of insight (e.g., `user_reflection`, `dyad_observation`, `synthesis`) |
 | `content` | string | yes | The actual understanding (natural language) |
 | `sources_scope_max` | enum | yes | `public`, `dm`, or `derived` |
 | `created_at` | timestamp | yes | When generated |
-| `expires_at` | timestamp | no | When to auto-delete (null = never) |
 | `layer_run_id` | string | yes | Which layer run produced this |
 | `supersedes` | string | no | ID of insight this updates (not replaces) |
+| `quarantined` | bool | no | True if subject user lost privacy gate role (default: false) |
 
 ### Strength and Metrics
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `salience_spent` | float | yes | Base salience consumed creating this |
-| `strength_adjustment` | float | yes | Model's adjustment factor (0.5 - 2.0) |
+| `strength_adjustment` | float | yes | Model's adjustment factor (0.1 - 10.0) |
 | `strength` | float | computed | `salience_spent × strength_adjustment` |
 | `confidence` | float | yes | How certain (0.0 - 1.0) |
 | `importance` | float | yes | How much this matters (0.0 - 1.0) |
@@ -172,6 +190,62 @@ Paradoxes can coexist until resolution is needed.
 |-------|------|----------|-------|
 | `conflicts_with` | list[string] | no | IDs of insights this contradicts |
 | `conflict_resolved` | bool | no | Whether synthesis has addressed this |
+
+### Synthesis Tracking
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `synthesis_source_ids` | list[string] | no | IDs of insights combined in this synthesis (only for category=`synthesis`) |
+
+---
+
+## Global Topic References
+
+Global topic references are **computed at query time**, not stored in the schema.
+
+For a server-scoped topic like `server:123:user:456`:
+- The global ref `user:456` is derived by stripping the server prefix
+- Same applies to dyads: `server:123:dyad:456:789` → `dyad:456:789`
+
+This enables:
+- Queries like "all insights about user:456 across all servers"
+- Synthesis from server-scoped to global topics
+- No redundant storage
+
+```python
+def extract_global_ref(topic_key: str) -> str | None:
+    """Extract global topic from server-scoped key, if applicable."""
+    if topic_key.startswith("server:"):
+        parts = topic_key.split(":", 2)  # ["server", "<id>", "<rest>"]
+        entity = parts[2]  # e.g., "user:456" or "dyad:456:789"
+        entity_type = entity.split(":")[0]
+        if entity_type in ("user", "dyad"):
+            return entity  # "user:456" or "dyad:456:789"
+    return None  # Global topics and other types have no parent
+```
+
+---
+
+## Quarantine Behavior
+
+When a user loses their privacy gate role:
+
+1. All insights where `topic_key` references that user are marked `quarantined = true`
+2. Quarantined insights are excluded from **all** retrieval (reflection and conversation)
+3. Quarantined insights remain queryable via introspection API (for operators)
+4. If the user re-gains the role, `quarantined` is set back to `false`
+
+**What gets quarantined:**
+- `server:X:user:<id>` — direct user insights
+- `user:<id>` — global user insights
+- `server:X:dyad:<id>:*` — dyad insights involving that user
+- `dyad:<id>:*` — global dyad insights involving that user
+
+**What does NOT get quarantined:**
+- Channel insights that happened to include the user's messages
+- Subject insights where the user participated (the subject persists)
+
+The quarantine is about *insights about the user as an entity*, not about erasing their participation in conversations.
 
 ---
 
@@ -348,11 +422,11 @@ When triggered:
 
 | Spec | Implication |
 |------|-------------|
-| [topics.md](topics.md) | Self-topics get special retrieval; topic-key format confirmed |
+| [topics.md](topics.md) | Self-topics get special retrieval; topic-key format confirmed; global refs computed from server-scoped keys |
 | [salience.md](salience.md) | Salience consumed on insight creation; strength uses salience_spent |
-| [layers.md](layers.md) | Layers request metrics; retrieval preferences in layer config; synthesis layer type |
-| [privacy.md](privacy.md) | Scope tracking unchanged; self-concept scope TBD |
-| [data-model.md](../architecture/data-model.md) | Extended schema with metrics, valence, cross-links, conflict fields |
+| [layers.md](layers.md) | Layers request metrics; retrieval preferences in layer config; synthesis layer produces `synthesis_source_ids` |
+| [privacy.md](privacy.md) | Quarantine flag for privacy gate role removal; scope tracking unchanged |
+| [data-model.md](../architecture/data-model.md) | Extended schema with metrics, valence, cross-links, conflict fields, quarantine flag, synthesis_source_ids |
 
 ---
 

@@ -20,19 +20,56 @@ The topic key system is a taxonomy: a structured way of naming entities that sup
 
 ### Topic Key Taxonomy
 
-Every topic has a key — a string with parseable structure. Keys are server-aware from the start to support multi-server operation in MVP 2+.
+Every topic has a key — a string with parseable structure. Keys follow a two-tier model:
+
+- **Global topics**: No prefix (e.g., `user:123`, `dyad:456:789`, `self:zos`)
+- **Server-scoped topics**: `server:<id>:` prefix (e.g., `server:A:user:123`)
+
+This mirrors how understanding works: some knowledge is universal to a person or relationship, while other knowledge is contextual to a specific community.
+
+### Hierarchical Topics
+
+Users and dyads exist at two levels:
+
+```
+user:<id>                    # Global unified understanding
+├── server:A:user:<id>       # Contextual understanding in Server A
+├── server:B:user:<id>       # Contextual understanding in Server B
+└── (DM insights attach here directly)
+
+dyad:<a>:<b>                 # Global relationship understanding
+├── server:A:dyad:<a>:<b>    # Contextual relationship in Server A
+└── server:B:dyad:<a>:<b>    # Contextual relationship in Server B
+```
+
+**Key principle**: Understanding is unified; expression is contextual. When responding in Server A, Zos has full access to global insights but only *reveals* server-A-specific knowledge.
+
+---
+
+## Topic Types
+
+### Global Topics
+
+| Pattern | Example | Meaning |
+|---------|---------|---------|
+| `user:<id>` | `user:456` | Unified understanding of a person across all contexts |
+| `dyad:<user_a>:<user_b>` | `dyad:456:678` | Unified relationship understanding (IDs sorted) |
+| `self:zos` | `self:zos` | Core identity and self-understanding |
+| `self:<aspect>` | `self:social_patterns` | Emergent self-topics as complexity warrants |
+
+### Server-Scoped Topics
 
 #### Social Topics
 
 | Pattern | Example | Meaning |
 |---------|---------|---------|
-| `server:<id>:user:<id>` | `server:123:user:456` | A person in a server |
+| `server:<id>:user:<id>` | `server:123:user:456` | A person in a specific server |
 | `server:<id>:channel:<id>` | `server:123:channel:789` | A Discord channel |
 | `server:<id>:thread:<id>` | `server:123:thread:012` | A Discord thread (configurable per server) |
 | `server:<id>:role:<id>` | `server:123:role:345` | A Discord role |
 | `server:<id>:user_in_channel:<channel>:<user>` | `server:123:user_in_channel:789:456` | A person's presence in a specific channel |
-| `server:<id>:dyad:<user_a>:<user_b>` | `server:123:dyad:456:678` | A relationship (IDs sorted) |
-| `server:<id>:dyad_in_channel:<channel>:<user_a>:<user_b>` | `server:123:dyad_in_channel:789:456:678` | A relationship in context |
+| `server:<id>:dyad:<user_a>:<user_b>` | `server:123:dyad:456:678` | A relationship in a specific server (IDs sorted) |
+| `server:<id>:dyad_in_channel:<channel>:<user_a>:<user_b>` | `server:123:dyad_in_channel:789:456:678` | A relationship in a specific channel |
 
 #### Semantic Topics
 
@@ -40,41 +77,92 @@ Every topic has a key — a string with parseable structure. Keys are server-awa
 |---------|---------|---------|
 | `server:<id>:subject:<name>` | `server:123:subject:api_redesign` | An emergent theme or subject of discussion |
 
-#### Self Topics
+#### Contextual Self Topics
 
 | Pattern | Example | Meaning |
 |---------|---------|---------|
-| `self:zos` | `self:zos` | Global self-understanding (core identity) |
 | `server:<id>:self:zos` | `server:123:self:zos` | Contextual self-understanding in a community |
-| `self:<aspect>` | `self:social_patterns` | (Future) Emergent self-topics as complexity warrants |
 
-### ID Conventions
+### Compound Topics (Server-Scoped Only)
 
-- **Storage**: Discord snowflake IDs used in keys for precision and stability
-- **Display**: When insights are shown to LLMs or humans, IDs are replaced with human-readable names (usernames, channel names, etc.)
-- **Dyad ordering**: User IDs sorted numerically ascending before key construction
+Compound topics like `user_in_channel` and `dyad_in_channel` are inherently contextual — channels are server-specific, so these topics cannot have global equivalents.
 
-### Topic Categories
+---
 
-Topics fall into categories for budgeting, targeting, and querying:
+## Insight Attachment Rules
 
-- **users**: Individual people (`server:*:user:*`)
-- **channels**: Spaces (`server:*:channel:*`)
-- **threads**: Nested conversations (`server:*:thread:*`) — configurable per server
-- **roles**: Discord roles (`server:*:role:*`)
-- **user_in_channel**: Person-space combinations
-- **dyads**: Relationships
-- **dyad_in_channel**: Relationships in context
-- **subjects**: Semantic topics (`server:*:subject:*`)
-- **self**: Self-understanding (`self:*` and `server:*:self:*`)
+| Insight Source | Attaches To | Notes |
+|----------------|-------------|-------|
+| DM with user | `user:<id>` | DMs are cross-server; attach to global |
+| Public message in Server A | `server:A:user:<id>` | Contextual to server |
+| DM between two users | `dyad:<a>:<b>` | If Zos observes (e.g., group DM with Zos) |
+| Public interaction between users | `server:A:dyad:<a>:<b>` | Contextual to server |
+
+### Synthesis to Global
+
+After reflecting on a user or dyad in any server, a synthesis step updates the corresponding global topic:
+
+1. Retrieve new insights from `server:X:user:<id>` since last synthesis
+2. Include existing `user:<id>` insights as context
+3. Generate meta-understanding that integrates the new contextual insights
+4. Store new insight(s) to `user:<id>`
+
+**Important**: Server-specific insights are preserved. Global synthesis adds meta-understanding without modifying or archiving sources. Both levels coexist with full granularity.
+
+---
+
+## Context Access Model
+
+When reflecting on a server-scoped topic, Zos has **full access** to the corresponding global topic as context:
+
+- Reflecting on `server:A:user:X` → include insights from `user:X`
+- Reflecting on `server:A:dyad:X:Y` → include insights from `dyad:X:Y`
+
+This enables unified understanding while maintaining contextual expression. The privacy output filter (see [privacy.md](privacy.md)) ensures that cross-server knowledge informs but doesn't inappropriately surface.
 
 ---
 
 ## Decisions
 
+### Hierarchical User and Dyad Topics
+
+- **Decision**: Users and dyads exist at both global and server-scoped levels
+- **Rationale**: Enables unified understanding while respecting contextual differences. A person may show up differently in different communities, but is still the same person.
+- **Implications**: Need synthesis mechanism; insight attachment rules based on source type
+
+### No Prefix = Global
+
+- **Decision**: Global topics have no prefix (`user:123`); server-scoped topics have `server:<id>:` prefix
+- **Rationale**: Simpler key format; mirrors existing `self:zos` vs `server:A:self:zos` pattern
+- **Implications**: Parsing must check for `server:` prefix first; absence means global
+
+### DM Insights Direct to Global
+
+- **Decision**: DM-derived insights attach directly to `user:<id>` (or `dyad:<a>:<b>` for multi-party)
+- **Rationale**: DMs are inherently cross-server context. No intermediate topic needed.
+- **Implications**: DM reflection doesn't create server-scoped insights
+
+### Continuous Synthesis
+
+- **Decision**: Synthesis to global happens as part of regular reflection, not a separate scheduled job
+- **Rationale**: Keeps understanding current; integrates naturally with reflection flow
+- **Implications**: User reflection layers need synthesis step; adds compute per reflection
+
+### Source Insights Preserved
+
+- **Decision**: Server-specific insights remain after synthesis; global insights are additive
+- **Rationale**: Preserves granularity and queryability; avoids data loss
+- **Implications**: Storage grows (both levels persist); retrieval can target either level
+
+### Compounds Remain Server-Scoped
+
+- **Decision**: `user_in_channel` and `dyad_in_channel` have no global equivalents
+- **Rationale**: These topics inherently involve channels, which are server-specific
+- **Implications**: No need for compound synthesis logic
+
 ### Server-Aware Keys from Start
 
-- **Decision**: All topic keys include server context, even in MVP 0 (single server)
+- **Decision**: All server-scoped topic keys include server context, even in MVP 0 (single server)
 - **Rationale**: Avoids migration pain when multi-server support arrives in MVP 2. Format is ready.
 - **Implications**: Keys are longer, but consistent; server extraction is trivial
 
@@ -99,7 +187,7 @@ Topics fall into categories for budgeting, targeting, and querying:
 
 ### Roles as Topics
 
-- **Decision**: Discord roles are trackable as `role:<server>:<id>` topics
+- **Decision**: Discord roles are trackable as `server:<id>:role:<id>` topics
 - **Rationale**: Enables insights like "moderators in this server tend to..." Roles shape how people show up.
 - **Implications**: Note that role-gated channels create overlap between role and channel topics; this is an insight opportunity, not a problem
 - **Note**: User reflection should consider role context; role-user relationship is many-to-many
@@ -109,20 +197,6 @@ Topics fall into categories for budgeting, targeting, and querying:
 - **Decision**: Insights attach to one primary topic but carry structured metadata linking to related topics
 - **Rationale**: Avoids the scattering that composite topics would create while preserving queryability
 - **Implications**: Insight schema includes `context`, `subject`, `participants` fields; layers query by participation
-
-### Insight Metadata Structure
-
-For cross-topic linking, insights carry:
-```yaml
-primary_topic: "server:123:dyad:456:678"  # What this insight is fundamentally about
-context:
-  channel: "server:123:channel:789"       # Where it happened
-  thread: "server:123:thread:012"         # If applicable
-subject: "server:123:subject:api_debate"  # What it concerned (optional)
-participants:                             # All entities involved
-  - "server:123:user:456"
-  - "server:123:user:678"
-```
 
 ### Preserve Insights Indefinitely
 
@@ -147,20 +221,25 @@ participants:                             # All entities involved
 ## Key Format Specification
 
 ```
-topic_key := self_topic | server_topic
+topic_key := global_topic | server_topic
 
-self_topic := "self:" identifier
+global_topic := user_global | dyad_global | self_global
+user_global := "user:" discord_snowflake
+dyad_global := "dyad:" discord_snowflake ":" discord_snowflake  # sorted
+self_global := "self:" identifier
 
 server_topic := "server:" server_id ":" entity_topic
 
-entity_topic := simple_entity | compound_entity
+entity_topic := simple_entity | compound_entity | self_entity
 
 simple_entity := entity_type ":" id
-entity_type := "user" | "channel" | "thread" | "role" | "subject" | "self"
+entity_type := "user" | "channel" | "thread" | "role" | "subject"
 
 compound_entity := "user_in_channel:" id ":" id
                  | "dyad:" id ":" id
                  | "dyad_in_channel:" id ":" id ":" id
+
+self_entity := "self:" identifier
 
 server_id := discord_snowflake
 id := discord_snowflake | identifier
@@ -170,31 +249,77 @@ discord_snowflake := [0-9]+
 
 ### Parsing Rules
 
-1. Check for `self:` prefix (global self-topic)
-2. Otherwise, expect `server:<id>:` prefix
-3. Parse entity type from next component
-4. For dyads, sort user IDs ascending before key construction
-5. For `user_in_channel` and `dyad_in_channel`, channel ID comes before user IDs
+1. Check for known global prefixes: `user:`, `dyad:`, `self:`
+2. If starts with `server:`, parse as server-scoped
+3. For dyads, user IDs are sorted ascending before key construction
+4. For `user_in_channel` and `dyad_in_channel`, channel ID comes before user IDs
 
 ### Key Construction Examples
 
 ```python
-# Global self
+# Global topics
+user_key(user)                                # "user:456"
+dyad_key(user_a, user_b)                      # "dyad:456:678" (sorted!)
 self_key()                                    # "self:zos"
 self_key("social_patterns")                   # "self:social_patterns"
 
-# Server-scoped entities
-user_key(server, user)                        # "server:123:user:456"
+# Server-scoped topics
+server_user_key(server, user)                 # "server:123:user:456"
+server_dyad_key(server, user_a, user_b)       # "server:123:dyad:456:678" (sorted!)
 channel_key(server, channel)                  # "server:123:channel:789"
 thread_key(server, thread)                    # "server:123:thread:012"
 role_key(server, role)                        # "server:123:role:345"
 subject_key(server, "api_debate")             # "server:123:subject:api_debate"
 server_self_key(server)                       # "server:123:self:zos"
 
-# Compound entities
+# Compound entities (server-scoped only)
 user_in_channel_key(server, channel, user)    # "server:123:user_in_channel:789:456"
-dyad_key(server, user_a, user_b)              # "server:123:dyad:456:678" (sorted!)
 dyad_in_channel_key(server, channel, a, b)    # "server:123:dyad_in_channel:789:456:678"
+```
+
+---
+
+## ID Conventions
+
+- **Storage**: Discord snowflake IDs used in keys for precision and stability
+- **Display**: When insights are shown to LLMs or humans, IDs are replaced with human-readable names (usernames, channel names, etc.)
+- **Dyad ordering**: User IDs sorted numerically ascending before key construction
+
+---
+
+## Topic Categories
+
+Topics fall into categories for budgeting, targeting, and querying:
+
+- **users**: Individual people (`user:*` and `server:*:user:*`)
+- **dyads**: Relationships (`dyad:*` and `server:*:dyad:*`)
+- **channels**: Spaces (`server:*:channel:*`)
+- **threads**: Nested conversations (`server:*:thread:*`) — configurable per server
+- **roles**: Discord roles (`server:*:role:*`)
+- **user_in_channel**: Person-space combinations (server-scoped only)
+- **dyad_in_channel**: Relationships in context (server-scoped only)
+- **subjects**: Semantic topics (`server:*:subject:*`)
+- **self**: Self-understanding (`self:*` and `server:*:self:*`)
+
+---
+
+## Insight Metadata Structure
+
+For cross-topic linking, insights carry:
+
+```yaml
+primary_topic: "server:123:dyad:456:678"  # What this insight is fundamentally about
+context:
+  channel: "server:123:channel:789"       # Where it happened
+  thread: "server:123:thread:012"         # If applicable
+subject: "server:123:subject:api_debate"  # What it concerned (optional)
+participants:                             # All entities involved
+  - "server:123:user:456"
+  - "server:123:user:678"
+global_refs:                              # Links to global topics (for synthesis)
+  - "user:456"
+  - "user:678"
+  - "dyad:456:678"
 ```
 
 ---
@@ -204,7 +329,7 @@ dyad_in_channel_key(server, channel, a, b)    # "server:123:dyad_in_channel:789:
 ### Creation
 
 Topics are created:
-- **On first activity**: When a user sends their first message, `server:X:user:Y` is created
+- **On first activity**: When a user sends their first message, relevant topics are created
 - **On first insight**: When reflection produces an insight about something, create the topic if needed
 - **Provisionally**: Auto-created topics marked `provisional: true` for consolidation review
 
@@ -242,8 +367,10 @@ servers:
 
 ## Salience Propagation Note
 
-When activity occurs on compound topics (dyads, user_in_channel), salience should propagate to component topics:
-- Dyad activity → both users gain salience
+When activity occurs on compound or server-scoped topics, salience should propagate:
+
+- Server user activity → global user gains salience
+- Dyad activity → both users (global and server-scoped) gain salience
 - user_in_channel activity → user and channel gain salience
 
 This is specified in detail in [salience.md](salience.md).
@@ -254,11 +381,11 @@ This is specified in detail in [salience.md](salience.md).
 
 | Spec | Implication |
 |------|-------------|
-| [salience.md](salience.md) | Salience propagation from compound to component topics; per-category budgets include new types |
-| [insights.md](insights.md) | Insight schema needs `context`, `subject`, `participants` fields; provisional flag for auto-created topics |
-| [privacy.md](privacy.md) | Self-topics have special scope considerations; subject topics inherit scope from constituent messages |
-| [layers.md](layers.md) | Layers can target self-reflection; subject emergence happens in layers; consolidation as a layer type |
-| [data-model.md](../architecture/data-model.md) | Topic table needs `provisional` flag, `category` index, server-aware key format |
+| [salience.md](salience.md) | Salience propagation to global topics; budget groups include global user/dyad |
+| [insights.md](insights.md) | Insight schema needs `global_refs` field for synthesis tracking |
+| [privacy.md](privacy.md) | Global topics inform but don't surface cross-server; output filter handles |
+| [layers.md](layers.md) | User/dyad reflection needs synthesis step to global; DM reflection attaches to global directly |
+| [data-model.md](../architecture/data-model.md) | Topic table needs global vs server-scoped distinction; synthesis tracking |
 
 ---
 
