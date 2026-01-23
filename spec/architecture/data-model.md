@@ -392,7 +392,13 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 | targets_processed | int | yes | How many were actually processed |
 | targets_skipped | int | yes | How many skipped due to errors |
 | insights_created | int | yes | How many insights stored |
-| tokens_used | int | no | Total LLM tokens consumed |
+| model_profile | string | no | Model profile used (e.g., `moderate`, `complex`) |
+| model_provider | string | no | Actual provider (e.g., `anthropic`, `openai`) |
+| model_name | string | no | Actual model (e.g., `claude-sonnet-4-20250514`) |
+| tokens_input | int | no | Input/prompt tokens consumed |
+| tokens_output | int | no | Output/completion tokens consumed |
+| tokens_total | int | no | Total tokens (input + output) |
+| estimated_cost_usd | float | no | Estimated cost based on token pricing |
 | errors | json | no | Array of error details for skipped topics |
 
 **Relationships**:
@@ -745,4 +751,4 @@ Social texture insights track *how* people communicate, not just *what* they say
 
 ---
 
-_Last updated: 2026-01-23 — Added observation entities (Reaction, MediaAnalysis, LinkAnalysis), chattiness entities (ChattinessLedger, SpeechPressure, ConversationLog, DraftHistory), emoji topic type, social_texture insight category_
+_Last updated: 2026-01-23 — Extended LayerRun with model tracking fields; observation entities; chattiness entities; emoji topic type; social_texture insight category_

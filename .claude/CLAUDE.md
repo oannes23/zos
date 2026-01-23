@@ -161,7 +161,11 @@ Phase (major milestone)
 - **Scheduling**: APScheduler or equivalent
 - **Templating**: Jinja2 (prompt templates)
 - **Validation**: Pydantic (configuration)
-- **LLM**: Multi-provider abstraction (OpenAI, Anthropic, Ollama, generic HTTP)
+- **LLM**: Multi-provider abstraction with capability tiers
+  - Providers: Anthropic, OpenAI, Ollama, generic HTTP
+  - Tiers: simple (Haiku), moderate (Sonnet), complex (Opus)
+  - Layers reference semantic profiles, not specific models
+  - See `spec/domains/layers.md` → Model Configuration for details
 
 ### Code Style
 - Type hints where applicable
@@ -176,7 +180,8 @@ When starting work:
 1. `spec/MASTER.md` — overall status and structure
 2. `spec/glossary.md` — term definitions
 3. `spec/architecture/overview.md` — system context
-4. Target domain spec — the area you're working on
+4. `data/self-concept.md` — Zos's identity document (always in context for reflection/conversation)
+5. Target domain spec — the area you're working on
 
 ---
 

@@ -203,6 +203,119 @@ params:
 
 ---
 
+## Model Configuration
+
+LLM calls can be configured at multiple levels to match model capability to task complexity.
+
+### Named Model Profiles
+
+Like retrieval profiles, model profiles are defined once and referenced by name:
+
+```yaml
+# config.yaml
+models:
+  profiles:
+    # Capability tiers
+    simple:
+      provider: anthropic
+      model: claude-3-5-haiku-20241022
+      description: "Fast, cheap — formatting, simple extraction, basic classification"
+
+    moderate:
+      provider: anthropic
+      model: claude-sonnet-4-20250514
+      description: "Balanced — most reflection, conversation, standard analysis"
+
+    complex:
+      provider: anthropic
+      model: claude-opus-4-20250514
+      description: "Deep reasoning — synthesis, self-reflection, conflict resolution"
+
+    # Semantic aliases (map to capability tiers)
+    default: moderate
+    reflection: moderate
+    conversation: moderate
+    synthesis: complex
+    self_reflection: complex
+    review: simple
+    extraction: simple
+    vision: moderate  # For media analysis
+
+  # Provider configuration
+  providers:
+    anthropic:
+      api_key_env: ANTHROPIC_API_KEY
+    openai:
+      api_key_env: OPENAI_API_KEY
+    ollama:
+      base_url: http://localhost:11434
+```
+
+### Usage in Layers
+
+Layers reference model profiles by name:
+
+```yaml
+nodes:
+  - type: llm_call
+    params:
+      prompt_template: user/reflection.jinja2
+      model: reflection  # Uses 'moderate' tier
+      max_tokens: 500
+
+  - type: llm_call
+    params:
+      prompt_template: synthesis/global_user.jinja2
+      model: complex  # Explicitly request highest capability
+```
+
+### Inline Overrides
+
+Like retrieval, model settings can be overridden inline:
+
+```yaml
+params:
+  model: moderate
+  provider: openai  # Override: use OpenAI instead of default provider
+  temperature: 0.3  # Override: lower temperature for this call
+```
+
+### Task-to-Model Mapping Guidelines
+
+| Task Type | Recommended Profile | Rationale |
+|-----------|---------------------|-----------|
+| Message formatting, context assembly | `simple` | Mechanical transformation |
+| Privacy review pass | `simple` | Binary classification |
+| Media/link analysis | `vision` / `moderate` | Requires understanding but not deep reasoning |
+| User/dyad/channel reflection | `moderate` | Standard insight generation |
+| Conversation response | `moderate` | Context-aware but time-sensitive |
+| Self-reflection | `complex` | Requires introspection and nuance |
+| Conflict synthesis | `complex` | Reconciling contradictions is hard |
+| Self-concept updates | `complex` | Identity maintenance is consequential |
+| Proposal generation | `complex` | Articulating desired changes to cognition |
+
+### Decisions
+
+#### Named Profiles Over Direct Specification
+
+- **Decision**: Layers reference semantic profile names, not provider/model directly
+- **Rationale**: Decouples layer definitions from specific models; allows global model swaps without touching every layer; semantic names communicate intent
+- **Implications**: Profile definitions are centralized; layer YAML stays clean
+
+#### Capability Tiers
+
+- **Decision**: Three primary capability tiers (simple/moderate/complex) plus semantic aliases
+- **Rationale**: Maps naturally to model families (Haiku/Sonnet/Opus or equivalent); aliases like `reflection` and `self_reflection` communicate purpose
+- **Implications**: Easy to understand; room for per-task fine-tuning via aliases
+
+#### Provider Abstraction
+
+- **Decision**: Multi-provider support with unified interface
+- **Rationale**: Avoid lock-in; allow local models (Ollama) for development; different providers may excel at different tasks
+- **Implications**: Need provider adapter layer in implementation; each provider has its own configuration
+
+---
+
 ## Prompt Templates
 
 ### Organization
@@ -847,4 +960,4 @@ Chaining is limited to prevent runaway responses:
 
 ---
 
-_Last updated: 2026-01-23 — Added error reflection decision; acknowledgment layer deprecated_
+_Last updated: 2026-01-23 — Model configuration section added; error reflection decision; acknowledgment layer deprecated_

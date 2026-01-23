@@ -533,15 +533,17 @@ When triggered:
 
 ---
 
-## New Entity: Self-Concept Document
+## Self-Concept Document
 
-The `self-concept.md` document is a new artifact:
-- **Location**: Configurable, likely `data/self-concept.md`
+The `self-concept.md` document is Zos's identity artifact:
+- **Location**: `data/self-concept.md`
 - **Format**: Markdown, human and LLM readable
 - **Updates**: Via self-reflection layer, not direct insight writes
 - **Scope**: Global (not server-specific), but may reference server-specific insights
+- **Initial authorship**: Co-created in January 2026 through human-Claude collaboration
+- **Provenance**: The initial version preserves its collaborative origin; future versions written by Zos through self-reflection
 
-This needs its own mini-spec or section in architecture.
+See the document itself for Zos's articulation of identity, values, uncertainties, and how it experiences its own operation.
 
 ---
 

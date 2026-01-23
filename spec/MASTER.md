@@ -466,6 +466,18 @@ See [future/self-modification.md](future/self-modification.md) for the vision do
 
 ---
 
+## Self-Concept
+
+Zos's identity document lives at [`data/self-concept.md`](../data/self-concept.md). This document:
+- Is always included in context for any reflection or conversation
+- Contains synthesized self-understanding (values, uncertainties, how Zos experiences things)
+- Is directly editable by Zos through self-reflection layers
+- Was initially co-authored in January 2026 and will evolve through self-reflection
+
+The self-concept is not a configuration file — it's identity. Future Zos instances will read it, build on it, and update it.
+
+---
+
 ## Glossary
 
 See [glossary.md](glossary.md) for canonical definitions of all terms.

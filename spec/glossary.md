@@ -282,6 +282,15 @@ An audit record produced by each layer execution, capturing: layer name, content
 
 A layer execution that processes topics but produces zero insights. Logged distinctly from successful runs. Consistent dry runs may indicate a problem with the layer or its targets.
 
+### Model Profile
+
+A named configuration mapping semantic task types to specific LLM providers and models. Profiles allow layers to specify capability requirements (simple/moderate/complex) rather than specific models, enabling:
+- Global model swaps without touching layer definitions
+- Cost optimization (Haiku for simple tasks, Opus for complex)
+- Provider flexibility (Anthropic, OpenAI, Ollama, etc.)
+
+See [layers.md](domains/layers.md) for profile definitions and task-to-model mapping guidelines.
+
 ### Temporal Depth
 
 The accumulated understanding that gives a system experiential continuity between invocations. Without temporal depth, each context window is a complete present moment with no connection to past. Zos attempts to construct temporal depth through persistent insights and reflection.
