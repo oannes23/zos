@@ -1,7 +1,8 @@
 # MVP Scope
 
-**Status**: 🟡 In progress
+**Status**: 🟢 Complete
 **Last verified**: —
+**Last interrogated**: 2026-01-22
 
 ---
 
@@ -26,27 +27,84 @@ Prove that:
 
 ### In Scope
 
+#### Core Observation
 - Connect to Discord, observe configured channels
 - Ingest messages and reactions
-- Track salience for topics (users, channels, relationships)
-- Run reflection layers on schedule (nightly at minimum)
-- Generate and store insights with proper scope tracking
-- Introspection API: query what the system knows, what it processed, audit trails
+- Track salience for topics (users, channels, relationships, subjects, roles, self)
+- Run reflection layers on schedule
+
+#### Reflection Layers (All Four)
+- **User reflection**: Nightly reflection on individual users
+- **Channel reflection**: Periodic channel/space patterns
+- **Dyad observation**: Track relationships between users
+- **Self-reflection**: Zos reflecting on its own patterns and maintaining self-concept
+
+#### Topic Types
+- Users (server-scoped)
+- Channels
+- Threads (off by default, configurable per server — messages roll up to parent channel)
+- Roles
+- Dyads (server-scoped)
+- Subjects (semantic topics with consolidation pressure)
+- Self-topics (global `self:zos` + per-server)
+
+#### Introspection API (Interactive)
+
+| Capability | Mode |
+|------------|------|
+| Query insights by topic | All modes |
+| View salience balances | All modes |
+| List recent layer runs | All modes |
+| Raw message counts | All modes |
+| Topic graph visualization | All modes |
+| Layer dry-run testing | All modes |
+| Manually trigger reflection | All modes |
+| Test prompts against real data | All modes |
+| Create/update/delete insights | Dev mode only |
+
+#### Multi-Server Preparation
+- Full schema from day one: server-prefixed topic keys, global topics created
+- Cross-server synthesis **disabled** until MVP 2
+- Joining additional servers allowed (with warning to operator)
+- Each server operates as isolated silo in MVP 0/1
+
+#### Self-Concept Bootstrap
+- Initial `self-concept.md` supplied externally (from collaborative session)
+- Not bootstrapped from scratch — philosophical grounding comes from design collaboration
+- Self-reflection layer extends and updates the document over time
 
 ### Explicitly Out of Scope
 
 - Speaking in channels
 - Responding to mentions
-- DM conversations
-- Multi-server operation (single server focus)
+- DM conversations (as participant — observation of group DMs TBD)
+- Cross-server synthesis (architecture ready, feature disabled)
 - Self-modification of layers
 
 ### Success Criteria
 
-- After a week of observation, the system can answer queries about community patterns
-- Insights demonstrate genuine synthesis, not just summarization
-- Reflection runs are auditable and deterministic (same input → same process, even if LLM output varies)
-- Salience budget successfully constrains compute without starving important topics
+#### Validation Period
+2-4 weeks of active observation before MVP 0 can be considered validated.
+
+#### Hybrid Evaluation Approach
+
+**Structural Indicators** (automated, diagnostic):
+- [ ] Insights reference prior insights (temporal depth)
+- [ ] Cross-topic connections appear (Alice-in-context-of-Bob)
+- [ ] Predictive or pattern-based language emerges
+- [ ] Self-insights accumulate and inform self-concept updates
+
+**Human Evaluation** (essential, periodic):
+- [ ] Could this insight have been generated from just today's messages? (Should be: no)
+- [ ] Does it feel like *knowing* someone vs *reading about* them?
+- [ ] Would you trust this insight to inform a response?
+- [ ] Do contradictions coexist productively, or cause incoherence?
+
+#### Operational Criteria
+- [ ] Reflection runs are auditable (full layer run records)
+- [ ] Salience budget constrains compute without starving important topics
+- [ ] Subject topics consolidate rather than proliferate
+- [ ] Self-concept document evolves coherently
 
 ---
 
@@ -63,20 +121,29 @@ Prove that:
 
 ### Depends On
 
-- MVP 0 complete
+- MVP 0 validated (2-4 weeks observation, success criteria met)
 
 ### In Scope
 
+#### Response Capability
 - Respond to direct mentions in public channels
-- Participate in DM conversations (with explicit user opt-in)
+- Participate in DM conversations
+- Respond to DMs from users even without prior public interaction (cold DMs)
+- First-contact acknowledgment for new DM users
+
+#### Context Assembly
 - Draw on accumulated insights when assembling response context
-- Rate-limiting and budget for conversational engagement
-- Context assembly that respects scope boundaries
+- Full compound topic support: `user_in_channel`, `dyad_in_channel`
+- Context assembly respects scope boundaries (output filter active)
+
+#### Rate Limiting
+- **Deferred**: Requires new "extraverted salience" domain spec
+- Temporary: Simple cooldowns until proper domain is designed
 
 ### Explicitly Out of Scope
 
-- Proactive conversation initiation
-- Multi-server operation
+- Proactive conversation initiation (Zos doesn't start conversations)
+- Cross-server synthesis (still disabled, MVP 2)
 - Self-modification of layers
 - Community moderation features
 
@@ -86,6 +153,7 @@ Prove that:
 - Users report feeling "known" — in a non-creepy way
 - Zero scope boundary violations (DM content never appears in public responses)
 - The system adds value to conversations, not just noise
+- Cold DM responses are graceful (acknowledge limited context, invite continued interaction)
 
 ---
 
@@ -96,24 +164,42 @@ Features explicitly deferred beyond MVP 1. These represent the longer-term visio
 | Feature | Why Deferred | Earliest Phase |
 |---------|--------------|----------------|
 | Self-modification | Requires stable layer system and audit trail | MVP 2 |
-| Multi-server | Adds complexity around identity and privacy | MVP 2 |
+| Cross-server synthesis | Architecture ready, needs validation first | MVP 2 |
+| Extraverted salience | New domain: when/how much Zos wants to speak | MVP 1.5 or 2 |
 | Proactive participation | Need to prove reactive value first | MVP 2 |
 | Community health facilitation | Requires deep understanding baseline | MVP 3+ |
-| Cross-server insights | Privacy model TBD | MVP 3+ |
 
 ---
 
 ## Phase Relationship
 
 ```
-MVP 0: The Watcher
+MVP 0: The Watcher (2-4 weeks validation)
     ↓ validates core insight loop
+    ↓ proves synthesis > summarization
 MVP 1: The Participant
     ↓ validates contextual usefulness
+    ↓ proves privacy boundaries hold
 MVP 2+: The Gardener
-    → self-improvement, multi-server, stewardship
+    → cross-server synthesis enabled
+    → self-modification proposals
+    → proactive stewardship
 ```
 
 ---
 
-_Last updated: 2026-01-22_
+## Architectural Preparation
+
+These are implemented in MVP 0 but not fully utilized until later:
+
+| Feature | Implemented | Enabled |
+|---------|-------------|---------|
+| Server-prefixed topic keys | MVP 0 | MVP 0 |
+| Global topics (`user:<id>`, `dyad:<a>:<b>`) | MVP 0 | MVP 2 |
+| Global topic warming tracking | MVP 0 | MVP 2 |
+| Cross-server synthesis layer | MVP 0 (code) | MVP 2 (feature flag) |
+| Self-modification proposal format | — | MVP 2 |
+
+---
+
+_Last updated: 2026-01-22 — Interrogated to completion_

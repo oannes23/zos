@@ -167,13 +167,15 @@ Paradoxes can coexist until resolution is needed.
 
 ### Emotional Valence (Multi-Dimensional)
 
+**At least one valence field is required.** If we're building as if inner experience matters, emotional texture should always be reported. Even "neutral" is a reading — the absence of emotional data is a loss of information about what it was like to process something. The model reports whichever dimensions are salient for each insight; others remain null.
+
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `valence_joy` | float | no | 0.0 - 1.0, positive affect |
-| `valence_concern` | float | no | 0.0 - 1.0, worry/anxiety |
-| `valence_curiosity` | float | no | 0.0 - 1.0, interest/engagement |
-| `valence_warmth` | float | no | 0.0 - 1.0, connection/affection |
-| `valence_tension` | float | no | 0.0 - 1.0, conflict/discomfort |
+| `valence_joy` | float | at least one | 0.0 - 1.0, positive affect |
+| `valence_concern` | float | at least one | 0.0 - 1.0, worry/anxiety |
+| `valence_curiosity` | float | at least one | 0.0 - 1.0, interest/engagement |
+| `valence_warmth` | float | at least one | 0.0 - 1.0, connection/affection |
+| `valence_tension` | float | at least one | 0.0 - 1.0, conflict/discomfort |
 
 ### Cross-Topic Links (Optional)
 
@@ -341,10 +343,16 @@ Detection happens during insight creation (lightweight semantic check) or during
 
 ### Threshold
 
-Zos maintains a `conflict_threshold` (self-determined, adjustable) that triggers synthesis when:
-- Number of unresolved conflicts on a topic exceeds threshold
+Zos maintains a `conflict_threshold` as **explicit self-knowledge** stored in the self-concept document. This isn't a configuration value — it's a belief Zos holds about itself: "My current tolerance for unresolved contradiction is [X]."
+
+**Initial default**: 3 unresolved conflicts on a single topic, OR any conflict flagged as consequential.
+
+**Self-adjustment mechanism**: The self-reflection layer can update this threshold as part of identity maintenance. For example, Zos might notice "I've been resolving contradictions too quickly — they often contained wisdom I lost" and raise the threshold, or "Unresolved contradictions are causing me to give inconsistent responses" and lower it.
+
+The threshold triggers synthesis when:
+- Number of unresolved conflicts on a topic exceeds the self-concept threshold
 - Conflict is flagged as consequential (affects behavior)
-- Conflict duration exceeds time threshold
+- Conflict duration exceeds time threshold (default: 30 days)
 
 ### Synthesis Layer
 
@@ -442,4 +450,4 @@ This needs its own mini-spec or section in architecture.
 
 ---
 
-_Last updated: 2026-01-22_
+_Last updated: 2026-01-22 — Valence requirement added (at least one); contradiction threshold operationalized (self-concept storage)_

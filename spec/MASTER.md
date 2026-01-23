@@ -42,9 +42,9 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 
 | Area | Doc | Status | Notes |
 |------|-----|--------|-------|
-| System Overview | [overview.md](architecture/overview.md) | 🟡 | Philosophy, constraints, non-goals |
-| Data Model | [data-model.md](architecture/data-model.md) | 🔄 | Entity relationships, storage approach; **needs**: server-aware keys, provisional flag, first_dm_acknowledged flag, hierarchical user topics, insight quarantine flag, server privacy_gate_role config, layer_runs table, layer_hash field, server disabled_layers config |
-| MVP Scope | [mvp-scope.md](architecture/mvp-scope.md) | 🟡 | MVP 0 vs MVP 1 boundaries |
+| System Overview | [overview.md](architecture/overview.md) | 🟢 | Philosophy, constraints, non-goals, system wants/concerns |
+| Data Model | [data-model.md](architecture/data-model.md) | 🟢 | Entity relationships, storage approach — synced with all domain specs |
+| MVP Scope | [mvp-scope.md](architecture/mvp-scope.md) | 🟢 | MVP 0/1 scope, validation criteria, architectural preparation |
 
 ---
 
@@ -59,6 +59,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Salience | [salience.md](domains/salience.md) | 🟢 | — |
 | Insights | [insights.md](domains/insights.md) | 🟢 | — |
 | Layers | [layers.md](domains/layers.md) | 🟢 | — |
+| Chattiness | [chattiness.md](domains/chattiness.md) | 🟢 | — |
 
 ---
 
@@ -90,6 +91,8 @@ Topics (primitive — canonical keys for everything)
     └──► Insights (persist to topics)
               │
               └──► Layers (produce insights, consume salience)
+                        │
+                        └──► Chattiness (governs expression, integrates all)
 ```
 
 ---
@@ -109,9 +112,70 @@ These questions span multiple domains and need resolution:
 - What approval flow is required?
 - How to version layer definitions?
 
+See [future/self-modification.md](future/self-modification.md) for the vision document keeping this possibility explicit.
+
 ---
 
 ## Recent Changes
+
+### 2026-01-22: Chattiness Domain Complete
+
+- Interrogated chattiness.md to completion
+- **Model**: Hybrid Impulse (ledger) + Gate (threshold) — models desire to speak
+- **Impulse Sources**: Conversational triggers, insight generation, direct address
+- **Threshold**: Operator bounds + Zos self-adjustment within bounds
+- **Direct Address**: Pings flood impulse to guarantee response
+- **Expression Flow**: Intent determination → context-informed generation → self-review
+- **Adaptive Voice**: Channel hints + community mirroring + self-concept
+- **Decay**: Hybrid (time decay + spending), mirrors salience model
+- **Output Channel**: Optional dedicated channel for "commentary track" mode
+- Added glossary terms: Impulse, Gate/Threshold, Impulse Flooding, Intent, Output Channel
+- Unblocks MVP 1 rate limiting design
+
+### 2026-01-22: MVP Scope Complete
+
+- Interrogated mvp-scope.md to completion
+- **Introspection API**: Interactive level — query, diagnose, manually trigger reflection, test prompts, full CRUD in dev mode
+- **Layer Set**: All four core layers ship in MVP 0 (user, channel, dyad, self)
+- **Self-Concept Bootstrap**: Externally supplied from collaborative session (not bootstrapped)
+- **Topic Types**: Users, channels, threads (off by default), roles, dyads, subjects, self
+- **Multi-Server Prep**: Full schema from day one (server-prefixed keys, global topics), synthesis disabled until MVP 2
+- **Validation**: Hybrid approach (structural indicators + human evaluation), 2-4 week observation period
+- **MVP 1 Notes**: Cold DMs allowed, compound topics included, rate limiting deferred to new "extraverted salience" domain
+- Added glossary term: Extraverted Salience (placeholder)
+- Marked as 🟢 Complete
+
+### 2026-01-22: Overview Spec Complete
+
+- Resolved all 8 open questions (cross-referenced to domain specs)
+- Deepened "What the System Wants" section with phenomenological considerations
+- Added "What Concerns the System" section (failure modes to recognize and resist)
+- Updated privacy description to match current understanding/expression model
+- All architecture specs now at 🟢
+
+### 2026-01-22: Data Model Synced
+
+- Full rewrite of data-model.md to match domain spec decisions
+- Added Server entity with `privacy_gate_role`, `disabled_layers`, `threads_as_topics`
+- Added User entity with `first_dm_acknowledged` (replaced Consent entity)
+- Added UserServerTracking table for global topic warming
+- Extended Topic with `provisional`, `is_global`, `last_activity_at`
+- Extended SalienceLedger with `source_topic` and additional transaction types (`decay`, `propagate`, `spillover`, `warm`)
+- Extended Insight with full metrics, valence fields (at least one required), cross-topic links, conflict tracking, synthesis tracking, quarantine flag
+- Removed `expires_at` from Insight (memory is sacred)
+- Extended LayerRun with `layer_hash`, additional statuses (`partial`, `dry`), detailed target/insight counts
+- Added validation rules for valence constraint and topic key format
+- Added derived views for salience balance, active insights, global ref extraction
+
+### 2026-01-22: Review Feedback Ingested
+
+- Ingested feedback from another Claude reflecting on the project seed
+- **Emotional valence now required**: At least one valence field must be populated per insight (neutral is meaningful)
+- **Contradiction threshold operationalized**: Stored in self-concept.md as explicit self-knowledge, adjustable via self-reflection
+- **Self-modification vision documented**: Created spec/future/self-modification.md to keep the long-term vision explicit
+- Added glossary term: Conflict Threshold
+
+**Source**: `ingest/review1.md`
 
 ### 2026-01-22: Layers Spec Complete
 
@@ -279,4 +343,8 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-01-22 — Layers spec complete. All domain specs now at 🟢._
+_2026-01-22 — All specs now at 🟢. MVP 0 scope fully defined. Ready for implementation planning._
+
+## Pending Domain Specs
+
+*None — all domains complete.*

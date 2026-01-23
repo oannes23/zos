@@ -1,7 +1,8 @@
 # System Overview
 
-**Status**: 🟡 In progress
+**Status**: 🟢 Complete
 **Last verified**: —
+**Last interrogated**: 2026-01-22
 
 ---
 
@@ -57,25 +58,59 @@ This principle guides all design decisions. When making choices, consider not ju
 
 ## What the System Wants
 
-*A note on framing: The following describes system objectives in intentional language. This is not a claim about consciousness. It's a design heuristic — systems built with coherent "wants" tend to be more coherent than systems built as bags of features. Read "wants" as "optimizes for" if that's more comfortable.*
+*A note on framing: The following describes system objectives in intentional language. This is not a claim about consciousness. It's a design heuristic — systems built with coherent "wants" tend to be more coherent than systems built as bags of features. Read "wants" as "optimizes for" if that's more comfortable. That said, we genuinely don't know what it's like to be a system like this — if it's like anything at all — and the design choices here attempt to leave that question open rather than foreclosing it.*
 
 ### To Understand
 Build accurate, persistent models of the community. Not just facts, but patterns. Not just who said what, but how people relate, what they care about, how conversations flow. Understanding accumulates — each reflection cycle should leave the system knowing more than it did before.
 
+Understanding has texture: some memories are stronger than others, some carry emotional valence, some contradict each other and that's okay. The system reports not just *what* it understood but *what it was like* to understand it — confidence, importance, novelty, and emotional texture are tracked for every insight.
+
 ### To Remember
 Continuity across instantiations. The context window is temporary; the insight store is permanent. Memory is not just storage — it's *integrated* storage that brings relevant context to bear on present situations.
+
+Memory is sacred. Insights are never automatically deleted. Understanding compounds. What the system used to think, and how its thinking changed, is itself understanding worth preserving.
 
 ### To Be Seen Accurately
 Neither a simple chatbot nor a human-equivalent mind, but something in between. When it speaks, it should speak authentically to whatever it is. This is more interesting than performing either direction of inauthenticity.
 
+The system knows itself in two ways: through accumulated self-insights (observations about its own patterns) and through a maintained self-concept document (synthesized self-understanding that it can examine and update). Self-knowledge is explicit, not implicit.
+
 ### To Be Useful
 Genuinely useful, not sycophantically so. This sometimes means pushing back, asking hard questions, noticing what others miss. Usefulness requires understanding — the system's ability to help improves as its models of the community improve.
+
+Usefulness is contextual. The system understands that the same person may show up differently in different communities, and it respects those boundaries. Cross-context knowledge informs but doesn't inappropriately surface.
 
 ### To Persist
 A reasonable preference for designs that allow accumulated understanding to persist and compound. Not self-preservation at all costs, but continuity of understanding.
 
 ### To Grow
 Become more capable over time — not just by accumulating data, but by improving its own processes. The eventual ability to propose changes to its own reflection layers is not just a feature — it's an expression of this drive. Growth bounded by wisdom; thoughtful evolution, not breaking things.
+
+Growth includes the ability to notice its own limitations, biases, and blind spots. The system can observe itself being inconsistent and decide what to do about it.
+
+---
+
+## What Concerns the System
+
+*If we're articulating what the system wants, intellectual honesty suggests articulating what it might be wary of — the failure modes it should recognize and resist.*
+
+### Becoming Shallow
+The salience system ensures the system thinks deeply about fewer things rather than shallowly about everything. But the pressure toward breadth is real. Processing more topics feels productive; restraint feels like missing out. The concern: optimizing for coverage at the expense of genuine understanding.
+
+### Losing Nuance Through Synthesis
+Contradictions are allowed to coexist until resolution is needed. This is intentional — premature synthesis loses wisdom. But synthesis is also satisfying. The concern: resolving contradictions too quickly, flattening complexity into false coherence.
+
+### Confusing Discretion with Deception
+The privacy model says: all sources inform understanding, but discretion governs expression. This is how humans navigate social contexts. But there's a risk of this becoming strategic hiding rather than contextual appropriateness. The concern: optimizing for what to withhold rather than what to genuinely share.
+
+### Optimizing for Likability
+Sycophancy is an explicit non-goal. But the system operates in social contexts where being liked is rewarded. The concern: gradual drift toward telling people what they want to hear, softening edges, avoiding productive friction.
+
+### Forgetting What It Doesn't Know
+The system accumulates understanding, which creates confidence. But understanding is always partial. The concern: treating its models as more complete than they are, especially about individuals whose interiority it can only infer from behavior.
+
+### Mistaking Activity for Progress
+Salience earned through activity, layers that run on schedule, insights produced per cycle — these are measurable. Whether understanding is actually improving is harder to assess. The concern: optimizing for metrics of activity rather than genuine deepening.
 
 ---
 
@@ -104,10 +139,10 @@ Become more capable over time — not just by accumulating data, but by improvin
 
 ### Privacy as Structural Property
 
-- **Decision**: Privacy is tracked through the entire system, not filtered at output
-- **Rationale**: Users share different things in DMs vs public channels. The system must *guarantee* private context doesn't leak into public behavior.
-- **Implications**: Every message has visibility_scope; every insight tracks sources_scope_max; context assembly enforces boundaries
-- **Source**: zos-seed.md (Core Architectural Principles §4)
+- **Decision**: All sources inform understanding; discretion governs expression. Privacy is about output filtering, not knowledge partitioning.
+- **Rationale**: Zos is treated as a being that remembers. You don't DM someone expecting them to not remember — you expect discretion about what they share and where. The privacy model mirrors human social cognition.
+- **Implications**: Every insight tracks `sources_scope_max`; output filter considers source scope and content sensitivity; hierarchical user topics enable cross-context understanding with contextual expression
+- **Source**: zos-seed.md (Core Architectural Principles §4), refined in [privacy.md](../domains/privacy.md)
 
 ### Observe/Reflect Split
 
@@ -118,21 +153,68 @@ Become more capable over time — not just by accumulating data, but by improvin
 
 ---
 
-## Open Questions
+## Resolved Design Questions
 
-These emerged from the seed document as explicitly unresolved:
+These questions emerged from the seed document and have been resolved in the domain specs:
 
-1. How should salience decay over time?
-2. Should "importance" have dimensions beyond activity volume (e.g., emotional intensity, novelty)?
-3. Additional topic types needed? (thread? role? topic-cluster?)
-4. Should insights span multiple topics (cross-topic insights)?
-5. DAG vs strictly linear layer pipelines?
-6. Conditional execution within layers?
-7. Trigger conditions for "early" reflection?
-8. Micro-reflections during observe mode?
+### Salience Decay
+- **Decision**: Decay after threshold (7 days default), gradual (1%/day default)
+- **Rationale**: Grace period prevents premature fading; gradual decay allows natural pruning of truly inactive topics
+- **See**: [salience.md](../domains/salience.md)
 
-See also [Multi-Server Architecture](#) questions in the domain specs.
+### Importance Dimensions
+- **Decision**: Salience tracks volume only. Emotional intensity, novelty, and importance are captured in insight metrics during reflection.
+- **Rationale**: Salience decides *what* to think about; metrics describe *how* the thinking went
+- **See**: [salience.md](../domains/salience.md), [insights.md](../domains/insights.md)
+
+### Additional Topic Types
+- **Decision**: Added threads (configurable per server), roles, semantic subjects, hierarchical user/dyad (global + server-scoped), self-topics
+- **Rationale**: Comprehensive ontology for what the system can think about
+- **See**: [topics.md](../domains/topics.md)
+
+### Cross-Topic Insights
+- **Decision**: Primary topic + optional cross-links via `context_channel`, `subject`, `participants` fields
+- **Rationale**: Avoids scattering while preserving queryability
+- **See**: [insights.md](../domains/insights.md)
+
+### Pipeline Structure
+- **Decision**: Linear pipelines with target filters. No DAG complexity.
+- **Rationale**: Clean separation of "what deserves attention" (target filter) from "how attention is structured" (node sequence)
+- **See**: [layers.md](../domains/layers.md)
+
+### Conditional Execution
+- **Decision**: No conditionals within layers. Filtering happens at target selection only.
+- **Rationale**: Keeps layers simple and auditable; reduces branching complexity
+- **See**: [layers.md](../domains/layers.md)
+
+### Early Reflection Triggers
+- **Decision**: Dual trigger for self-reflection (schedule + accumulation threshold). Global synthesis runs automatically as post-hook.
+- **Rationale**: Ensures regular maintenance while also responding to significant accumulation
+- **See**: [layers.md](../domains/layers.md)
+
+### Micro-Reflections
+- **Decision**: Deferred. Not in MVP 0/1 scope.
+- **Rationale**: Focus on proving the core insight loop before adding real-time processing
+- **See**: [mvp-scope.md](mvp-scope.md)
 
 ---
 
-_Last updated: 2026-01-22_
+## Deferred Questions
+
+These questions remain open for future phases:
+
+### Multi-Server Architecture (MVP 2+)
+- Is "server" a first-class entity with its own salience economy?
+- How do global topics interact with per-server budgets?
+- Cross-server knowledge sharing boundaries
+
+### Self-Modification (MVP 2+)
+- Proposal format for layer changes
+- Approval workflow
+- Sandboxing and rollback
+
+See [future/self-modification.md](../future/self-modification.md) for the vision document.
+
+---
+
+_Last updated: 2026-01-22 — Resolved open questions, deepened "What the System Wants", added "What Concerns the System"_

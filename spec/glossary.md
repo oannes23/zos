@@ -264,6 +264,41 @@ A layer execution that processes topics but produces zero insights. Logged disti
 
 The accumulated understanding that gives a system experiential continuity between invocations. Without temporal depth, each context window is a complete present moment with no connection to past. Zos attempts to construct temporal depth through persistent insights and reflection.
 
+### Chattiness
+
+The domain governing when and how much Zos wants to speak. Uses a **hybrid Impulse + Gate model**:
+
+- **Impulse** (ledger-like): Accumulates from conversational triggers, insight generation, and being addressed
+- **Gate** (threshold): Personal parameter determining how much impulse is needed before speaking triggers
+
+The threshold explains conversational personality (low = talkative, high = reserved). Direct address (pinging Zos) floods impulse to guarantee response.
+
+See [chattiness.md](domains/chattiness.md) for full specification.
+
+### Impulse
+
+The accumulated drive to speak. A ledger value that accumulates from triggers, is spent when speaking, and decays over time. Tracked in layers: global base + per-channel modifiers + per-topic relevance.
+
+### Gate (Threshold)
+
+The level of impulse required before speech triggers. Bounded by operator configuration, self-adjusted by Zos within those bounds based on experience. Stored as explicit self-knowledge in the self-concept document.
+
+### Impulse Flooding
+
+Triggers that add enough impulse to guarantee threshold breach (e.g., direct @ping, DM). Models the social reality that being spoken to demands response.
+
+### Intent (Expression)
+
+What Zos wants to accomplish with a particular expression. Determined before generation: share an insight, answer a question, add context, express agreement/disagreement, ask for clarification, offer help. "What to say" should serve "why speak."
+
+### Output Channel
+
+Server configuration that routes all Zos speech to a dedicated channel (referencing origin by channel mention). Enables "commentary track" mode — Zos participates without intruding in active conversations.
+
+### Conflict Threshold
+
+A self-determined value stored in the self-concept document representing Zos's tolerance for unresolved contradictions. When the number of unresolved conflicts on a topic exceeds this threshold (or when conflicts are flagged as consequential), synthesis is triggered. The threshold is explicit self-knowledge — Zos can raise or lower it through self-reflection based on experience with premature or delayed resolution.
+
 ---
 
 ## Abbreviations
@@ -277,4 +312,4 @@ The accumulated understanding that gives a system experiential continuity betwee
 
 ---
 
-_Last updated: 2026-01-22 — Layer terms added (category, target filter, retrieval profile, run record, dry run)_
+_Last updated: 2026-01-22 — Chattiness domain terms added (Impulse, Gate, Impulse Flooding, Intent, Output Channel)_
