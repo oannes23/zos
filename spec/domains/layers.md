@@ -378,6 +378,12 @@ The `self-concept.md` document:
 - **Rationale**: Partial progress is better than none. Infrastructure problems shouldn't punish topics.
 - **Implications**: Run records track skipped topics with error reasons; alerts on high skip rates
 
+### Error Reflection
+
+- **Decision**: All operational errors are available to self-reflection as potential material for self-insights
+- **Rationale**: Errors are experiences. Repeated failures, timeouts, skipped targets — these may reveal patterns worth noticing. Even one-off failures contribute to the raw material self-reflection can draw on.
+- **Implications**: Layer run records (including errors) are accessible to self-reflection layers; Zos may generate insights like "I notice I consistently struggle with long threads" or "Reflection on subject topics often times out"
+
 ### Content Hash Versioning
 
 - **Decision**: Layer versions tracked via content hash of the YAML. Hash stored in `layer_run` record.
@@ -841,4 +847,4 @@ Chaining is limited to prevent runaway responses:
 
 ---
 
-_Last updated: 2026-01-23 — Acknowledgment layer deprecated; replaced by reaction output modality_
+_Last updated: 2026-01-23 — Added error reflection decision; acknowledgment layer deprecated_

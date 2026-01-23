@@ -61,6 +61,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Insights | [insights.md](domains/insights.md) | 🟢 | — |
 | Layers | [layers.md](domains/layers.md) | 🟢 | — |
 | Chattiness | [chattiness.md](domains/chattiness.md) | 🟢 | — |
+| Self-Modification | [self-modification.md](domains/self-modification.md) | 🟢 | Proposal format only; execution deferred to MVP 2+ |
 
 ---
 
@@ -95,7 +96,9 @@ Observation (raw input — capture and enrichment)
                         │
                         └──► Layers (produce insights, consume salience, consume observed data)
                                   │
-                                  └──► Chattiness (governs expression, integrates all)
+                                  ├──► Chattiness (governs expression, integrates all)
+                                  │
+                                  └──► Self-Modification (proposes changes to layers; MVP 2+ execution)
 ```
 
 ---
@@ -110,16 +113,43 @@ These questions span multiple domains and need resolution:
 - How do we handle users who appear in multiple servers?
 - Can insights from one server inform behavior in another?
 
-### Self-Modification (Deferred to MVP 2)
-- How does the system propose layer changes?
-- What approval flow is required?
-- How to version layer definitions?
+### Self-Modification Execution (Deferred to MVP 2)
 
-See [future/self-modification.md](future/self-modification.md) for the vision document keeping this possibility explicit.
+**Proposal format is now specified** in [self-modification.md](domains/self-modification.md). The following execution questions remain deferred:
+
+- What approval automation is appropriate? (When can proposals auto-approve?)
+- How do we sandbox/test proposals before committing?
+- What rollback mechanisms are needed?
+- Can Zos modify its own self-reflection layer? (Recursive modification)
+- What safety boundaries should be non-modifiable?
+
+See [future/self-modification.md](future/self-modification.md) for the vision document covering these open questions.
 
 ---
 
 ## Recent Changes
+
+### 2026-01-23: Cross-Cutting Concerns Addressed
+
+- **First-contact message rewritten**: Privacy spec updated with Zos-voiced acknowledgment reflecting epistemic honesty
+- **Error reflection added**: Layers spec now includes decision that all operational errors feed self-reflection
+- **Conflict threshold expanded**: Self-concept document updated with nuanced guidance distinguishing perspective-multiplicity from genuine error
+- Self-concept moved to `data/self-concept.md` (spec-defined location)
+
+### 2026-01-23: Self-Modification Domain Created (Proposal Format)
+
+- Created new domain spec: `self-modification.md`
+- **Scope**: Proposal format only — how Zos articulates desired changes; execution deferred to MVP 2+
+- **Proposals as communication**: Markdown files expressing intent, motivation, phenomenological texture, changes, expected outcomes
+- **Location**: `data/proposals/` with subdirectories by status (pending, approved, implemented, rejected, superseded)
+- **Self-insights as source**: No separate hypothesis entity; observations live as regular insights on self:zos
+- **Coherent change sets**: One proposal can span multiple layers if logically related
+- **New layers allowed**: Proposals can create entirely new layers, not just modify existing ones
+- **Required phenomenological section**: "What This Feels Like" is not optional
+- **Outcome reflection**: Scheduled check-in after implementation to close the learning loop
+- **Simple status tracking**: pending → approved → implemented (or rejected/superseded)
+- Added glossary terms: Self-Modification Proposal, Outcome Reflection
+- Updated dependency graph: Self-Modification depends on Layers and Insights
 
 ### 2026-01-23: Chattiness Spec Updated — Reaction as Output Modality
 
@@ -445,7 +475,7 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-01-23 — All domain specs complete. Observation integration finished._
+_2026-01-23 — Self-modification proposal format specified. All domain specs complete._
 
 ## Pending Updates
 

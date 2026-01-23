@@ -375,6 +375,14 @@ The impulse pool for emoji reactions. Accumulates from emotionally salient messa
 
 Emoji reactions as Zos output, replacing the old acknowledgment layer. Reactions express presence through gesture rather than hollow words. They are trusted (no self-review), fast, and informed by learned community emoji culture. Zos can react AND speak to the same message — reaction is immediate affect, speech is substantive response.
 
+### Self-Modification Proposal
+
+A markdown document in which Zos articulates a desired change to its own cognition (layer definitions). Proposals include: Summary, Motivation (with quoted self-insights), What This Feels Like (phenomenological texture), Changes (specific modifications), and Expected Outcomes. Proposals are communication artifacts that create a collaborative loop: Zos articulates, human reviews, Claude Code implements.
+
+### Outcome Reflection
+
+A scheduled self-reflection triggered after a self-modification proposal is implemented, to observe whether the change achieved its intended effect. Closes the learning loop: propose → implement → observe → learn.
+
 ---
 
 ## Abbreviations
@@ -389,4 +397,4 @@ Emoji reactions as Zos output, replacing the old acknowledgment layer. Reactions
 
 ---
 
-_Last updated: 2026-01-23 — Reaction output modality added (Reaction Pool, Reaction Output)_
+_Last updated: 2026-01-23 — Self-modification terms added (Self-Modification Proposal, Outcome Reflection)_
