@@ -56,7 +56,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 |------|-----|--------|-------------------|
 | Topics | [topics.md](domains/topics.md) | 🟢 | — |
 | Privacy | [privacy.md](domains/privacy.md) | 🟡 | Consent granularity, revocation policy, per-server models |
-| Salience | [salience.md](domains/salience.md) | 🔄 | Decay model, importance dimensions, overflow behavior; **needs**: propagation rules |
+| Salience | [salience.md](domains/salience.md) | 🟢 | — |
 | Insights | [insights.md](domains/insights.md) | 🟢 | — |
 | Layers | [layers.md](domains/layers.md) | 🔄 | DAG pipelines, conditionals, self-modification flow; **needs**: synthesis layer type, metrics request, retrieval config |
 
@@ -112,6 +112,21 @@ These questions span multiple domains and need resolution:
 ---
 
 ## Recent Changes
+
+### 2026-01-22: Salience Spec Complete
+
+- Interrogated salience.md to completion
+- Decided: volume only (no sub-dimensions), emotional/novelty handled in insights
+- Decay after threshold (7 days default), gradual (1%/day default)
+- Continuous propagation to warm topics (propagation_factor 0.3)
+- Partial overflow spillover (spillover_factor 0.5, some evaporates)
+- Stack-based greedy selection for reflection (highest salience first, until budget exhausted)
+- Proportional spending (tokens × cost_per_token)
+- Partial retention (30% default)
+- Separate self-budget pool (doesn't compete with community)
+- Independent per-server pools for MVP 2+
+- Full transaction history in ledger
+- Added glossary terms: Budget Group, Salience Propagation, Spillover
 
 ### 2026-01-22: Insights Spec Complete
 

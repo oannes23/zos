@@ -18,10 +18,31 @@ Canonical definitions for domain terms used in this project. When a term appears
 
 The attention-budget currency that governs what the system thinks about. Salience is a *ledger*, not a score:
 - **Earned** through activity: messages, reactions, mentions, interactions
-- **Spent** during reflection: thinking about a topic costs salience
-- **Retained** partially: configurable retention after reflection (0% = fresh each cycle, 30% = some persistence of priority)
+- **Spent** when insights are created: proportional to tokens/time spent
+- **Retained** partially: configurable retention after spending (default 30%)
+- **Propagated** to related topics: warm topics receive a fraction of activity
+- **Capped** per topic: prevents any single topic from consuming all attention
+- **Decayed** after inactivity: gradual decay after threshold days inactive
 
-Unbounded attention leads to either runaway compute or shallow analysis of everything. Salience budget forces prioritization — the system naturally thinks more about what matters more, as measured by actual community activity.
+Salience tracks *volume* only — how much attention a topic deserves, not what kind. Emotional intensity, novelty, etc. are captured in insight metrics during reflection.
+
+### Budget Group
+
+Topics are organized into groups for budget allocation:
+- **Social**: users, dyads, user_in_channel, dyad_in_channel
+- **Spaces**: channels, threads
+- **Semantic**: subjects, roles
+- **Self**: self:zos topics (separate pool, doesn't compete with community)
+
+Reflection budget is allocated by group to ensure balanced attention across topic types.
+
+### Salience Propagation
+
+When a topic earns salience, related "warm" topics (those with salience > 0) also earn a fraction. This models how attention naturally spreads — thinking about Alice-and-Bob involves thinking about Alice and Bob individually. Cold topics (salience = 0) don't receive propagation.
+
+### Spillover
+
+When a topic hits its salience cap, additional earned salience "spills over" to related warm topics at a configurable rate. Some evaporates (is lost) to dampen runaway effects.
 
 ### Topic
 
