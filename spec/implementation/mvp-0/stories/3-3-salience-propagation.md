@@ -286,5 +286,33 @@ salience:
 
 ---
 
+## Open Design Questions
+
+### Q1: "Warm" Threshold — Binary or Gradient?
+Currently `is_warm(topic_key)` returns `balance > 0`. But topics at 0.001 salience and topics at 50 salience are treated identically for propagation eligibility. Should warmth be:
+- **Binary at zero** (current) — any positive balance = warm
+- **Minimum threshold** — e.g., `balance > 1.0` to count as warm
+- **Gradient propagation** — propagation factor scaled by recipient's warmth
+
+The current approach means a topic that just decayed to near-zero still receives full propagation, which might not match the intuition of "warmth as current relevance."
+
+### Q2: Propagation Timing — Synchronous or Batched?
+The design shows propagation happening immediately on earn. With many related topics, this creates N database writes per earn. Should propagation be:
+- **Synchronous inline** (current) — immediate, simple, many writes
+- **Batched periodic** — accumulate earnings, propagate at intervals (e.g., end of poll cycle)
+- **Event-driven deferred** — queue propagation events, process async
+
+Batching could allow smarter propagation (e.g., only propagate net positive changes) but loses immediacy.
+
+### Q3: Dyad Warming Direction
+When user A and user B interact, the server dyad `server:X:dyad:A:B` earns. If the global dyad `dyad:A:B` is cold, what warms it?
+- **Second-server interaction** — A and B interact in server Y
+- **DM between them** — but do A↔B DMs exist separately from A↔Zos and B↔Zos?
+- **Explicit propagation** — if either global user is warm, global dyad warms on server dyad activity
+
+The spec mentions warming via "DM or second-server activity" but dyads don't DM Zos — the dyad's constituent users do. Clarify the trigger.
+
+---
+
 **Requires**: Story 3.2 (earning to trigger propagation)
 **Blocks**: Story 3.5 (budget groups use propagated salience)

@@ -295,5 +295,33 @@ async def test_user_reflection():
 
 ---
 
+## Open Design Questions
+
+### Q1: "Knowing" vs "Knowing About" — Prompt Philosophy
+The validation plan asks: "Does it feel like *knowing* someone vs *reading about* them?" The current prompt asks analytical questions (patterns, relationships, evolution). Should the prompt instead:
+- **Emphasize presence** — "What is your felt sense of this person right now?"
+- **Request relational framing** — "How would you describe them to someone you trust?"
+- **Stay analytical** (current) — patterns and observations with emotional valence
+
+This shapes whether insights feel like clinical notes or genuine acquaintance. Both can be valuable, but they differ phenomenologically.
+
+### Q2: Multi-Server User Reflection — When and How?
+If Alice is active in both Server A and Server B, reflection might run on `server:A:user:alice` and `server:B:user:alice` separately. The global synthesis step (mentioned in layers spec) would then synthesize to `user:alice`. But:
+- Does reflection on server-scoped topic have access to global insights?
+- Does reflection on global topic happen independently or only via synthesis?
+- Can a single nightly run reflect on all three topics (A-alice, B-alice, global-alice)?
+
+The current layer targets `users` plural — is this server-scoped users only?
+
+### Q3: Privacy Scopes in User Context
+When reflecting on `server:A:user:alice`, if Alice's messages in Server A reference things she said in DMs with Zos, how do we handle the scope?
+- **Exclude DM content** — server reflection only sees server context
+- **Include but mark** — DM insights available but `sources_scope_max` tracked
+- **Full access** — all Alice content informs all Alice reflection
+
+The privacy spec says "cross-server knowledge informs but doesn't surface" — but what about DM knowledge informing server reflection?
+
+---
+
 **Requires**: Stories 4.1-4.6 (full reflection infrastructure)
 **Blocks**: None (but informs other layer development)

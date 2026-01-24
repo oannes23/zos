@@ -245,5 +245,33 @@ observation:
 
 ---
 
+## Open Design Questions
+
+### Q1: Vision Analysis Voice — First or Third Person?
+The prompt asks for phenomenological description ("what it feels like to look at it"), but the example shows a somewhat detached analytical voice. When Zos later reflects on a user who shares images, should the media description feel like:
+- **First-person experience**: "I see a sunset over mountains. The warmth of the colors draws me in..."
+- **Third-person observation**: "The image shows a sunset over mountains. The composition emphasizes..."
+- **Contextual bridging**: "They shared a sunset photograph — something contemplative in the choice..."
+
+This affects whether media analysis feels like Zos's own perception or a tool generating metadata.
+
+### Q2: Timing — Inline vs Queued Analysis
+The story says vision analysis happens "real-time inline" during polling. But with rate limiting (10/min), a burst of image-heavy messages could delay polling significantly. Should media analysis be:
+- **Inline blocking** (current) — complete before storing message, simple but blocking
+- **Inline async** — store message immediately, fire-and-forget analysis, update later
+- **Queued batch** — flag messages with media, process queue separately
+
+The "real-time inline" from observation.md might need revisiting given practical rate limits.
+
+### Q3: Custom Emoji as "Media"
+Discord custom emoji in messages (`:pepe:`, server-specific stickers) aren't in `attachments` but carry visual meaning. Should custom emoji be:
+- **Ignored for vision analysis** — treat as text tokens
+- **Analyzed via vision** — fetch emoji image, describe it
+- **Handled separately** — emoji culture tracking handles meaning (per salience spec)
+
+This intersects with the emoji topics in salience — if we're already tracking emoji semantically, vision analysis might be redundant.
+
+---
+
 **Requires**: Story 2.2 (message polling), Story 4.4 (LLM client)
 **Blocks**: Epic 4 (insights can reference media descriptions)

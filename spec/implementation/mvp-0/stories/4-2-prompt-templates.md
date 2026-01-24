@@ -307,5 +307,37 @@ def format_insights_for_prompt(insights: list[Insight]) -> list[dict]:
 
 ---
 
+## Open Design Questions
+
+### Q1: Self-Concept Freshness — Per-Render or Cached?
+The `get_self_concept()` method reads from disk each time. This ensures fresh reads, but:
+- Multiple renders in one layer run will re-read the file
+- If self-concept updates mid-layer-run, different templates see different versions
+
+Should self-concept be:
+- **Fresh each render** (current) — always latest, potential inconsistency
+- **Cached per layer run** — read once at start, consistent within run
+- **Cached per process** — reload on explicit signal only
+
+For MVP this probably doesn't matter, but the semantics affect future scenarios like concurrent reflection.
+
+### Q2: Template Error Handling — Fail Layer or Render Empty?
+If a template has a Jinja2 syntax error, or references an undefined variable, the current code would raise an exception. Should template errors:
+- **Fail the layer** — template error = layer cannot run
+- **Fail the topic** — per-topic template render failure skips that topic
+- **Render with placeholder** — missing variable becomes empty string, log warning
+
+This matters for layer authoring — strict failure catches errors quickly, graceful handling enables partial success.
+
+### Q3: `<chat>` Guidance — System vs User Prompt?
+The `<chat>` guidance is currently injected as content in the template. But with chat APIs, there's a distinction between system prompts and user messages. Should `<chat>` guidance be:
+- **Part of template body** (current) — mixed with other instructions
+- **Always system prompt** — guidance in system, context in user message
+- **Configurable per layer** — layer specifies where guidance goes
+
+This affects how models interpret the guidance and whether it can be "overridden" by user-message content.
+
+---
+
 **Requires**: Story 4.1 (layers reference templates)
 **Blocks**: Story 4.3 (executor uses templates)

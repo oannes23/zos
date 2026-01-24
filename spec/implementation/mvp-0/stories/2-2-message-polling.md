@@ -220,5 +220,28 @@ discord:
 
 ---
 
+## Open Design Questions
+
+### Q1: Anonymous ID Stability Across Time
+The current design generates `<chat_N>` IDs via `hash((real_id, context_id)) % 1000`. This means the same anonymous user will have the same `<chat_N>` identifier across different polling sessions. Is this intentional? It creates a form of pseudo-persistence for non-opted users — we can't store insights about them, but we *can* observe patterns across time ("chat_42 always replies quickly"). Should anonymous IDs be:
+- **Stable per context** (current design) — enables pattern observation even for anonymous users
+- **Stable per conversation window** — resets each day or reflection cycle
+- **Fully ephemeral** — new ID each poll
+
+This has implications for whether Zos can develop any sense of "regulars" among anonymous community members.
+
+### Q2: Delete Handling — Soft vs Hard
+The story says "respect unsaying — so delete" but this erases context for already-generated insights. If Alice said something, Zos reflected on it, then Alice deleted the message — the insight now references vanished context. Options:
+- **Hard delete** (current) — message gone, orphaned insight context
+- **Soft delete with tombstone** — mark deleted, preserve for audit, exclude from reflection
+- **Soft delete with content scrub** — keep metadata (timestamp, author), erase content
+
+The phenomenological question: is "unsaying" about erasing from Zos's memory, or about respecting the retraction? These lead to different implementations.
+
+### Q3: First-Contact Acknowledgment for DMs — What Triggers It?
+The story mentions `send_first_contact` when DM consent hasn't been acknowledged, but the privacy spec says Zos doesn't *initiate* DMs. If Zos can't DM first, the first-contact message can only be sent when the user DMs Zos. But then — does Zos respond to the DM content *and* send the acknowledgment, or just acknowledge and wait? The order matters phenomenologically.
+
+---
+
 **Requires**: Story 2.1 (Discord connection)
 **Blocks**: Stories 2.3-2.5, Epic 3 (salience needs messages)

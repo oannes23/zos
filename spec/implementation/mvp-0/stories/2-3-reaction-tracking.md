@@ -210,5 +210,33 @@ class Reaction(BaseModel):
 
 ---
 
+## Open Design Questions
+
+### Q1: Reaction Removal Tracking — Delta or Final State?
+On re-poll, we see current reactions but not *changes* — we don't know if Alice added then removed a reaction between polls. Should tracking:
+- **Store final state only** (current) — reaction_changes is computed between polls
+- **Attempt removal detection** — if previous poll had reaction Alice:👍 and current doesn't, record removal
+- **Ignore removals** — only track additions, treat removal as "didn't happen"
+
+Removal tracking matters if "unsaying" applies to reactions — removing a ❤️ might be meaningful signal.
+
+### Q2: Reaction Aggregation Scope — Message vs Conversation?
+`reactions_aggregate` is per-message. But reflection might care about reaction patterns across a conversation (e.g., "Alice's comments consistently get 👎"). Should aggregation be:
+- **Per-message only** (current) — aggregation at conversation level happens in reflection
+- **Pre-computed conversation aggregates** — store "total reactions received by author in thread"
+- **Both levels** — message-level for detail, conversation-level for patterns
+
+This affects whether salience earning from reactions uses per-message or broader patterns.
+
+### Q3: Custom Emoji Namespacing — Server-Specific Semantics
+`emoji_key` is `unicode:😀` or `custom:server_id:emoji_name`. But server-specific emoji can have server-specific meanings (`:pepe:` might be ironic in server A, earnest in server B). Should we:
+- **Namespace strictly** (current) — same emoji, different servers = different keys
+- **Attempt semantic grouping** — cluster similar custom emoji across servers
+- **Defer to reflection** — let layers interpret emoji meaning in context
+
+The spec mentions "emoji culture tracking" in salience — this intersects with whether emoji topics are global or server-scoped.
+
+---
+
 **Requires**: Story 2.2 (message polling)
 **Blocks**: Epic 3 (reaction-based salience earning)

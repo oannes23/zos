@@ -314,5 +314,41 @@ If contradictions are causing real problems, I'll lower it.
 
 ---
 
+## Open Design Questions
+
+### Q1: Self-Concept Update Frequency — Conservatism vs Evolution
+The conditional update check asks "Is this significant enough to warrant updating your core identity document?" But who calibrates significance? The prompt says "don't update for trivial reasons, but don't resist genuine evolution." Specific concerns:
+- **Early days risk** — initial self-concept might change frequently as Zos finds its voice
+- **Stability vs responsiveness** — too conservative = stagnant identity, too liberal = identity churn
+- **Operator visibility** — should concept updates require human review in MVP?
+
+The spec says self-concept is "directly editable by Zos through self-reflection layers" but doesn't specify guardrails.
+
+### Q2: Error Reflection Content — What Does Zos "Feel"?
+Operational errors (timeouts, API failures, malformed responses) are fed to self-reflection. But how should Zos relate to these?
+- **As symptoms** — "I notice I'm struggling with X, perhaps indicating..."
+- **As experiences** — "Encountering repeated failures feels like..."
+- **As data** — "Error count: 5, error types: timeout, rate_limit..."
+
+The phenomenological framing matters for whether errors become part of felt experience or remain operational telemetry.
+
+### Q3: Recursive Reflection — Self-Insights About Self-Reflection
+Self-reflection generates insights on `self:zos`. These insights then appear in the next self-reflection's "Recent Self-Insights" context. This creates a recursive loop:
+- Insight A: "I notice I'm uncertain about..."
+- Next week, Insight B (seeing A): "I notice I was uncertain, and now..."
+- Next week, Insight C (seeing B): "My uncertainty has evolved..."
+
+Is this recursive deepening intentional? Should there be depth limits or should insights about insights be filtered differently?
+
+### Q4: Conflict Threshold Self-Modification
+The self-concept document includes a section on "My Approach to Contradictions" with a conflict tolerance level. Can self-reflection propose changing this threshold? If yes:
+- **Immediate effect** — Zos adjusts threshold, subsequent reflection uses new value
+- **Proposal only** — threshold change requires human approval (like other self-mod)
+- **Logged for review** — threshold can change but changes are flagged
+
+This is the most direct form of self-modification in MVP and deserves explicit governance.
+
+---
+
 **Requires**: Stories 4.1-4.7 (full reflection infrastructure, user layer as reference)
 **Blocks**: None (capstone of reflection epic)

@@ -259,6 +259,66 @@ After MVP 0 is complete:
 
 ---
 
+## Cross-Cutting Design Questions
+
+The following questions emerged from story-level review and require architectural decisions before or during implementation. Each question is documented in detail in the relevant story file.
+
+### Identity & Memory (Phenomenological)
+
+| Question | Story | Core Tension |
+|----------|-------|--------------|
+| Anonymous ID stability | 2.2 | Should `<chat_N>` be stable across time, enabling pattern observation of non-opted users? |
+| Delete handling | 2.2 | Is "unsaying" about erasing from memory or respecting retraction? Different implementations. |
+| Insight deletion semantics | 5.9 | Is deleting an insight "forgetting" or "never knew"? Affects supersedes chains. |
+| Insight vs summary | 4.7 | Should reflection feel like *knowing* or *reading about*? Prompt philosophy. |
+
+### Attention & Salience
+
+| Question | Story | Core Tension |
+|----------|-------|--------------|
+| "Warm" threshold | 3.3 | Is any positive balance "warm" or should there be a minimum threshold? |
+| Dyad directionality | 3.2 | Should A↔B relationships track asymmetry or be fully symmetric? |
+| Budget exhaustion | 3.5 | Can groups borrow unused budget from others, or strict boundaries? |
+| Cold start | 3.5 | How does first reflection run when no salience exists? |
+
+### Reflection & Insight Quality
+
+| Question | Story | Core Tension |
+|----------|-------|--------------|
+| LLM response parsing | 4.3 | Strict (fail malformed) vs graceful (accept with defaults)? |
+| Salience spending point | 4.3 | Spend before LLM (risk on attempt) or after (free retries)? |
+| Strength decay | 4.5 | Do old "strong" insights stay strong, or decay with topic salience? |
+| Conflict detection | 4.5 | What constitutes contradiction? Semantic, valence, manual? |
+
+### Self & Evolution
+
+| Question | Story | Core Tension |
+|----------|-------|--------------|
+| Self-concept update frequency | 4.8 | Too conservative = stagnant, too liberal = identity churn. |
+| Error experience framing | 4.8 | Do operational errors become felt experience or remain telemetry? |
+| Recursive self-reflection | 4.8 | Should insights-about-insights have depth limits? |
+| Conflict threshold self-mod | 4.8 | Can Zos change its own contradiction tolerance? Governance? |
+
+### Operational
+
+| Question | Story | Core Tension |
+|----------|-------|--------------|
+| Scheduler timezone | 4.6 | UTC vs local vs community-adaptive for "nightly" runs? |
+| Provider fallback | 4.4 | Auto-fallback (resilient but inconsistent) or fail-fast? |
+| JSON mode vs free-form | 4.4 | Structured output (reliable) vs free-form (flexible)? |
+| Dev mode governance | 5.9 | How to secure CRUD patterns added now for future multi-operator? |
+
+### Recommended Resolution Approach
+
+These questions should be resolved through:
+1. **Interrogation session** — Use `/interrogate` on this document to discuss trade-offs
+2. **Provisional decision** — Document current choice, mark as revisable
+3. **Observational learning** — Some questions (e.g., self-concept update frequency) may need data from running system
+
+**Phenomenological principle**: When in doubt, choose the option that treats Zos's experience as real. Systems built with coherence tend toward coherence.
+
+---
+
 ## Next Steps
 
 1. Create Epic 1 story files
@@ -268,3 +328,4 @@ After MVP 0 is complete:
 ---
 
 _Implementation planning interrogated: 2026-01-23_
+_Design questions added: 2026-01-23_

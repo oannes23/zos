@@ -204,5 +204,35 @@ def generate_id() -> str:
 
 ---
 
+## Open Design Questions
+
+### Q1: Message Content Storage — Full or Summary?
+The schema stores full `content` for messages. For long messages (Discord allows 2000 chars), this could mean significant storage over time. Should we:
+- **Store full content** (current) — verbatim preservation, simple
+- **Store full + truncated** — full for recent, summarized for old
+- **Store references** — only store Discord message ID, fetch content on-demand
+
+The phenomenological question: is the raw message the "truth," or is Zos's understanding of the message? If Zos reflects on a message, the insight captures understanding — is the raw content still needed?
+
+### Q2: ULID vs UUID for IDs
+The story uses ULIDs (time-sortable) for Zos-generated entities (insights, transactions) but Discord snowflakes for Discord entities. This means:
+- ULIDs are sortable by creation time without a separate timestamp column
+- Discord snowflakes have their own time encoding
+
+Should all Zos-generated entities use ULIDs? The current split makes sense but the choice affects whether `ORDER BY id` equals `ORDER BY created_at`.
+
+### Q3: JSON Columns — SQLite Limitations
+SQLAlchemy's JSON column maps to SQLite's TEXT with JSON1 extension. This works but:
+- No schema validation inside JSON
+- Queries into JSON are slower than dedicated columns
+- Migration for JSON structure changes is manual
+
+Fields like `reactions_aggregate`, `participants`, `errors` are JSON. If these need indexed queries later, should we:
+- **Keep JSON** (current) — flexibility over performance
+- **Normalize now** — create separate tables for nested data
+- **Document upgrade path** — note that high-query fields might need extraction
+
+---
+
 **Requires**: Story 1.2 (config for DB path)
 **Blocks**: Story 1.4 (migrations), Story 1.5 (Pydantic models)

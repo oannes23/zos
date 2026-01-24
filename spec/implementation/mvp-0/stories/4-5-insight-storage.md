@@ -319,5 +319,38 @@ async def get_insights_by_category(
 
 ---
 
+## Open Design Questions
+
+### Q1: Retrieval Profile Selection — Who Decides?
+Profiles are defined in code (recent, balanced, deep, comprehensive), but layers specify `retrieval_profile: recent` as a string. Who has authority over profile semantics?
+- **Code-defined only** (current) — profiles are implementation, layer authors pick by name
+- **Config-defined** — profiles in config.yaml, adjustable without code change
+- **Layer-local override** — layer YAML can specify custom weights inline
+
+If Zos later wants to propose changes to retrieval behavior (self-modification), it would need to modify code vs config vs layer YAML — different autonomy implications.
+
+### Q2: Strength Decay — Insight-Level or Via Salience?
+Insights have `strength` computed at creation (`salience_spent * strength_adjustment`). But insight strength doesn't decay, while topic salience does. Over time:
+- Old insights keep original strength even as topic salience decays
+- Retrieval by strength might surface very old "strong" insights over fresh "weaker" ones
+
+Should insight strength:
+- **Be static** (current) — strength captures importance *at time of creation*
+- **Track topic salience** — strength_effective = stored_strength * (current_salience / original_salience)
+- **Have independent decay** — insights decay separately from topics
+
+This affects whether "strong memory from 6 months ago" means "important when created" or "still important now."
+
+### Q3: Conflict Detection Heuristics — What Constitutes Conflict?
+The `_may_conflict` function returns `False` (placeholder). Real conflict detection needs definition:
+- **Semantic similarity** — embeddings, cosine similarity threshold
+- **Explicit markers** — LLM flags conflicts in insight generation
+- **Valence opposition** — high warmth vs high tension on same topic
+- **Manual tagging** — operator marks conflicts in dev mode
+
+This shapes whether contradiction synthesis happens automatically or requires human identification. The spec says "threshold self-determined by Zos" but MVP needs bootstrap logic.
+
+---
+
 **Requires**: Stories 1.3 (schema), 1.5 (models)
 **Blocks**: Story 4.3 (executor stores insights)

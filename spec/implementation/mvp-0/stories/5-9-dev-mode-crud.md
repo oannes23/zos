@@ -353,5 +353,39 @@ Add dev link when dev mode is enabled:
 
 ---
 
+## Open Design Questions
+
+### Q1: Insight Deletion Semantics — What Happens to References?
+If an insight is deleted:
+- Insights that `supersedes` the deleted one now point to nothing
+- Layer runs that created the insight have orphaned `insight_id` references
+- Salience that was "spent" on the insight is gone but the insight isn't
+
+Should deletion:
+- **Hard delete** (current) — row gone, dangling references allowed
+- **Cascade delete** — remove dependent references (but what does that mean for supersedes chain?)
+- **Soft delete** — mark deleted, exclude from queries, preserve for audit
+- **Block if referenced** — can't delete insights with dependents
+
+The phenomenological question: is deleting an insight like "forgetting" or like "retroactively never knowing"?
+
+### Q2: Dev Mode Scope — Single Instance or Multi-Operator?
+`dev_mode: true` is a global flag. In a multi-operator future (or even with Zos running with oversight), who can use dev features?
+- **All or nothing** (current) — dev mode is process-wide
+- **Operator-scoped** — specific operator accounts can use dev features
+- **Action-scoped** — some dev actions need elevated permission even with dev mode
+
+For MVP this doesn't matter, but adding CRUD now without access control might create patterns that are hard to secure later.
+
+### Q3: Audit Trail Durability — Logs vs Database?
+Current design logs mutations via structlog. But logs rotate and might not persist. For audit purposes, should mutation history be:
+- **Logs only** (current) — simple, ephemeral
+- **Dedicated audit table** — permanent record of all CRUD operations
+- **Append to insight** — insights track their mutation history in a JSON field
+
+If Zos later reflects on its own mutations ("I notice I deleted three insights about Alice..."), it needs durable audit data.
+
+---
+
 **Requires**: Stories 5.1, 5.2 (API, insights)
 **Blocks**: None (optional development convenience)

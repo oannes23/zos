@@ -376,5 +376,45 @@ class LayerExecutor:
 
 ---
 
+## Open Design Questions
+
+### Q1: LLM Response Parsing — Strict or Graceful?
+The `_parse_insight_response` function has a fallback that wraps unparseable responses as plain text with default metrics. But this produces insights with `confidence: 0.5`, `novelty: 0.5` — generic values that don't reflect the LLM's actual judgment. Should we:
+- **Accept graceful fallback** (current) — always produce *something*, audit quality later
+- **Fail the topic** — malformed response = skip this topic, log error
+- **Retry with guidance** — send the response back to LLM with "parse this into JSON"
+
+The graceful approach could fill the database with low-quality insights during prompt development. The strict approach loses content but maintains metric integrity.
+
+### Q2: Salience Spending Point — Before or After LLM Call?
+Currently, salience is spent in `_handle_store_insight` *after* the LLM call succeeds. If the LLM call fails, no salience is spent. This means:
+- Topics can fail repeatedly without spending salience
+- A buggy prompt could cause infinite reflection attempts
+
+Should spending be:
+- **On success only** (current) — failed attempts are "free"
+- **On attempt** — spend before LLM call, partial refund on failure
+- **On selection** — spend when topic is selected for reflection, regardless of outcome
+
+This affects how failures impact attention allocation and whether "difficult" topics drain budget attempting to reflect.
+
+### Q3: Context Window Limits — Topic Isolation or Layer Budget?
+If a topic has 100 messages and 20 prior insights, the rendered prompt might exceed model context. Currently unhandled. Should limits be:
+- **Per-topic truncation** — limit messages/insights per topic in node params
+- **Layer-wide budget** — layer specifies total context budget, executor allocates
+- **Dynamic estimation** — count tokens, truncate to fit
+
+This matters for self-reflection (potentially huge context) and busy channels. The story's examples show `limit_per_channel: 50` but that's messages, not tokens.
+
+### Q4: Node Failure Granularity — Skip Topic or Skip Node?
+Current fail-forward skips the entire topic on error. But what if `fetch_messages` succeeds, `fetch_insights` succeeds, and `llm_call` fails? The fetched data is discarded. Should we:
+- **Skip topic** (current) — any node failure = abandon topic
+- **Skip node, continue** — failed node produces empty output, subsequent nodes try with partial context
+- **Checkpoint and resume** — save successful node outputs, retry from failure point
+
+This affects how partial failures in complex layers behave.
+
+---
+
 **Requires**: Stories 4.1, 4.2, 4.4 (layers, templates, LLM)
 **Blocks**: Stories 4.6-4.8 (layers need executor)

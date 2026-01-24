@@ -330,5 +330,37 @@ scheduler:
 
 ---
 
+## Open Design Questions
+
+### Q1: Time Zone for Scheduled Reflection
+Cron schedules like `0 3 * * *` (3 AM daily) need a time zone. Options:
+- **UTC** — consistent, timezone-agnostic, but "3 AM" might be afternoon locally
+- **Operator local time** — configured timezone, matches human expectations
+- **Community-adaptive** — infer primary timezone from activity patterns
+
+The 3 AM timing assumes overnight processing — but whose overnight? For a global Discord server, there's no universal "quiet time."
+
+### Q2: Concurrent Layer Execution — Allowed or Serialized?
+If multiple layers' schedules align (both at 3 AM), should they:
+- **Run concurrently** — faster throughput, potential resource contention
+- **Run serially** — predictable, no contention, slower
+- **Priority-ordered** — higher-priority layers first, lower-priority can be dropped if late
+
+`max_instances: 1` prevents concurrent runs of the *same* layer, but doesn't address different layers running simultaneously.
+
+### Q3: Scheduler Persistence — Across Restarts vs Fresh
+APScheduler with SQLAlchemy jobstore persists jobs. If Zos restarts after missing a scheduled run:
+- `misfire_grace_time: 3600` means runs missed by <1 hour still execute
+- `coalesce: true` means multiple missed runs become one
+
+But what if layers are added/removed/modified while Zos is down?
+- **Persist and reconcile** — compare persisted jobs to current layer definitions, add/remove
+- **Fresh on restart** — always rebuild schedule from layer files
+- **Persist metadata only** — track last-run times but regenerate jobs
+
+This affects whether schedule changes take effect on restart or require explicit migration.
+
+---
+
 **Requires**: Stories 4.1-4.5 (layers, executor)
 **Blocks**: Stories 4.7, 4.8 (need scheduler for real layers)

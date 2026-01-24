@@ -283,5 +283,33 @@ salience:
 
 ---
 
+## Open Design Questions
+
+### Q1: Budget Exhaustion — Skip or Borrow?
+If the Social group (30%) has high-salience topics but exhausts its budget, while Semantic (20%) has spare capacity, should the system:
+- **Strict boundaries** (current) — each group spends only its allocation
+- **Overflow borrowing** — excess demand in one group can borrow from underutilized groups
+- **Proportional reallocation** — at selection time, redistribute unused budget
+
+Strict boundaries enforce diversity but might leave compute unused. Borrowing maximizes output but undermines group purpose.
+
+### Q2: Self Budget — Triggered or Scheduled?
+The self budget is described as "separate pool" with `daily_allocation: 50`. But self-reflection can also trigger via `trigger_threshold: 10` (10+ new self-insights). How do these interact?
+- **Budget limits both** — whether scheduled or triggered, spend from same pool
+- **Scheduled uses budget, triggered is free** — threshold triggers don't consume budget
+- **Separate budgets** — weekly scheduled has one budget, threshold triggers have another
+
+This affects whether self-reflection can "interrupt" if something significant happens.
+
+### Q3: Cold Start — No Salience, No Reflection?
+Selection requires salience. On day one, no topics have salience (no activity processed yet). How does reflection bootstrap?
+- **Wait for salience** — first reflection runs after enough activity accumulates
+- **Minimum seed** — config specifies initial topics to reflect on
+- **Zero-salience reflection** — if no salience, reflect on random/all topics
+
+The first reflection cycle is special — there are no prior insights either. Should there be explicit bootstrap logic?
+
+---
+
 **Requires**: Stories 3.1-3.3 (salience data to select from)
 **Blocks**: Epic 4 (reflection uses selection)
