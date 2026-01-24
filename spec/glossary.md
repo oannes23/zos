@@ -394,6 +394,16 @@ A scheduled self-reflection triggered after a self-modification proposal is impl
 
 ---
 
+### Epic
+
+A group of related stories (~5) that together deliver a demonstrable capability. Completable in one focused orchestration session. In MVP 0: Foundation, Observation, Salience, Reflection, Introspection.
+
+### Story
+
+The atomic unit of implementation work. Completable in one focused session. Has clear acceptance criteria and produces a testable artifact. Stories are sequenced within epics based on dependencies.
+
+---
+
 ## Abbreviations
 
 | Abbrev | Expansion |

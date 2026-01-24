@@ -71,7 +71,12 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 
 | Epic | Doc | Status | Blocked By |
 |------|-----|--------|------------|
-| Overview | [overview.md](implementation/mvp-0/overview.md) | 🔴 | Domain specs need deepening |
+| Overview | [overview.md](implementation/mvp-0/overview.md) | 🟢 | — |
+| Epic 1: Foundation | stories/1-*.md | 🟡 | — (5 stories ready) |
+| Epic 2: Observation | stories/2-*.md | 🟡 | Epic 1 (5 stories ready) |
+| Epic 3: Salience | stories/3-*.md | 🟡 | Epic 1 (5 stories ready) |
+| Epic 4: Reflection | stories/4-*.md | 🟡 | Epics 1-3 (8 stories ready) |
+| Epic 5: Introspection | stories/5-*.md | 🟡 | Epic 1 (9 stories ready) |
 
 ### MVP 1
 
@@ -128,6 +133,33 @@ See [future/self-modification.md](future/self-modification.md) for the vision do
 ---
 
 ## Recent Changes
+
+### 2026-01-23: All MVP 0 Stories Documented
+
+- Created all 32 story files across 5 epics
+- **Epic 1 (Foundation)**: 5 stories — project scaffold, config, DB schema, migrations, Pydantic models
+- **Epic 2 (Observation)**: 5 stories — Discord connection, message polling, reactions, media analysis, link analysis
+- **Epic 3 (Salience)**: 5 stories — ledger operations, topic earning, propagation, decay, budget groups
+- **Epic 4 (Reflection)**: 8 stories — layer YAML, prompt templates, executor, LLM client, insight storage, scheduler, user reflection, self-reflection
+- **Epic 5 (Introspection)**: 9 stories — FastAPI scaffold, insights API, salience API, layer runs API, UI base, insights browser, salience dashboard, layer run monitor, dev CRUD
+- All stories include acceptance criteria, technical notes, code examples, test cases
+- Ready to begin code implementation
+
+### 2026-01-23: MVP 0 Implementation Overview
+
+- Interrogated implementation planning for MVP 0: "The Watcher"
+- **Code layout**: Flat modules (`src/zos/{models,layers,observation,api,config}.py`)
+- **Epic decomposition**: Foundation → Observation → Salience → Reflection → Introspection
+- **Database**: SQLAlchemy Core + Pydantic (explicit SQL, no ORM magic)
+- **Discord**: discord.py with background polling task
+- **LLM**: Thin wrapper with provider adapters, model profiles (simple/moderate/complex)
+- **Web UI**: htmx + Jinja2 (insights browser, salience dashboard, layer run monitor)
+- **Scheduler**: APScheduler in-process
+- **Testing**: Integration-heavy with seed script fixtures
+- **Config**: YAML + env vars
+- **Workflow**: Trunk-based development with feature flags
+- 5 epics, 32 stories total
+- Story documentation phase complete
 
 ### 2026-01-23: Cross-Cutting Concerns Addressed
 
@@ -487,7 +519,7 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-01-23 — Self-modification proposal format specified. All domain specs complete._
+_2026-01-23 — All 32 MVP 0 stories documented. Ready to begin code implementation._
 
 ## Pending Updates
 
