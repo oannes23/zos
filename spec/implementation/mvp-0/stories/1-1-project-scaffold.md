@@ -1,7 +1,7 @@
 # Story 1.1: Project Scaffold
 
 **Epic**: Foundation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Small
 
 ## Goal
@@ -10,13 +10,13 @@ Establish the project structure, dependencies, and basic CLI entrypoint so all s
 
 ## Acceptance Criteria
 
-- [ ] `pyproject.toml` with all dependencies defined
-- [ ] Directory structure matches the flat module layout
-- [ ] `python -m zos --help` shows available commands
-- [ ] `python -m zos version` prints version
-- [ ] Basic logging configured (structured JSON)
-- [ ] `.gitignore` covers Python artifacts, .env, data/
-- [ ] Tests run with `pytest`
+- [x] `pyproject.toml` with all dependencies defined
+- [x] Directory structure matches the flat module layout
+- [x] `python -m zos --help` shows available commands
+- [x] `python -m zos version` prints version
+- [x] Basic logging configured (structured JSON)
+- [x] `.gitignore` covers Python artifacts, .env, data/
+- [x] Tests run with `pytest`
 
 ## Dependencies
 
@@ -148,10 +148,10 @@ if __name__ == "__main__":
 
 ## Definition of Done
 
-- [ ] Can run `pip install -e .` successfully
-- [ ] `python -m zos --help` works
-- [ ] `pytest` runs (even with no tests yet)
-- [ ] Logging outputs structured JSON
+- [x] Can run `pip install -e .` successfully (using uv sync)
+- [x] `python -m zos --help` works
+- [x] `pytest` runs (7 tests passing)
+- [x] Logging outputs structured JSON
 
 ---
 

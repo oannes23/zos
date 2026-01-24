@@ -72,7 +72,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Epic | Doc | Status | Blocked By |
 |------|-----|--------|------------|
 | Overview | [overview.md](implementation/mvp-0/overview.md) | 🟢 | All design questions resolved |
-| Epic 1: Foundation | stories/1-*.md | 🟡 | — (5 stories ready) |
+| Epic 1: Foundation | stories/1-*.md | 🟢 | Implemented 2026-01-24 |
 | Epic 2: Observation | stories/2-*.md | 🟡 | Epic 1 (6 stories ready) |
 | Epic 3: Salience | stories/3-*.md | 🟡 | Epic 1 (5 stories ready) |
 | Epic 4: Reflection | stories/4-*.md | 🟡 | Epics 1-3 (8 stories ready) |

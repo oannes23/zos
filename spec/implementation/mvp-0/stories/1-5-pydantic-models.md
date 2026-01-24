@@ -1,7 +1,7 @@
 # Story 1.5: Pydantic Models
 
 **Epic**: Foundation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,13 +10,13 @@ Define Pydantic models for all entities that bridge between the database (SQLAlc
 
 ## Acceptance Criteria
 
-- [ ] Pydantic model for each entity in data-model.md
-- [ ] Models validate data on construction
-- [ ] Models serialize to/from database rows
-- [ ] Models serialize to JSON (for API)
-- [ ] ULID fields validate format
-- [ ] Enum fields constrain to valid values
-- [ ] Valence constraint enforced at model level
+- [x] Pydantic model for each entity in data-model.md
+- [x] Models validate data on construction
+- [x] Models serialize to/from database rows
+- [x] Models serialize to JSON (for API)
+- [x] ULID fields validate format
+- [x] Enum fields constrain to valid values
+- [x] Valence constraint enforced at model level
 
 ## Models to Create
 

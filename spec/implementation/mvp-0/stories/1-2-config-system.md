@@ -1,7 +1,7 @@
 # Story 1.2: Config System
 
 **Epic**: Foundation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement configuration loading from YAML files with environment variable overla
 
 ## Acceptance Criteria
 
-- [ ] `config.yaml` loads with Pydantic validation
-- [ ] Environment variables override YAML values (for secrets)
-- [ ] Invalid config produces clear error messages
-- [ ] Model profiles are defined and accessible
-- [ ] Salience weights/caps are configurable
-- [ ] `zos config check` validates configuration
+- [x] `config.yaml` loads with Pydantic validation
+- [x] Environment variables override YAML values (for secrets)
+- [x] Invalid config produces clear error messages
+- [x] Model profiles are defined and accessible
+- [x] Salience weights/caps are configurable
+- [x] `zos config check` validates configuration
 
 ## Configuration Structure
 

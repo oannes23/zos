@@ -1,7 +1,7 @@
 # Story 1.4: Migration System
 
 **Epic**: Foundation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Small
 
 ## Goal
@@ -10,12 +10,12 @@ Implement a simple, forward-only migration system that tracks schema versions an
 
 ## Acceptance Criteria
 
-- [ ] `_schema_version` table tracks current version
-- [ ] Migration files are numbered Python scripts
-- [ ] `zos db migrate` applies pending migrations
-- [ ] `zos db status` shows current version and pending migrations
-- [ ] Migrations are idempotent (safe to run twice)
-- [ ] Initial migration creates all tables from Story 1.3
+- [x] `_schema_version` table tracks current version
+- [x] Migration files are numbered Python scripts
+- [x] `zos db migrate` applies pending migrations
+- [x] `zos db status` shows current version and pending migrations
+- [x] Migrations are idempotent (safe to run twice)
+- [x] Initial migration creates all tables from Story 1.3
 
 ## Design
 

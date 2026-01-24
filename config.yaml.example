@@ -1,0 +1,126 @@
+# Zos Configuration
+# Copy this file to config.yaml and adjust as needed
+
+# General settings
+data_dir: ./data
+log_level: INFO
+log_json: true
+
+# Discord settings
+discord:
+  polling_interval_seconds: 60
+
+# Database settings
+database:
+  # Path relative to data_dir
+  path: zos.db
+
+# LLM Model Profiles
+# Each profile defines a provider and model to use
+models:
+  profiles:
+    # Base profiles - actual models
+    simple:
+      provider: anthropic
+      model: claude-3-5-haiku-20241022
+    moderate:
+      provider: anthropic
+      model: claude-sonnet-4-20250514
+    complex:
+      provider: anthropic
+      model: claude-opus-4-20250514
+
+    # Semantic aliases - reference other profiles
+    default: moderate
+    reflection: moderate
+    conversation: moderate
+    synthesis: complex
+    self_reflection: complex
+    review: simple
+    vision: moderate
+
+  providers:
+    anthropic:
+      api_key_env: ANTHROPIC_API_KEY
+    openai:
+      api_key_env: OPENAI_API_KEY
+
+# Salience configuration
+salience:
+  # Topic caps - maximum salience per topic type
+  caps:
+    server_user: 100
+    global_user: 150
+    channel: 150
+    thread: 50
+    role: 80
+    dyad: 80
+    user_in_channel: 40
+    dyad_in_channel: 30
+    subject: 60
+    emoji: 60
+    self: 100
+
+  # Earning weights per activity type
+  weights:
+    message: 1.0
+    reaction: 0.5
+    mention: 2.0
+    reply: 1.5
+    media: 1.2  # Multiplier for messages with media
+    link: 1.2   # Multiplier for messages with links
+
+  # Propagation and decay
+  propagation_factor: 0.3
+  global_propagation_factor: 0.3
+  spillover_factor: 0.5
+  retention_rate: 0.3
+  decay_threshold_days: 7
+  decay_rate_per_day: 0.01
+  warm_threshold: 1.0
+
+  # Budget allocation per group (must sum to ~1.0)
+  budget:
+    social: 0.30    # server users + dyads
+    global: 0.15    # global users + global dyads
+    spaces: 0.30    # channels + threads
+    semantic: 0.15  # subjects
+    culture: 0.10   # emoji
+
+  # Self budget is separate
+  self_budget: 20
+
+# Chattiness configuration (MVP 1 prep)
+chattiness:
+  decay_threshold_hours: 1
+  decay_rate_per_hour: 0.05
+  base_spend: 10
+
+# Privacy settings
+privacy:
+  review_pass: private_context  # always | private_context | never
+  first_contact_message: |
+    I remember what people tell me. This shapes how I understand you over time.
+    I won't share what you say in DMs in other contexts without good reason.
+    If you'd prefer I not remember our conversations, let me know.
+
+# Observation settings
+observation:
+  vision_enabled: true
+  link_fetch_enabled: true
+  youtube_transcript_enabled: true
+  video_duration_threshold_minutes: 30
+
+# Scheduler settings
+scheduler:
+  timezone: UTC
+  reflection_cron: "0 13 * * *"  # 1 PM UTC daily (~5 AM Pacific)
+
+# Server-specific overrides (keyed by Discord server ID)
+# servers:
+#   "123456789012345678":
+#     privacy_gate_role: "987654321098765432"
+#     threads_as_topics: false
+#     chattiness:
+#       threshold_min: 30
+#       threshold_max: 80

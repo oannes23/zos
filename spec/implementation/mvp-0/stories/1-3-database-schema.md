@@ -1,7 +1,7 @@
 # Story 1.3: Database Schema
 
 **Epic**: Foundation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Large
 
 ## Goal
@@ -10,11 +10,11 @@ Define all SQLAlchemy Core tables matching the data model specification, with pr
 
 ## Acceptance Criteria
 
-- [ ] All entities from `data-model.md` have corresponding tables
-- [ ] Indexes defined for common query patterns
-- [ ] Constraints enforce data integrity (foreign keys, check constraints)
-- [ ] Tables can be created on fresh database
-- [ ] Schema matches spec exactly (field names, types)
+- [x] All entities from `data-model.md` have corresponding tables
+- [x] Indexes defined for common query patterns
+- [x] Constraints enforce data integrity (foreign keys, check constraints)
+- [x] Tables can be created on fresh database
+- [x] Schema matches spec exactly (field names, types)
 
 ## Tables to Create
 
