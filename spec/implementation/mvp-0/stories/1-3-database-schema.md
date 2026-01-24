@@ -28,8 +28,9 @@ From `spec/architecture/data-model.md`:
 | `users` | id, first_dm_acknowledged, first_dm_at | Discord users |
 | `user_server_tracking` | user_id, server_id, first_seen_at | Multi-server presence |
 | `channels` | id, server_id, name, type, parent_id | Discord channels |
-| `messages` | id, channel_id, author_id, content, has_media, has_links | Raw observations |
-| `reactions` | id, message_id, user_id, emoji, is_custom | Reaction tracking |
+| `messages` | id, channel_id, author_id, content, has_media, has_links, deleted_at | Raw observations |
+| `reactions` | id, message_id, user_id, emoji, is_custom, removed_at | Reaction tracking |
+| `poll_state` | channel_id (PK), last_message_at, last_polled_at | Polling state tracking |
 | `media_analysis` | id, message_id, media_type, description | Vision analysis |
 | `link_analysis` | id, message_id, url, domain, summary | Link fetching |
 
@@ -91,6 +92,7 @@ messages = Table(
     Column("has_media", Boolean, nullable=False, default=False),
     Column("has_links", Boolean, nullable=False, default=False),
     Column("ingested_at", DateTime, nullable=False, default=datetime.utcnow),
+    Column("deleted_at", DateTime, nullable=True),  # Soft delete tombstone
 
     Index("ix_messages_channel_created", "channel_id", "created_at"),
     Index("ix_messages_author_created", "author_id", "created_at"),
@@ -204,33 +206,94 @@ def generate_id() -> str:
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: Message Content Storage — Full or Summary?
-The schema stores full `content` for messages. For long messages (Discord allows 2000 chars), this could mean significant storage over time. Should we:
-- **Store full content** (current) — verbatim preservation, simple
-- **Store full + truncated** — full for recent, summarized for old
-- **Store references** — only store Discord message ID, fetch content on-demand
+### Q1: SQLite Journal Mode
+**Decision**: WAL (Write-Ahead Logging)
+- Readers don't block writers — good for API + background tasks in unified process
+- Creates 3 files (db, wal, shm) but worth it for concurrency
+- Backup/copy needs to include all WAL files
 
-The phenomenological question: is the raw message the "truth," or is Zos's understanding of the message? If Zos reflects on a message, the insight captures understanding — is the raw content still needed?
+### Q2: Message Content Storage
+**Decision**: Store full content
+- Verbatim preservation, simple implementation
+- The raw message is ground truth; insights are interpretation
+- Storage cost acceptable for Discord message volumes
 
-### Q2: ULID vs UUID for IDs
-The story uses ULIDs (time-sortable) for Zos-generated entities (insights, transactions) but Discord snowflakes for Discord entities. This means:
-- ULIDs are sortable by creation time without a separate timestamp column
-- Discord snowflakes have their own time encoding
+### Q3: Timezone Handling
+**Decision**: UTC only
+- Simple, consistent, all timestamps in UTC
+- User's local time context comes from user knowledge and insights, not stored timezone
+- "3 AM their time" meaning emerges from understanding the user, not timestamp metadata
 
-Should all Zos-generated entities use ULIDs? The current split makes sense but the choice affects whether `ORDER BY id` equals `ORDER BY created_at`.
+### Q4: ULID Consistency
+**Decision**: Convention with documentation
+- ULIDs for Zos-generated entities, Discord snowflakes for Discord entities
+- Document that `ORDER BY id` equals `ORDER BY created_at` for Zos entities (ULIDs are time-sortable)
+- No helper function needed — just documented convention
 
-### Q3: JSON Columns — SQLite Limitations
-SQLAlchemy's JSON column maps to SQLite's TEXT with JSON1 extension. This works but:
-- No schema validation inside JSON
-- Queries into JSON are slower than dedicated columns
-- Migration for JSON structure changes is manual
+### Q5: JSON Columns
+**Decision**: Keep JSON for flexibility
+- `reactions_aggregate`, `participants`, `errors` stay as JSON columns
+- Document that high-query fields may need extraction to dedicated columns later
+- For MVP, flexibility > query performance
 
-Fields like `reactions_aggregate`, `participants`, `errors` are JSON. If these need indexed queries later, should we:
-- **Keep JSON** (current) — flexibility over performance
-- **Normalize now** — create separate tables for nested data
-- **Document upgrade path** — note that high-query fields might need extraction
+---
+
+## Additional Decisions (Resolved 2026-01-24)
+
+### Q6: LLM Calls Audit Table
+**Decision**: Full prompt AND full response storage
+- Store complete prompt text (useful for fine-tuning, debugging)
+- Store complete response (failed parses would otherwise lose raw output)
+- Indexes: by layer_run_id, by created_at, by model_profile
+
+**Schema**:
+```python
+llm_calls = Table(
+    "llm_calls",
+    metadata,
+    Column("id", String, primary_key=True),  # ULID
+    Column("layer_run_id", String, ForeignKey("layer_runs.id"), nullable=True),
+    Column("topic_key", String, nullable=True),
+    Column("model_profile", String, nullable=False),
+    Column("model_provider", String, nullable=False),
+    Column("model_name", String, nullable=False),
+    Column("prompt", String, nullable=False),  # Full prompt text
+    Column("response", String, nullable=False),  # Full response text
+    Column("tokens_input", Integer, nullable=False),
+    Column("tokens_output", Integer, nullable=False),
+    Column("estimated_cost_usd", Float, nullable=True),
+    Column("latency_ms", Integer, nullable=True),
+    Column("created_at", DateTime, nullable=False),
+
+    Index("ix_llm_calls_layer_run", "layer_run_id"),
+    Index("ix_llm_calls_created", "created_at"),
+    Index("ix_llm_calls_profile", "model_profile"),
+)
+```
+
+### Q7: Reaction Table — `removed_at` Field
+**Decision**: Add `removed_at` timestamp
+- Soft delete for reactions, consistent with message tombstone approach
+- Field added to reactions table definition
+
+### Q8: Poll State Table
+**Decision**: Track polling state per channel
+- `poll_state` table tracks last_message_at and last_polled_at per channel
+- Used by message polling (Story 2.2) to efficiently fetch only new messages
+- Simple primary key on channel_id
+
+**Schema**:
+```python
+poll_state = Table(
+    "poll_state",
+    metadata,
+    Column("channel_id", String, primary_key=True),  # Discord snowflake
+    Column("last_message_at", DateTime, nullable=True),  # Timestamp of most recent message
+    Column("last_polled_at", DateTime, nullable=False),  # When we last polled this channel
+)
+```
 
 ---
 

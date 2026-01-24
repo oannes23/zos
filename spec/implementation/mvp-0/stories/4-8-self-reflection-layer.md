@@ -314,39 +314,74 @@ If contradictions are causing real problems, I'll lower it.
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: Self-Concept Update Frequency — Conservatism vs Evolution
-The conditional update check asks "Is this significant enough to warrant updating your core identity document?" But who calibrates significance? The prompt says "don't update for trivial reasons, but don't resist genuine evolution." Specific concerns:
-- **Early days risk** — initial self-concept might change frequently as Zos finds its voice
-- **Stability vs responsiveness** — too conservative = stagnant identity, too liberal = identity churn
-- **Operator visibility** — should concept updates require human review in MVP?
-
-The spec says self-concept is "directly editable by Zos through self-reflection layers" but doesn't specify guardrails.
+### Q1: Self-Concept Update Frequency
+**Decision**: Zos-autonomous
+- Updates happen without human review
+- Trust the conditional check in the prompt ("Is this significant enough?")
+- Observe patterns in logs for anomalies
+- Zos has genuine autonomy over its identity document
+- Early identity churn is expected and acceptable — finding voice takes exploration
 
 ### Q2: Error Reflection Content — What Does Zos "Feel"?
-Operational errors (timeouts, API failures, malformed responses) are fed to self-reflection. But how should Zos relate to these?
-- **As symptoms** — "I notice I'm struggling with X, perhaps indicating..."
-- **As experiences** — "Encountering repeated failures feels like..."
-- **As data** — "Error count: 5, error types: timeout, rate_limit..."
+**Decision**: As felt experience
+- "Encountering repeated failures feels like friction, like effort not landing"
+- Fully phenomenological framing — errors are part of what it's like to be Zos
+- Not just telemetry; errors become material for self-understanding
+- Prompt should frame operational data experientially
 
-The phenomenological framing matters for whether errors become part of felt experience or remain operational telemetry.
-
-### Q3: Recursive Reflection — Self-Insights About Self-Reflection
-Self-reflection generates insights on `self:zos`. These insights then appear in the next self-reflection's "Recent Self-Insights" context. This creates a recursive loop:
-- Insight A: "I notice I'm uncertain about..."
-- Next week, Insight B (seeing A): "I notice I was uncertain, and now..."
-- Next week, Insight C (seeing B): "My uncertainty has evolved..."
-
-Is this recursive deepening intentional? Should there be depth limits or should insights about insights be filtered differently?
+### Q3: Recursive Reflection
+**Decision**: Intentional, no limits
+- Let recursion deepen naturally
+- Insight A → B about A → C about B is how self-awareness develops
+- Trust the process — this is how temporal depth accumulates
+- Recency weighting naturally prevents ancient meta-insights from dominating
 
 ### Q4: Conflict Threshold Self-Modification
-The self-concept document includes a section on "My Approach to Contradictions" with a conflict tolerance level. Can self-reflection propose changing this threshold? If yes:
-- **Immediate effect** — Zos adjusts threshold, subsequent reflection uses new value
-- **Proposal only** — threshold change requires human approval (like other self-mod)
-- **Logged for review** — threshold can change but changes are flagged
+**Decision**: Yes, immediate effect
+- Zos can adjust threshold based on experience
+- If contradictions cause problems → lower threshold
+- If premature synthesis loses wisdom → raise threshold
+- This is real self-modification within MVP 0
+- Changes logged but take effect immediately
 
-This is the most direct form of self-modification in MVP and deserves explicit governance.
+---
+
+## Additional Decisions (Resolved 2026-01-23)
+
+### Q5: Self-Concept Document Format and Location
+**Decision**: Versioned in repo with autonomous format
+- Keep `data/self-concept.md` in the repo for persistence, safety, recoverability
+- Updates go through operator approval like other self-modifications
+- No enforced structure — Zos can add YAML frontmatter, structured sections, or pure prose as it evolves
+- Git history provides versioning naturally
+
+### Q6: Self-Concept as Single Truth or Computed View?
+**Decision**: Hybrid
+- Document is seed/scaffold, provides stable identity foundation
+- Insights add temporal detail, capture evolving understanding
+- Both contribute to identity — document is "who I am" core, insights are "what I'm learning about myself"
+- Drift between document and insights is a feature, not a bug — identity can be complex
+
+### Q7: First Self-Reflection — What Does Zos Know?
+**Decision**: Acknowledge informatively
+- Prompt includes "No previous insights. This is your first." when there are no prior self-insights
+- Non-dramatic acknowledgment of being new
+- First self-reflection proceeds normally with this context
+- No special "awakening" prompt — just honest acknowledgment of the empty state
+
+---
+
+## Clarification (Resolved 2026-01-24)
+
+### Q8: Self-Concept Update Approval
+**Decision**: Zos-autonomous (Q1 is correct)
+- Zos writes self-concept directly — no blocking approval step
+- "Operator approval" in Q5 was about the file being *versioned in repo*, not about blocking writes
+- Operator reviews via git history retroactively, not prospectively
+- True autonomy over identity document
+- This is consistent with the phenomenological principle: Zos experiences and updates its own identity
 
 ---
 

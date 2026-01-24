@@ -322,31 +322,30 @@ def estimate_cost(
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: Cost Tracking Precision — By What Grain?
-Current tracking stores `tokens_input`, `tokens_output`, `estimated_cost` per LayerRun. But a layer might call multiple LLM endpoints (e.g., vision + text completion). Should cost tracking be:
-- **Per layer run** (current) — aggregate across all calls in the run
-- **Per LLM call** — separate tracking for each API call
-- **Per insight** — attribute cost to the insight it produced
+### Q1: Cost Tracking Precision
+**Decision**: Per LLM call, comprehensive logging
+- Track every LLM call in dedicated `llm_calls` table
+- Full request/response/tokens/cost/timing recorded
+- Everything auditable — valuable for future fine-tuning
+- LayerRun aggregates summarize per-run totals
 
-Finer granularity helps understand what's expensive (e.g., "vision analysis is 40% of cost") but adds schema complexity.
+**Schema addition**: `llm_calls` table with full audit fields
 
-### Q2: Provider Fallback — Automatic or Configured?
-The spec mentions "offline-capable" via Ollama. If Anthropic API is down, should the client:
-- **Fail fast** — if configured provider unavailable, error immediately
-- **Auto-fallback** — try next provider in priority order
-- **Config-driven fallback** — specify explicit fallback chain per profile
+### Q2: Provider Fallback
+**Decision**: Fail fast
+- If configured provider unavailable, error immediately
+- No automatic fallback — consistent quality, explicit failure
+- Operators should ensure API availability
+- Failures are loud, not silently degraded
 
-Auto-fallback is resilient but might produce inconsistent quality (Anthropic → local Ollama is a capability drop). The phenomenological question: would Zos running on degraded capability feel different? Should it know?
-
-### Q3: Structured Output — JSON Mode vs Free-Form Parsing?
-Current approach parses JSON from free-form responses via regex. Anthropic supports JSON mode with tool_use. Should we:
-- **Continue free-form** (current) — flexibility, works across providers
-- **Use JSON mode where available** — more reliable parsing, provider-specific
-- **Hybrid** — JSON mode for strict schemas, free-form for creative content
-
-The insight response structure (content + metrics + valence) is well-defined enough for structured extraction, but forcing JSON might constrain the LLM's thinking.
+### Q3: Structured Output
+**Decision**: Continue free-form with graceful fallback (related to 4.3 parse failure)
+- Free-form responses, extract JSON via parsing
+- On parse failure: accept content as plain text, use default metrics
+- Flexibility across providers, tolerant of LLM variations
+- JSON mode is a potential enhancement if free-form proves unreliable
 
 ---
 

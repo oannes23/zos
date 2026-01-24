@@ -394,6 +394,28 @@ A scheduled self-reflection triggered after a self-modification proposal is impl
 
 ---
 
+### Soft Delete Tombstone
+
+When a user deletes a message, Zos marks it as deleted (with `deleted_at` timestamp) rather than removing it from the database. The message is excluded from new reflection but preserved for audit and to maintain context integrity. Zos experiences deletions as "unsayings" — the retraction is recorded as an event, not a vanishing.
+
+### Warm Threshold
+
+The minimum salience balance required for a topic to be considered "warm" and eligible to receive propagation from related topics. Default: 1.0 (configurable). Topics below this threshold are effectively cold — they exist but don't participate in the attention network.
+
+### Asymmetry Metrics
+
+For dyad topics, tracking of interaction direction ratios — who initiates contact, who responds more, reaction patterns. The dyad remains a single topic (`dyad:A:B`), but asymmetry is captured in computed metrics that inform insight generation. Relationships have directionality even when structurally symmetric.
+
+### LLM Call Log
+
+Comprehensive database record of every LLM API call, including request content, response content, token counts, cost estimate, timing, model used, and associated layer run. Provides full auditability and potential training data for future fine-tuning.
+
+### Effective Strength
+
+The retrieval-time strength of an insight, computed as `stored_strength × (current_topic_salience / original_topic_salience)`. Unlike stored strength (fixed at creation), effective strength decays as the topic's salience decays. This creates natural forgetting — insights about people you haven't thought about in months become dim.
+
+---
+
 ### Epic
 
 A group of related stories (~5) that together deliver a demonstrable capability. Completable in one focused orchestration session. In MVP 0: Foundation, Observation, Salience, Reflection, Introspection.
@@ -416,4 +438,4 @@ The atomic unit of implementation work. Completable in one focused session. Has 
 
 ---
 
-_Last updated: 2026-01-23 — Self-modification terms added (Self-Modification Proposal, Outcome Reflection)_
+_Last updated: 2026-01-23 — Implementation decision terms added (Soft Delete Tombstone, Warm Threshold, Asymmetry Metrics, LLM Call Log, Effective Strength)_

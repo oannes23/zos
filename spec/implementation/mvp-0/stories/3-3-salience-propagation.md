@@ -286,31 +286,30 @@ salience:
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: "Warm" Threshold — Binary or Gradient?
-Currently `is_warm(topic_key)` returns `balance > 0`. But topics at 0.001 salience and topics at 50 salience are treated identically for propagation eligibility. Should warmth be:
-- **Binary at zero** (current) — any positive balance = warm
-- **Minimum threshold** — e.g., `balance > 1.0` to count as warm
-- **Gradient propagation** — propagation factor scaled by recipient's warmth
+### Q1: "Warm" Threshold
+**Decision**: Minimum threshold (salience > 1.0)
+- Topics must have meaningful attention to receive propagation
+- `is_warm(topic_key)` returns `balance > config.warm_threshold`
+- Default `warm_threshold = 1.0` (configurable)
+- Cleaner distinction between "cold" and "barely noticed"
 
-The current approach means a topic that just decayed to near-zero still receives full propagation, which might not match the intuition of "warmth as current relevance."
+**Config addition**: `salience.warm_threshold: 1.0`
 
-### Q2: Propagation Timing — Synchronous or Batched?
-The design shows propagation happening immediately on earn. With many related topics, this creates N database writes per earn. Should propagation be:
-- **Synchronous inline** (current) — immediate, simple, many writes
-- **Batched periodic** — accumulate earnings, propagate at intervals (e.g., end of poll cycle)
-- **Event-driven deferred** — queue propagation events, process async
+### Q2: Propagation Timing
+**Decision**: Synchronous inline (current)
+- Immediate propagation, simple implementation
+- SQLite can handle the write volume for MVP
+- Batching adds complexity without clear benefit
+- Revisit if performance becomes an issue
 
-Batching could allow smarter propagation (e.g., only propagate net positive changes) but loses immediacy.
-
-### Q3: Dyad Warming Direction
-When user A and user B interact, the server dyad `server:X:dyad:A:B` earns. If the global dyad `dyad:A:B` is cold, what warms it?
-- **Second-server interaction** — A and B interact in server Y
-- **DM between them** — but do A↔B DMs exist separately from A↔Zos and B↔Zos?
-- **Explicit propagation** — if either global user is warm, global dyad warms on server dyad activity
-
-The spec mentions warming via "DM or second-server activity" but dyads don't DM Zos — the dyad's constituent users do. Clarify the trigger.
+### Q3: Global Dyad Warming
+**Decision**: When both constituent global users are warm
+- If `user:A` and `user:B` are both warm, `dyad:A:B` becomes warm automatically
+- Derived warmth — relationship understanding becomes cross-server when both people are
+- Check global user warmth before propagating to global dyad
+- Implementation: warm check in propagation, not separate trigger
 
 ---
 

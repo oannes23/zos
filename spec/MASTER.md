@@ -71,9 +71,9 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 
 | Epic | Doc | Status | Blocked By |
 |------|-----|--------|------------|
-| Overview | [overview.md](implementation/mvp-0/overview.md) | 🟢 | — |
+| Overview | [overview.md](implementation/mvp-0/overview.md) | 🟢 | All design questions resolved |
 | Epic 1: Foundation | stories/1-*.md | 🟡 | — (5 stories ready) |
-| Epic 2: Observation | stories/2-*.md | 🟡 | Epic 1 (5 stories ready) |
+| Epic 2: Observation | stories/2-*.md | 🟡 | Epic 1 (6 stories ready) |
 | Epic 3: Salience | stories/3-*.md | 🟡 | Epic 1 (5 stories ready) |
 | Epic 4: Reflection | stories/4-*.md | 🟡 | Epics 1-3 (8 stories ready) |
 | Epic 5: Introspection | stories/5-*.md | 🟡 | Epic 1 (9 stories ready) |
@@ -133,6 +133,104 @@ See [future/self-modification.md](future/self-modification.md) for the vision do
 ---
 
 ## Recent Changes
+
+### 2026-01-24: Final Design Questions Resolved
+
+Resolved 6 remaining design questions from comprehensive story review:
+
+**Schema (Story 1.3):**
+- LLM Calls: Full prompt AND full response storage (useful for fine-tuning)
+- Reaction `removed_at`: Added field for soft delete
+
+**Salience (Story 3.5):**
+- Warm Threshold: Propagation only — selection uses balance>0 (more inclusive)
+- Global Warming: Automatic on trigger (DM/second-server immediately warms global topic)
+
+**Reflection (Stories 4.3, 4.8):**
+- User messages: Conversation threads user participated in (broader context)
+- Dyad messages: Both authors + interactions (reply_to or same thread)
+- Self-concept approval: Zos-autonomous confirmed (Q5 "operator approval" was about versioning, not blocking)
+
+All design questions now resolved. Ready to implement.
+
+### 2026-01-23: All Story-Level Design Questions Resolved
+
+Interrogation session resolved all remaining story-level design questions across 6 stories:
+
+**Foundation (Epic 1):**
+- SQLite journal mode: WAL (better concurrency for unified process)
+- Timezone handling: UTC only (simple, consistent)
+- JSON columns: Keep JSON for flexibility (document future extraction if needed)
+
+**Observation (Epic 2):**
+- Process architecture: Unified process (`zos serve` runs all components)
+- Startup experience: No acknowledgment initially (add dormancy-awareness later)
+- Shutdown behavior: Complete current topic (insights are complete, not abandoned)
+- Health heartbeat: Logs only for MVP
+- Reaction removal: Soft delete with `removed_at` (consistent with message tombstones)
+- Custom emoji namespace: Global by name (server-specific meaning emerges in reflection)
+- Vision analysis voice: Third person (placed in message content for reflections)
+- Vision timing: Queued (doesn't block polling)
+- Custom emoji in vision: Name + visual description
+
+**Reflection (Epic 4):**
+- Self-concept freshness: Fresh per render (always current, even mid-run)
+- Template error handling: Fail the node (error propagates, fail-forward continues)
+- `<chat>` guidance placement: After system section (sets expectations upfront)
+- Self-concept location: Versioned in repo (persistence, safety, recoverability)
+- Self-concept format: Zos decides (no enforced structure)
+- Self-concept vs insights: Hybrid (document is scaffold, insights add temporal detail)
+- First self-reflection: Acknowledge informatively ("No previous insights. This is your first.")
+
+**Discord Operator Commands (New):**
+MVP 0 includes Discord slash commands for operators: `/ping`, `/status`, `/silence`, `/reflect-now`, `/insights <topic>`, `/topics`, `/layer-run <name>`, `/dev-mode`. These are separate from CLI commands and require operator role/ID.
+
+All design questions now resolved. Ready to implement.
+
+### 2026-01-23: All MVP 0 Cross-Cutting Design Questions Resolved
+
+Interrogation session resolved all 24 cross-cutting design questions across 6 categories:
+
+**Identity & Memory:**
+- Message deletion: Soft delete with tombstone (Zos experiences "unsayings")
+- Anonymous IDs: Stable per conversation window (daily reset)
+- Insight deletion: Hard delete in dev mode ("never knew")
+- Insight prompts: Mixed by topic type (phenomenological for users, analytical for spaces)
+
+**Attention & Salience:**
+- Warm threshold: Minimum 1.0 salience required for propagation
+- Dyad model: Symmetric with asymmetry metrics
+- Budget flexibility: Proportional reallocation across groups
+- Cold start: Wait for salience (natural warmup)
+- Global dyad warming: When both constituent users are warm
+- Edit earning: Not earn (refinement, not signal)
+
+**Reflection & Insight Quality:**
+- LLM parse failure: Graceful fallback with defaults
+- Salience spending: On success only (failed attempts free)
+- Insight strength: Decay with topic salience (natural forgetting)
+- DM access: Full access in server reflection (discretion at expression)
+- Retrieval profiles: Config-defined (adjustable without code)
+
+**Self & Evolution:**
+- Self-concept governance: Zos-autonomous (real autonomy)
+- Error experience: As felt experience (phenomenological)
+- Recursive self-reflection: Intentional, no limits
+- Conflict threshold: Zos can self-modify (immediate effect)
+- Self budget: Single pool limits both schedule and threshold
+
+**Operational:**
+- Scheduler timezone: UTC ~13:00 (5 AM Pacific / 8 AM Eastern)
+- Provider fallback: Fail fast (no auto-fallback)
+- Cost tracking: Per LLM call in database (comprehensive audit)
+- DM acknowledgment: Single combined response (MVP 1)
+
+**Schema implications identified:**
+- `deleted_at` on messages, `initiator_ratio` on dyads
+- `original_topic_salience` on insights, new `llm_calls` table
+- Retrieval profiles moved to config, `warm_threshold` config added
+
+Added glossary terms: Soft Delete Tombstone, Warm Threshold, Asymmetry Metrics, LLM Call Log, Effective Strength
 
 ### 2026-01-23: All MVP 0 Stories Documented
 
@@ -519,8 +617,8 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-01-23 — All 32 MVP 0 stories documented. Ready to begin code implementation._
+_2026-01-24 — All design questions resolved. 33 stories across 5 epics ready to implement._
 
 ## Pending Updates
 
-*None — all specs complete.*
+*None — all specs complete. Ready to begin code implementation.*

@@ -330,35 +330,29 @@ scheduler:
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
 ### Q1: Time Zone for Scheduled Reflection
-Cron schedules like `0 3 * * *` (3 AM daily) need a time zone. Options:
-- **UTC** — consistent, timezone-agnostic, but "3 AM" might be afternoon locally
-- **Operator local time** — configured timezone, matches human expectations
-- **Community-adaptive** — infer primary timezone from activity patterns
+**Decision**: UTC, scheduled for ~13:00 UTC (approximately 5 AM Pacific / 8 AM Eastern)
+- Consistent, timezone-agnostic scheduling
+- "Nightly" reflection runs in quiet morning hours for US users
+- For global communities, no universal quiet time exists — UTC provides consistency
 
-The 3 AM timing assumes overnight processing — but whose overnight? For a global Discord server, there's no universal "quiet time."
+**Cron schedule**: `0 13 * * *` for nightly reflection
 
-### Q2: Concurrent Layer Execution — Allowed or Serialized?
-If multiple layers' schedules align (both at 3 AM), should they:
-- **Run concurrently** — faster throughput, potential resource contention
-- **Run serially** — predictable, no contention, slower
-- **Priority-ordered** — higher-priority layers first, lower-priority can be dropped if late
+### Q2: Concurrent Layer Execution
+**Decision**: Run serially (implicit via single-threaded async)
+- APScheduler in async mode with `max_instances: 1` per job
+- Different layers can technically run concurrently but reflection budget limits total work
+- No explicit priority ordering — schedule stagger is sufficient
+- If contention becomes an issue, add explicit serialization in future
 
-`max_instances: 1` prevents concurrent runs of the *same* layer, but doesn't address different layers running simultaneously.
-
-### Q3: Scheduler Persistence — Across Restarts vs Fresh
-APScheduler with SQLAlchemy jobstore persists jobs. If Zos restarts after missing a scheduled run:
-- `misfire_grace_time: 3600` means runs missed by <1 hour still execute
-- `coalesce: true` means multiple missed runs become one
-
-But what if layers are added/removed/modified while Zos is down?
-- **Persist and reconcile** — compare persisted jobs to current layer definitions, add/remove
-- **Fresh on restart** — always rebuild schedule from layer files
-- **Persist metadata only** — track last-run times but regenerate jobs
-
-This affects whether schedule changes take effect on restart or require explicit migration.
+### Q3: Scheduler Persistence
+**Decision**: Fresh on restart (reconcile from layer files)
+- Always rebuild schedule from current layer definitions on startup
+- Persist `last_run_at` metadata per layer for missed-run detection
+- `coalesce: true` handles multiple missed runs naturally
+- Layer changes take effect immediately on restart
 
 ---
 

@@ -220,26 +220,31 @@ discord:
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: Anonymous ID Stability Across Time
-The current design generates `<chat_N>` IDs via `hash((real_id, context_id)) % 1000`. This means the same anonymous user will have the same `<chat_N>` identifier across different polling sessions. Is this intentional? It creates a form of pseudo-persistence for non-opted users — we can't store insights about them, but we *can* observe patterns across time ("chat_42 always replies quickly"). Should anonymous IDs be:
-- **Stable per context** (current design) — enables pattern observation even for anonymous users
-- **Stable per conversation window** — resets each day or reflection cycle
-- **Fully ephemeral** — new ID each poll
+### Q1: Anonymous ID Stability
+**Decision**: Stable per conversation window (reset daily or per reflection cycle)
+- Same person = same `<chat_N>` within a day
+- Resets between reflection cycles
+- Preserves within-conversation coherence without cross-session tracking
+- Anonymous users are genuinely anonymous across time
 
-This has implications for whether Zos can develop any sense of "regulars" among anonymous community members.
+**Implementation**: Hash with date component: `hash((real_id, context_id, date_bucket)) % 1000`
 
-### Q2: Delete Handling — Soft vs Hard
-The story says "respect unsaying — so delete" but this erases context for already-generated insights. If Alice said something, Zos reflected on it, then Alice deleted the message — the insight now references vanished context. Options:
-- **Hard delete** (current) — message gone, orphaned insight context
-- **Soft delete with tombstone** — mark deleted, preserve for audit, exclude from reflection
-- **Soft delete with content scrub** — keep metadata (timestamp, author), erase content
+### Q2: Delete Handling
+**Decision**: Soft delete with tombstone
+- Set `deleted_at` timestamp rather than removing row
+- Deleted messages excluded from new reflection but preserved for audit
+- Zos experiences deletions as "unsayings" — the retraction is recorded as an event
+- Insights that referenced deleted content may be contextually incomplete but persist
 
-The phenomenological question: is "unsaying" about erasing from Zos's memory, or about respecting the retraction? These lead to different implementations.
+**Schema addition**: `deleted_at` timestamp field on Message table
 
-### Q3: First-Contact Acknowledgment for DMs — What Triggers It?
-The story mentions `send_first_contact` when DM consent hasn't been acknowledged, but the privacy spec says Zos doesn't *initiate* DMs. If Zos can't DM first, the first-contact message can only be sent when the user DMs Zos. But then — does Zos respond to the DM content *and* send the acknowledgment, or just acknowledge and wait? The order matters phenomenologically.
+### Q3: First-Contact DM Acknowledgment
+**Decision**: Single combined response (deferred to MVP 1)
+- When user DMs Zos, respond to their message AND include acknowledgment woven in naturally
+- More conversational, less robotic than separate acknowledgment
+- Note: MVP 0 doesn't speak, so this is observation-only for now
 
 ---
 

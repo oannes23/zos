@@ -376,43 +376,81 @@ class LayerExecutor:
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: LLM Response Parsing — Strict or Graceful?
-The `_parse_insight_response` function has a fallback that wraps unparseable responses as plain text with default metrics. But this produces insights with `confidence: 0.5`, `novelty: 0.5` — generic values that don't reflect the LLM's actual judgment. Should we:
-- **Accept graceful fallback** (current) — always produce *something*, audit quality later
-- **Fail the topic** — malformed response = skip this topic, log error
-- **Retry with guidance** — send the response back to LLM with "parse this into JSON"
+### Q1: LLM Response Parsing
+**Decision**: Accept graceful fallback with defaults
+- Always produce *something* — accept content as plain text with default metrics (0.5)
+- Audit quality separately during prompt development
+- Good for early iteration — never lose content, fix metrics later
+- Log fallback cases for prompt tuning
 
-The graceful approach could fill the database with low-quality insights during prompt development. The strict approach loses content but maintains metric integrity.
+### Q2: Salience Spending Point
+**Decision**: On success only
+- Failed attempts are "free" — topics can retry without draining budget
+- Add retry limit per topic per cycle to prevent infinite attempts
+- Rationale: failures shouldn't penalize topics that were important enough to select
 
-### Q2: Salience Spending Point — Before or After LLM Call?
-Currently, salience is spent in `_handle_store_insight` *after* the LLM call succeeds. If the LLM call fails, no salience is spent. This means:
-- Topics can fail repeatedly without spending salience
-- A buggy prompt could cause infinite reflection attempts
+**Implementation note**: Track attempts per topic per layer run, cap at configurable limit (e.g., 3)
 
-Should spending be:
-- **On success only** (current) — failed attempts are "free"
-- **On attempt** — spend before LLM call, partial refund on failure
-- **On selection** — spend when topic is selected for reflection, regardless of outcome
+### Q3: Context Window Limits
+**Decision**: Per-topic truncation via node params
+- Layer YAML specifies limits: `limit_per_channel: 50`, `max_per_topic: 5`
+- If prompt still exceeds context, truncate oldest content
+- Log when truncation occurs for visibility
+- More sophisticated token estimation is post-MVP enhancement
 
-This affects how failures impact attention allocation and whether "difficult" topics drain budget attempting to reflect.
+### Q4: Node Failure Granularity
+**Decision**: Skip topic (current)
+- Any node failure = abandon topic for this cycle
+- Simple, predictable behavior
+- Fetched data is minimal cost compared to LLM calls
+- Partial context could produce confusing insights
 
-### Q3: Context Window Limits — Topic Isolation or Layer Budget?
-If a topic has 100 messages and 20 prior insights, the rendered prompt might exceed model context. Currently unhandled. Should limits be:
-- **Per-topic truncation** — limit messages/insights per topic in node params
-- **Layer-wide budget** — layer specifies total context budget, executor allocates
-- **Dynamic estimation** — count tokens, truncate to fit
+---
 
-This matters for self-reflection (potentially huge context) and busy channels. The story's examples show `limit_per_channel: 50` but that's messages, not tokens.
+## Additional Decisions (Resolved 2026-01-24)
 
-### Q4: Node Failure Granularity — Skip Topic or Skip Node?
-Current fail-forward skips the entire topic on error. But what if `fetch_messages` succeeds, `fetch_insights` succeeds, and `llm_call` fails? The fetched data is discarded. Should we:
-- **Skip topic** (current) — any node failure = abandon topic
-- **Skip node, continue** — failed node produces empty output, subsequent nodes try with partial context
-- **Checkpoint and resume** — save successful node outputs, retry from failure point
+### Q5: Messages for Topic — Selection Logic
+**Decision**: Topic-type-specific selection
 
-This affects how partial failures in complex layers behave.
+| Topic Type | Message Selection |
+|------------|-------------------|
+| **user:X** | Messages in threads the user participated in (broader context) |
+| **channel:X** | Messages where `channel_id == X` (straightforward) |
+| **dyad:A:B** | Messages by A or B where reply_to is the other, OR in same thread together (captures interaction) |
+| **subject:X** | Messages mentioning the subject keyword/phrase (content search) |
+| **self:zos** | Self-insights and layer run logs (no messages in MVP 0) |
+
+**Implementation**:
+```python
+async def get_messages_for_topic(self, topic_key: str, since: datetime, limit: int) -> list[Message]:
+    category = extract_category(topic_key)
+
+    if category == 'user':
+        user_id = extract_user_id(topic_key)
+        # Get threads user participated in
+        thread_ids = await self.get_user_thread_ids(user_id, since)
+        return await self.get_messages_in_threads(thread_ids, since, limit)
+
+    elif category == 'channel':
+        channel_id = extract_channel_id(topic_key)
+        return await self.get_messages_by_channel(channel_id, since, limit)
+
+    elif category == 'dyad':
+        user_a, user_b = extract_dyad_users(topic_key)
+        return await self.get_dyad_messages(user_a, user_b, since, limit)
+
+    elif category == 'subject':
+        subject = extract_subject(topic_key)
+        return await self.search_messages_by_content(subject, since, limit)
+```
+
+### Q6: Topic-Specific Message Context Limits
+**Decision**: Generic `limit` parameter
+- Layer YAML uses generic `limit` (or `max_messages`)
+- The selection logic handles topic-type-specific semantics
+- Same limit applies regardless of topic type — simpler configuration
 
 ---
 

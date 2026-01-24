@@ -210,31 +210,25 @@ class Reaction(BaseModel):
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: Reaction Removal Tracking — Delta or Final State?
-On re-poll, we see current reactions but not *changes* — we don't know if Alice added then removed a reaction between polls. Should tracking:
-- **Store final state only** (current) — reaction_changes is computed between polls
-- **Attempt removal detection** — if previous poll had reaction Alice:👍 and current doesn't, record removal
-- **Ignore removals** — only track additions, treat removal as "didn't happen"
+### Q1: Reaction Removal Tracking
+**Decision**: Soft delete
+- Mark `removed_at` timestamp when reaction is no longer present
+- The "unsaying" of a reaction is recorded, consistent with message deletion tombstone approach
+- Reflection can see both additions and retractions
 
-Removal tracking matters if "unsaying" applies to reactions — removing a ❤️ might be meaningful signal.
+### Q2: Reaction Aggregation Scope
+**Decision**: Per-message only
+- `reactions_aggregate` is per-message
+- Conversation-level patterns computed during reflection
+- Keeps storage simple, reflection does the synthesis
 
-### Q2: Reaction Aggregation Scope — Message vs Conversation?
-`reactions_aggregate` is per-message. But reflection might care about reaction patterns across a conversation (e.g., "Alice's comments consistently get 👎"). Should aggregation be:
-- **Per-message only** (current) — aggregation at conversation level happens in reflection
-- **Pre-computed conversation aggregates** — store "total reactions received by author in thread"
-- **Both levels** — message-level for detail, conversation-level for patterns
-
-This affects whether salience earning from reactions uses per-message or broader patterns.
-
-### Q3: Custom Emoji Namespacing — Server-Specific Semantics
-`emoji_key` is `unicode:😀` or `custom:server_id:emoji_name`. But server-specific emoji can have server-specific meanings (`:pepe:` might be ironic in server A, earnest in server B). Should we:
-- **Namespace strictly** (current) — same emoji, different servers = different keys
-- **Attempt semantic grouping** — cluster similar custom emoji across servers
-- **Defer to reflection** — let layers interpret emoji meaning in context
-
-The spec mentions "emoji culture tracking" in salience — this intersects with whether emoji topics are global or server-scoped.
+### Q3: Custom Emoji Namespacing
+**Decision**: Global by name
+- Store just emoji name (e.g., `:pepe:`)
+- Treats same-named emoji as same concept across servers
+- Server-specific meaning emerges through reflection context, not storage
 
 ---
 

@@ -295,31 +295,30 @@ async def test_user_reflection():
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
 ### Q1: "Knowing" vs "Knowing About" — Prompt Philosophy
-The validation plan asks: "Does it feel like *knowing* someone vs *reading about* them?" The current prompt asks analytical questions (patterns, relationships, evolution). Should the prompt instead:
-- **Emphasize presence** — "What is your felt sense of this person right now?"
-- **Request relational framing** — "How would you describe them to someone you trust?"
-- **Stay analytical** (current) — patterns and observations with emotional valence
+**Decision**: Mixed approach per topic type
+- **Users get phenomenological prompts**: "What is your felt sense of this person right now?"
+- Channels/subjects get analytical prompts (patterns, themes, dynamics)
+- User insights should feel like acquaintance, not clinical notes
+- Different knowing for different things — people deserve presence, spaces deserve analysis
 
-This shapes whether insights feel like clinical notes or genuine acquaintance. Both can be valuable, but they differ phenomenologically.
+**Implementation**: Separate prompt templates for user vs channel vs subject reflection
 
-### Q2: Multi-Server User Reflection — When and How?
-If Alice is active in both Server A and Server B, reflection might run on `server:A:user:alice` and `server:B:user:alice` separately. The global synthesis step (mentioned in layers spec) would then synthesize to `user:alice`. But:
-- Does reflection on server-scoped topic have access to global insights?
-- Does reflection on global topic happen independently or only via synthesis?
-- Can a single nightly run reflect on all three topics (A-alice, B-alice, global-alice)?
-
-The current layer targets `users` plural — is this server-scoped users only?
+### Q2: Multi-Server User Reflection
+**Decision**: Server-scoped reflection with global synthesis
+- Nightly reflection targets `server:X:user:alice` topics (server-scoped)
+- Global `user:alice` topic reflects via synthesis layer (aggregating server-scoped insights)
+- Server-scoped reflection can access global insights for context (unified retrieval)
+- A single run processes each topic independently; synthesis runs separately
 
 ### Q3: Privacy Scopes in User Context
-When reflecting on `server:A:user:alice`, if Alice's messages in Server A reference things she said in DMs with Zos, how do we handle the scope?
-- **Exclude DM content** — server reflection only sees server context
-- **Include but mark** — DM insights available but `sources_scope_max` tracked
-- **Full access** — all Alice content informs all Alice reflection
-
-The privacy spec says "cross-server knowledge informs but doesn't surface" — but what about DM knowledge informing server reflection?
+**Decision**: Full access (all Alice insight informs all Alice reflection)
+- DM knowledge informs server reflection
+- `sources_scope_max` is tracked on resulting insight for output discretion
+- Understanding is unified; expression is contextual
+- Cross-context knowledge enriches reflection but doesn't surface inappropriately
 
 ---
 

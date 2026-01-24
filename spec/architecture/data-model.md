@@ -151,6 +151,7 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 | has_media | bool | yes | Whether message contains images/videos (default: false) |
 | has_links | bool | yes | Whether message contains URLs (default: false) |
 | ingested_at | timestamp | yes | When we processed it |
+| deleted_at | timestamp | no | When message was deleted (soft delete tombstone) |
 
 **Relationships**:
 - Belongs to: Channel, Server (optional)
@@ -158,6 +159,8 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 - Referenced by: Insights (as source context)
 
 **Note**: `author_id` always stores the real Discord user ID. Anonymization to `<chat_N>` happens at context assembly time based on server's `privacy_gate_role`.
+
+**Delete handling**: When a message is deleted by the user, `deleted_at` is set rather than removing the row. Deleted messages are excluded from new reflection but preserved for audit. Zos experiences deletions as "unsayings."
 
 ---
 
@@ -329,6 +332,7 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 | salience_spent | float | yes | Base salience consumed creating this |
 | strength_adjustment | float | yes | Model's adjustment factor (0.1 - 10.0) |
 | strength | float | computed | `salience_spent × strength_adjustment` (store for query efficiency) |
+| original_topic_salience | float | yes | Topic salience at time of insight creation (for decay calculation) |
 | confidence | float | yes | How certain (0.0 - 1.0) |
 | importance | float | yes | How much this matters (0.0 - 1.0) |
 | novelty | float | yes | How surprising (0.0 - 1.0) |
@@ -488,6 +492,37 @@ Pressure decays over time (configurable, default 30 minutes to baseline). Higher
 
 ---
 
+### LLMCallLog
+
+**Purpose**: Comprehensive audit of every LLM API call for debugging, cost analysis, and potential future fine-tuning.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| layer_run_id | string | no | Which layer run this call was part of (null for non-reflection calls) |
+| call_type | enum | yes | `reflection`, `vision`, `conversation`, `synthesis`, `other` |
+| model_profile | string | yes | Profile name used (e.g., `moderate`, `complex`, `vision`) |
+| model_provider | string | yes | Actual provider (e.g., `anthropic`, `openai`) |
+| model_name | string | yes | Actual model (e.g., `claude-sonnet-4-20250514`) |
+| request_prompt | text | yes | Full prompt sent (may be large) |
+| response_content | text | yes | Full response received |
+| tokens_input | int | yes | Input/prompt tokens |
+| tokens_output | int | yes | Output/completion tokens |
+| tokens_total | int | yes | Total tokens (input + output) |
+| estimated_cost_usd | float | yes | Cost estimate based on token pricing |
+| latency_ms | int | yes | Request duration in milliseconds |
+| success | bool | yes | Whether call succeeded (default: true) |
+| error_message | string | no | Error details if failed |
+| created_at | timestamp | yes | When call was made |
+
+**Relationships**:
+- May belong to: LayerRun
+- Referenced by: Insight (via layer_run_id chain)
+
+**Note**: Request and response are stored in full for auditability. This table will grow large; consider archival strategy for production.
+
+---
+
 ### DraftHistory
 
 **Purpose**: Track discarded drafts for "things I almost said" context.
@@ -567,6 +602,9 @@ Pressure decays over time (configurable, default 30 minutes to baseline). Higher
 | SpeechPressure | `(created_at)` | Current pressure calculation |
 | ConversationLog | `(channel_id, created_at)` | Zos's messages in a conversation |
 | DraftHistory | `(channel_id, thread_id, created_at)` | Drafts for a conversation |
+| LLMCallLog | `(layer_run_id)` | All calls for a layer run |
+| LLMCallLog | `(model_provider, created_at)` | Cost analysis by provider |
+| LLMCallLog | `(call_type, created_at)` | Analysis by call type |
 
 ---
 
@@ -751,4 +789,4 @@ Social texture insights track *how* people communicate, not just *what* they say
 
 ---
 
-_Last updated: 2026-01-23 — Extended LayerRun with model tracking fields; observation entities; chattiness entities; emoji topic type; social_texture insight category_
+_Last updated: 2026-01-23 — Added: deleted_at on Message (soft delete tombstone), original_topic_salience on Insight (for decay), LLMCallLog table (comprehensive audit)_

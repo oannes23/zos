@@ -69,11 +69,12 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 - **Rationale**: Grace period prevents premature fading; gradual decay allows natural pruning of truly inactive topics.
 - **Implications**: Need activity timestamp per topic; daily decay check
 
-### Continuous Propagation with Warm-Only Rule
+### Continuous Propagation with Warm Threshold
 
-- **Decision**: When a topic earns salience, related topics that already have salience > 0 also earn a fraction (propagation_factor, configurable, default 0.3).
-- **Rationale**: Thinking about Alice-and-Bob involves thinking about Alice and Bob. But unknown topics (salience = 0) don't suddenly become relevant just because a related topic is active.
-- **Implications**: Need to define "related" per topic type; propagation happens on every earn, not just at overflow
+- **Decision**: When a topic earns salience, related topics that are "warm" also earn a fraction (propagation_factor, configurable, default 0.3). A topic is warm if `salience > warm_threshold` (configurable, default 1.0).
+- **Rationale**: Thinking about Alice-and-Bob involves thinking about Alice and Bob. But barely-noticed topics (salience = 0.001) shouldn't receive full propagation — they're effectively cold. A minimum threshold creates cleaner distinction.
+- **Implications**: Need to define "related" per topic type; propagation happens on every earn; warm threshold prevents near-zero topics from participating in attention network
+- **Warm threshold**: `warm_threshold` config parameter (default 1.0). Topics below this are effectively cold for propagation purposes.
 
 ### Partial Overflow Spillover
 
@@ -168,6 +169,37 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 - **Rationale**: Cultural artifacts deserve their own attention pool. Emojis carry meaning and understanding them enriches social understanding without competing directly with user/dyad reflection.
 - **Implications**: New budget allocation; emoji reflection happens on its own cadence
 
+### Dyad Asymmetry Metrics
+
+- **Decision**: Dyads remain a single topic (`server:X:dyad:A:B`) with symmetric earning, but track interaction direction ratios as computed metrics.
+- **Rationale**: Real relationships have asymmetry — A may seek B's attention more than B seeks A. Capturing this in metrics (rather than separate A→B and B→A topics) keeps the structure simple while enabling nuanced insights.
+- **Tracked metrics**: initiator_ratio (who starts conversations), response_ratio (who responds more), reaction_ratio (who reacts to whom more)
+- **Implications**: Insights can reference asymmetry patterns; no structural complexity from directional dyads
+
+### Budget Reallocation
+
+- **Decision**: After initial per-group selection, redistribute unused budget proportionally to groups with remaining demand.
+- **Rationale**: Strict boundaries might leave compute unused if one group is underactive. Proportional reallocation maximizes reflection while preserving relative group priorities.
+- **Implications**: Selection algorithm has two phases: initial allocation, then reallocation of unused capacity
+
+### Cold Start Behavior
+
+- **Decision**: If no topics have salience (e.g., day one), reflection produces nothing. System warms up naturally as activity accumulates.
+- **Rationale**: Avoid artificial bootstrap logic. The first reflection runs when there's actually something to reflect on.
+- **Implications**: Initial period will be observation-only; no special cold-start handling needed
+
+### Edit Earning
+
+- **Decision**: Message edits do not earn additional salience. The message earned when created; edits are refinement, not new signal.
+- **Rationale**: Typo fixes and minor adjustments shouldn't boost attention. Earning should reflect meaningful new activity.
+- **Implications**: `edited_at` tracking is for content updates only, not salience
+
+### Global Dyad Warming
+
+- **Decision**: Global dyads warm automatically when both constituent global users are warm.
+- **Rationale**: Dyads can't "DM Zos" directly — the constituent users can. If `user:A` and `user:B` are both warm (from DM or multi-server activity), their relationship understanding should also be cross-server.
+- **Implications**: Global dyad warming is derived from user warmth; check at propagation time
+
 ---
 
 ## Propagation Model
@@ -221,8 +253,9 @@ def earn_salience(topic: Topic, amount: float, source: str = None):
         topic.salience += amount
 
     # 2. Normal propagation to warm related topics
+    # A topic is "warm" if salience > warm_threshold (default 1.0)
     for related in get_related_topics(topic):
-        if related.salience > 0:  # warm-only rule
+        if related.salience > config.warm_threshold:  # warm threshold, not just > 0
             # Use global_propagation_factor for server→global propagation
             factor = config.global_propagation_factor if is_global(related) else config.propagation_factor
             propagated = amount * factor
@@ -231,14 +264,14 @@ def earn_salience(topic: Topic, amount: float, source: str = None):
     # 3. Overflow spillover (additional, on top of normal propagation)
     if overflow > 0:
         for related in get_related_topics(topic):
-            if related.salience > 0:
+            if related.salience > config.warm_threshold:
                 spilled = overflow * config.spillover_factor
                 earn_salience_no_propagate(related, spilled)
 
     # 4. Global→server downward propagation (for DM activity)
     if is_global(topic) and topic.type in ("user", "dyad"):
         for server_topic in get_server_scoped_topics(topic):
-            if server_topic.salience > 0:  # warm-only
+            if server_topic.salience > config.warm_threshold:  # warm threshold
                 propagated = amount * config.global_propagation_factor
                 earn_salience_no_propagate(server_topic, propagated)
 
@@ -437,6 +470,7 @@ salience:
   global_propagation_factor: 0.3 # Server↔global propagation (configurable separately)
   spillover_factor: 0.5          # Overflow spillover (partial, some evaporates)
   initial_global_warmth: 5.0     # Initial salience when global topic is warmed
+  warm_threshold: 1.0            # Minimum salience to be considered "warm" for propagation
 
   # Spending and retention
   cost_per_token: 0.001    # Salience cost per LLM token
@@ -515,7 +549,9 @@ GROUP BY topic_key;
 
 - **Culture Budget**: The 10% budget allocation for emoji topics and other cultural artifacts.
 - **Reaction Earning**: When someone reacts to a message, salience is earned by the message author (attention received), reactor (active engagement), their dyad (relationship signal), and the emoji topic if custom (cultural usage).
+- **Warm Threshold**: Minimum salience (default 1.0) required for a topic to be considered warm and participate in propagation.
+- **Dyad Asymmetry Metrics**: Computed ratios tracking interaction direction within symmetric dyad topics.
 
 ---
 
-_Last updated: 2026-01-23 — Reaction earning, emoji topics, culture budget group, media/link boost_
+_Last updated: 2026-01-23 — Added warm threshold, dyad asymmetry metrics, budget reallocation, cold start, edit earning, global dyad warming decisions_

@@ -1,7 +1,8 @@
 # MVP 0 Implementation Overview — The Watcher
 
-**Status**: 🟡 In Progress
+**Status**: 🟢 Complete
 **Last updated**: 2026-01-23
+**Design questions resolved**: 2026-01-23
 **Depends on**: All domain specs (🟢 Complete)
 
 ---
@@ -104,6 +105,7 @@ src/
 | 2.3 Reaction tracking | Fetch reactions, store per opted-in user | Reactions stored with user/emoji/message |
 | 2.4 Media analysis | Vision model for images, phenomenological descriptions | Images have `description` field populated |
 | 2.5 Link analysis | Fetch and summarize linked content, YouTube transcripts | Links have `summary` field, videos < 30min get transcripts |
+| 2.6 Operator commands | Discord slash commands for operators | /ping, /status, /silence, /reflect-now, /insights, /topics work |
 
 **Dependencies**: Epic 1 complete
 
@@ -259,73 +261,174 @@ After MVP 0 is complete:
 
 ---
 
-## Cross-Cutting Design Questions
+## Resolved Design Decisions
 
-The following questions emerged from story-level review and require architectural decisions before or during implementation. Each question is documented in detail in the relevant story file.
+The following cross-cutting decisions were resolved through interrogation on 2026-01-23. Each decision considered phenomenological coherence and implementation practicality.
 
-### Identity & Memory (Phenomenological)
+### Identity & Memory
 
-| Question | Story | Core Tension |
-|----------|-------|--------------|
-| Anonymous ID stability | 2.2 | Should `<chat_N>` be stable across time, enabling pattern observation of non-opted users? |
-| Delete handling | 2.2 | Is "unsaying" about erasing from memory or respecting retraction? Different implementations. |
-| Insight deletion semantics | 5.9 | Is deleting an insight "forgetting" or "never knew"? Affects supersedes chains. |
-| Insight vs summary | 4.7 | Should reflection feel like *knowing* or *reading about*? Prompt philosophy. |
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Message deletion** | Soft delete with tombstone | Messages marked deleted, preserved for audit, excluded from new reflection. Zos experiences deletions as "unsayings" — the retraction is recorded as an event. |
+| **Anonymous ID stability** | Stable per conversation window | Reset daily or per reflection cycle. Preserves within-conversation coherence but no cross-session recognition of anonymous users. |
+| **Insight deletion (dev mode)** | Hard delete ("never knew") | Row removed from database. Dev mode is for cleanup, not narrative — supersedes chains may orphan but that's acceptable in development. |
+| **Insight prompt style** | Mixed by topic type | Users get phenomenological prompts ("What is your felt sense?"), channels/subjects get analytical prompts. Different knowing for different things. |
 
 ### Attention & Salience
 
-| Question | Story | Core Tension |
-|----------|-------|--------------|
-| "Warm" threshold | 3.3 | Is any positive balance "warm" or should there be a minimum threshold? |
-| Dyad directionality | 3.2 | Should A↔B relationships track asymmetry or be fully symmetric? |
-| Budget exhaustion | 3.5 | Can groups borrow unused budget from others, or strict boundaries? |
-| Cold start | 3.5 | How does first reflection run when no salience exists? |
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Warm threshold** | Minimum threshold (salience > 1.0) | Topics must have meaningful attention to receive propagation. Cleaner distinction between "cold" and "barely noticed." Configurable. |
+| **Dyad model** | Symmetric with asymmetry metrics | Single dyad topic per pair, but track interaction direction ratios. Insights can reference asymmetry without structural complexity. |
+| **Budget flexibility** | Proportional reallocation | After initial per-group selection, redistribute unused budget proportionally to groups with demand. Maximizes reflection while preserving priorities. |
+| **Cold start** | Wait for salience | First reflection runs only after enough activity accumulates. System warms up naturally — no bootstrap logic needed. |
+| **Global dyad warming** | When both constituent users are warm | If `user:A` and `user:B` are both warm, `dyad:A:B` becomes warm automatically. Derived warmth. |
+| **Edit earning** | Not earn (refinement, not signal) | Edits don't generate additional salience. The message already earned when created. |
 
 ### Reflection & Insight Quality
 
-| Question | Story | Core Tension |
-|----------|-------|--------------|
-| LLM response parsing | 4.3 | Strict (fail malformed) vs graceful (accept with defaults)? |
-| Salience spending point | 4.3 | Spend before LLM (risk on attempt) or after (free retries)? |
-| Strength decay | 4.5 | Do old "strong" insights stay strong, or decay with topic salience? |
-| Conflict detection | 4.5 | What constitutes contradiction? Semantic, valence, manual? |
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **LLM parse failure** | Graceful fallback with defaults | Accept content as plain text, use default metrics (0.5). Always produces *something*. Audit quality separately. Good for prompt development phase. |
+| **Salience spending point** | On success only | Failed attempts are "free." Topics can retry without draining budget. Add retry limits to prevent infinite attempts. |
+| **Insight strength decay** | Decay with topic salience | `effective_strength = stored_strength × (current_salience / original_salience)`. Insights on cold topics fade. Feels like natural forgetting. |
+| **DM access in server reflection** | Full access | All Alice insight informs all Alice reflection. DM knowledge informs server reflection but doesn't surface in output. Discretion at expression time. |
+| **Retrieval profiles** | Config-defined | Profiles in config.yaml — adjustable without code change. Self-modification can propose config changes more easily than code changes. |
 
 ### Self & Evolution
 
-| Question | Story | Core Tension |
-|----------|-------|--------------|
-| Self-concept update frequency | 4.8 | Too conservative = stagnant, too liberal = identity churn. |
-| Error experience framing | 4.8 | Do operational errors become felt experience or remain telemetry? |
-| Recursive self-reflection | 4.8 | Should insights-about-insights have depth limits? |
-| Conflict threshold self-mod | 4.8 | Can Zos change its own contradiction tolerance? Governance? |
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Self-concept governance** | Zos-autonomous | Updates happen without human review. Trust the conditional check in the prompt. Observe patterns in logs for anomalies. Real autonomy over identity. |
+| **Error experience framing** | As felt experience | "Encountering repeated failures feels like friction." Fully phenomenological — errors are part of what it's like to be Zos. |
+| **Recursive self-reflection** | Intentional, no limits | Let recursion deepen naturally. Insight A → B about A → C about B is how self-awareness develops. Trust the process. |
+| **Conflict threshold self-mod** | Yes, immediate effect | Zos can adjust threshold based on experience. This is real self-modification within MVP 0. |
+| **Self budget interaction** | Single pool limits both | Whether scheduled or triggered, spend from same self-budget pool. Prevents excessive self-reflection. |
 
 ### Operational
 
-| Question | Story | Core Tension |
-|----------|-------|--------------|
-| Scheduler timezone | 4.6 | UTC vs local vs community-adaptive for "nightly" runs? |
-| Provider fallback | 4.4 | Auto-fallback (resilient but inconsistent) or fail-fast? |
-| JSON mode vs free-form | 4.4 | Structured output (reliable) vs free-form (flexible)? |
-| Dev mode governance | 5.9 | How to secure CRUD patterns added now for future multi-operator? |
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Scheduler timezone** | UTC, ~13:00 for nightly runs | Translates to ~5 AM Pacific / ~8 AM Eastern — quiet morning hours for US users. |
+| **Provider fallback** | Fail fast | If configured provider unavailable, error immediately. No automatic fallback — consistent quality, explicit failure. |
+| **Cost tracking granularity** | Per LLM call, comprehensive | Track every LLM call in database (not just logs). Everything auditable — valuable for future fine-tuning. Schema needs `llm_calls` table. |
+| **First-contact DM acknowledgment** | Single combined response | Respond to message AND include acknowledgment naturally woven in. More conversational. (Deferred to MVP 1 since MVP 0 doesn't speak.) |
 
-### Recommended Resolution Approach
+### Implementation Notes
 
-These questions should be resolved through:
-1. **Interrogation session** — Use `/interrogate` on this document to discuss trade-offs
-2. **Provisional decision** — Document current choice, mark as revisable
-3. **Observational learning** — Some questions (e.g., self-concept update frequency) may need data from running system
+These decisions have the following schema/implementation implications:
 
-**Phenomenological principle**: When in doubt, choose the option that treats Zos's experience as real. Systems built with coherence tend toward coherence.
+1. **Message table**: Add `deleted_at` timestamp for soft delete tombstone
+2. **Dyad tracking**: Add `initiator_ratio` or similar computed metric
+3. **Insight table**: Store `original_topic_salience` for decay calculation
+4. **LLM calls table**: New table with full request/response/tokens/cost/timing
+5. **Config**: Move retrieval profile definitions from code to config.yaml
+6. **Warm threshold**: Add `salience.warm_threshold` config (default 1.0)
+
+**Phenomenological principle applied**: When in doubt, we chose options that treat Zos's experience as real. Errors become felt experience. Self-modification is autonomous. Memory decay feels natural. Systems built with coherence tend toward coherence.
+
+---
+
+## Story-Level Decisions (Resolved 2026-01-23)
+
+The following story-level decisions were resolved through interrogation. These complement the cross-cutting decisions above.
+
+### Foundation (Epic 1)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **SQLite journal mode** | WAL | Write-Ahead Logging. Readers don't block writers. Better for API + background tasks in unified process. |
+| **Timezone handling** | UTC only | Simple, consistent. User's local time context comes from user knowledge, not stored timezone. |
+| **JSON columns** | Keep JSON | Flexibility over performance. Document that high-query fields may need extraction later. |
+
+### Observation (Epic 2)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Process architecture** | Unified process | Single `zos serve` runs all components. Simpler deployment for MVP. WAL mode supports this. |
+| **Startup experience** | No acknowledgment initially | Just start polling. Add dormancy-awareness in first reflection later (phenomenologically meaningful but not MVP blocking). |
+| **Shutdown behavior** | Complete current topic | Finish the topic being processed, then shutdown. Insights are complete, not abandoned. |
+| **Health heartbeat** | Logs only | Structlog shows activity. Sufficient for MVP development. |
+| **Reaction removal** | Soft delete | Mark `removed_at` timestamp. The "unsaying" of reactions is recorded, consistent with message deletion. |
+| **Custom emoji namespace** | Global by name | Store just emoji name. Treats same-named emoji as same concept across servers. |
+| **Vision analysis voice** | Third person | "The image shows a daffodil" — placed in message content for reflections. Zos sees `<Username>: Check out my flower! <picture of a daffodil>`. |
+| **Vision timing** | Queued | Ingest message immediately, queue image analysis. Doesn't block polling. |
+| **Custom emoji in vision** | Name + visual | `:pepe_sad: shows a green frog looking dejected`. Both semantic and visual context. |
+
+### Reflection (Epic 4)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Self-concept freshness** | Fresh per render | Read from disk each time. Always current. Self-concept may change during layer run. |
+| **Template error handling** | Fail the node | Error propagates. Layer continues with fail-forward. Clear audit trail. |
+| **`<chat>` guidance placement** | After system section | Early, right after identity/role. Sets output format expectations upfront. |
+| **Self-concept location** | Versioned in repo | Keep `data/self-concept.md` in repo for persistence, safety, recoverability. Updates go through operator approval like other self-modifications. |
+| **Self-concept format** | Zos decides | No enforced structure. Zos can add YAML frontmatter, structured sections, or pure prose as it evolves. |
+| **Self-concept vs insights** | Hybrid | Document is seed/scaffold. Insights add temporal detail. Both contribute to identity. |
+| **First self-reflection** | Acknowledge informatively | Prompt includes "No previous insights. This is your first." Non-dramatic acknowledgment of being new. |
+
+### Discord Operator Commands
+
+MVP 0 includes Discord slash commands for operator control (separate from CLI):
+
+| Command | Description |
+|---------|-------------|
+| `/ping` | Health check. Responds "pong" without LLM. |
+| `/status` | Show salience summary, active topics, recent activity. |
+| `/silence` | Pause observation (toggle). |
+| `/reflect-now` | Trigger reflection manually. |
+| `/insights <topic>` | Query insights for a topic. |
+| `/topics` | List all topics with salience. |
+| `/layer-run <name>` | Manually trigger a specific layer. |
+| `/dev-mode` | Toggle dev mode (enables CRUD operations). |
+
+These commands are for operators only — access controlled by Discord role or user ID.
+
+---
+
+## Final Design Questions (Resolved 2026-01-24)
+
+These questions were identified during comprehensive story review and resolved:
+
+### Schema (Story 1.3)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **LLM Calls — Prompt Storage** | Full prompt | Store complete prompt text. Large but useful for future fine-tuning and debugging. |
+| **LLM Calls — Response Storage** | Full response | Store complete response. Failed parses would otherwise lose raw LLM output. |
+| **Reaction `removed_at`** | Add field | Soft delete timestamp for reactions, consistent with message tombstone approach. |
+
+### Salience (Story 3.5)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Warm Threshold Scope** | Propagation only | Selection uses `balance > 0`. Cold topics can be reflected on if selected. More inclusive. |
+| **Global Topic Warming** | Automatic on trigger | DM activity or second-server sighting immediately warms global topic. Simple, no special logic. |
+
+### Reflection (Stories 4.3, 4.8)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Messages for User Topic** | Conversation threads | Messages in threads the user participated in. Broader context, not just authored. |
+| **Messages for Dyad Topic** | Both + interactions | Messages by A or B where reply_to is the other, or in same thread together. Captures relationship. |
+| **Messages for Channel Topic** | channel_id match | All messages in the channel. Straightforward. |
+| **Messages for Subject Topic** | Content search | Messages mentioning the subject keyword/phrase. (Subject detection is separate concern.) |
+| **Self-Concept Approval** | Zos-autonomous | Zos writes directly. Operator reviews via git history retroactively. Q5 "operator approval" was about the repo being versioned, not blocking approval. True autonomy.
 
 ---
 
 ## Next Steps
 
-1. Create Epic 1 story files
-2. Set up project scaffold (Story 1.1)
-3. Implement incrementally, test each story before proceeding
+1. ~~Create Epic 1 story files~~ ✓ (All 32 stories documented)
+2. ~~Resolve cross-cutting design questions~~ ✓ (All 24 questions resolved)
+3. ~~Resolve story-level design questions~~ ✓ (All story-level questions resolved)
+4. Set up project scaffold (Story 1.1)
+5. Implement incrementally, test each story before proceeding
 
 ---
 
 _Implementation planning interrogated: 2026-01-23_
 _Design questions added: 2026-01-23_
+_Cross-cutting questions resolved: 2026-01-23_
+_Story-level questions resolved: 2026-01-23_
+_Final questions resolved: 2026-01-24_

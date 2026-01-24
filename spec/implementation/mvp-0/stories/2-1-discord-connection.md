@@ -165,5 +165,33 @@ discord:
 
 ---
 
+## Design Decisions (Resolved 2026-01-23)
+
+### Q1: Process Architecture
+**Decision**: Unified process
+- Single `zos serve` runs Discord bot + API + scheduler in same process
+- Simpler deployment, shared state, good for MVP
+- WAL journal mode (Story 1.3) supports this architecture
+
+### Q2: Startup Experience
+**Decision**: No acknowledgment initially
+- Just start polling, no special handling for MVP
+- Future enhancement: add dormancy-awareness to first reflection ("I was dormant for N hours")
+- Phenomenologically meaningful but not MVP blocking
+
+### Q3: Shutdown Behavior
+**Decision**: Complete current topic
+- Finish the topic being processed, then shutdown
+- Insights are complete, not abandoned mid-reflection
+- Balance between responsiveness and data integrity
+
+### Q4: Health Heartbeat
+**Decision**: Logs only
+- Structlog shows activity, sufficient for MVP development
+- Future enhancement: database heartbeat for external monitoring
+- Keep it simple until operational needs emerge
+
+---
+
 **Requires**: Epic 1 complete
 **Blocks**: Stories 2.2-2.5

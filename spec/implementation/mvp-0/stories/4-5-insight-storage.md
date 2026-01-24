@@ -319,36 +319,45 @@ async def get_insights_by_category(
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: Retrieval Profile Selection — Who Decides?
-Profiles are defined in code (recent, balanced, deep, comprehensive), but layers specify `retrieval_profile: recent` as a string. Who has authority over profile semantics?
-- **Code-defined only** (current) — profiles are implementation, layer authors pick by name
-- **Config-defined** — profiles in config.yaml, adjustable without code change
-- **Layer-local override** — layer YAML can specify custom weights inline
+### Q1: Retrieval Profile Location
+**Decision**: Config-defined
+- Profiles defined in `config.yaml`, adjustable without code change
+- Self-modification can propose config changes more easily than code changes
+- Layer YAML references profiles by name; config defines their semantics
 
-If Zos later wants to propose changes to retrieval behavior (self-modification), it would need to modify code vs config vs layer YAML — different autonomy implications.
+**Config example**:
+```yaml
+insights:
+  profiles:
+    recent:
+      recency_weight: 0.8
+      strength_weight: 0.2
+    balanced:
+      recency_weight: 0.5
+      strength_weight: 0.5
+    deep:
+      recency_weight: 0.3
+      strength_weight: 0.7
+```
 
-### Q2: Strength Decay — Insight-Level or Via Salience?
-Insights have `strength` computed at creation (`salience_spent * strength_adjustment`). But insight strength doesn't decay, while topic salience does. Over time:
-- Old insights keep original strength even as topic salience decays
-- Retrieval by strength might surface very old "strong" insights over fresh "weaker" ones
+### Q2: Strength Decay
+**Decision**: Decay with topic salience
+- `effective_strength = stored_strength × (current_topic_salience / original_topic_salience)`
+- Insights on cold topics fade naturally
+- Feels like natural forgetting — memories of people you haven't thought about become dim
+- Requires storing `original_topic_salience` on insight at creation time
 
-Should insight strength:
-- **Be static** (current) — strength captures importance *at time of creation*
-- **Track topic salience** — strength_effective = stored_strength * (current_salience / original_salience)
-- **Have independent decay** — insights decay separately from topics
+**Schema addition**: `original_topic_salience` float field on Insight table
 
-This affects whether "strong memory from 6 months ago" means "important when created" or "still important now."
-
-### Q3: Conflict Detection Heuristics — What Constitutes Conflict?
-The `_may_conflict` function returns `False` (placeholder). Real conflict detection needs definition:
-- **Semantic similarity** — embeddings, cosine similarity threshold
-- **Explicit markers** — LLM flags conflicts in insight generation
-- **Valence opposition** — high warmth vs high tension on same topic
-- **Manual tagging** — operator marks conflicts in dev mode
-
-This shapes whether contradiction synthesis happens automatically or requires human identification. The spec says "threshold self-determined by Zos" but MVP needs bootstrap logic.
+### Q3: Conflict Detection
+**Decision**: Deferred to synthesis layer prompts (MVP bootstrap)
+- For MVP, `_may_conflict` remains a placeholder returning `False`
+- Conflict detection happens explicitly in synthesis layer prompts
+- LLM is asked "Do any of these insights contradict each other?" during synthesis
+- Automatic detection (embeddings, heuristics) is post-MVP enhancement
+- Conflict threshold self-determination happens through self-reflection, not code
 
 ---
 

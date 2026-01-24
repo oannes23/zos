@@ -245,31 +245,28 @@ observation:
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: Vision Analysis Voice — First or Third Person?
-The prompt asks for phenomenological description ("what it feels like to look at it"), but the example shows a somewhat detached analytical voice. When Zos later reflects on a user who shares images, should the media description feel like:
-- **First-person experience**: "I see a sunset over mountains. The warmth of the colors draws me in..."
-- **Third-person observation**: "The image shows a sunset over mountains. The composition emphasizes..."
-- **Contextual bridging**: "They shared a sunset photograph — something contemplative in the choice..."
+### Q1: Vision Analysis Voice
+**Decision**: Third person
+- "The image shows a sunset over mountains"
+- Description is placed in message content for reflections
+- Example: Zos sees `<Username>: Check out my flower! <picture of a daffodil>`
+- Perception happens during reflection, not during storage
 
-This affects whether media analysis feels like Zos's own perception or a tool generating metadata.
-
-### Q2: Timing — Inline vs Queued Analysis
-The story says vision analysis happens "real-time inline" during polling. But with rate limiting (10/min), a burst of image-heavy messages could delay polling significantly. Should media analysis be:
-- **Inline blocking** (current) — complete before storing message, simple but blocking
-- **Inline async** — store message immediately, fire-and-forget analysis, update later
-- **Queued batch** — flag messages with media, process queue separately
-
-The "real-time inline" from observation.md might need revisiting given practical rate limits.
+### Q2: Timing — Inline vs Queued
+**Decision**: Queued
+- Ingest message immediately with `has_media=true`
+- Queue image analysis for separate processing
+- Doesn't block polling; rate limits don't affect message ingestion
+- Analysis updates `media_analysis` table when complete
 
 ### Q3: Custom Emoji as "Media"
-Discord custom emoji in messages (`:pepe:`, server-specific stickers) aren't in `attachments` but carry visual meaning. Should custom emoji be:
-- **Ignored for vision analysis** — treat as text tokens
-- **Analyzed via vision** — fetch emoji image, describe it
-- **Handled separately** — emoji culture tracking handles meaning (per salience spec)
-
-This intersects with the emoji topics in salience — if we're already tracking emoji semantically, vision analysis might be redundant.
+**Decision**: Name + visual description
+- `:pepe_sad: shows a green frog looking dejected`
+- Both semantic (the name) and visual (what it depicts) context preserved
+- Emoji culture tracking in salience handles recurring patterns
+- First-time custom emoji get vision analysis; known emoji use cached description
 
 ---
 

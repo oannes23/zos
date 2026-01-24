@@ -337,39 +337,27 @@ async def store_message(self, message, server_id):
 
 ---
 
-## Open Design Questions
+## Design Decisions (Resolved 2026-01-23)
 
-### Q1: Dyad Directionality — Symmetric or Ordered?
-Current design canonicalizes dyads: `server:X:dyad:min(A,B):max(A,B)`. This treats A→B and B→A interaction as the same relationship. But relationships often have asymmetry:
-- A might seek B's attention more than B seeks A
-- A might reply to B frequently while B rarely acknowledges A
+### Q1: Dyad Directionality
+**Decision**: Symmetric with asymmetry metrics
+- Single dyad topic per pair (`server:X:dyad:min(A,B):max(A,B)`)
+- Track interaction direction ratios as computed metrics
+- Metrics tracked: initiator_ratio (who starts), response_ratio, reaction_ratio
+- Insights can reference asymmetry without structural complexity
 
-Should dyads be:
-- **Symmetric** (current) — single topic for the relationship regardless of direction
-- **Directional** — separate `A:B` and `B:A` dyads, with possible synthesis
-- **Symmetric with asymmetry metrics** — single dyad but track interaction direction ratios
+### Q2: Time-Based Earning Modifiers
+**Decision**: Fixed amounts (current)
+- Simple, predictable earning
+- Community-specific differences handled by separate budget pools (post-MVP)
+- Adaptive earning adds complexity without clear benefit
 
-The spec says "dyads are conversations" — but not all conversations are symmetric.
-
-### Q2: Time-Based Earning Modifiers — Fixed or Adaptive?
-Earning amounts (1.0 for message, 0.5 per reaction) are fixed. But community activity levels vary:
-- A very active server might generate 10x the earnings of a quiet one
-- Late-night activity might be more significant than peak-hours chatter
-
-Should earning be:
-- **Fixed amounts** (current) — simple, predictable
-- **Normalized to activity** — earning scaled by inverse of recent activity level
-- **Time-weighted** — activity during quiet periods earns more
-
-Adaptive earning would make salience more comparable across contexts but adds complexity.
-
-### Q3: Earning on Edits — New Salience or Update?
-If Alice edits a message, the edit is seen on next poll (if tracking edited_at). Should this:
-- **Earn as new activity** — edit = engagement = salience
-- **Not earn** — edit is refinement, not new signal
-- **Earn differently** — smaller earn for edit than new message
-
-Edits might indicate care (thoughtful revision) or mistakes (typo fixes). Treating them uniformly might over/under-weight.
+### Q3: Earning on Edits
+**Decision**: Not earn (refinement, not signal)
+- Edits don't generate additional salience
+- Message already earned when created
+- Typo fixes and refinements don't boost attention
+- `edited_at` tracking for content updates only
 
 ---
 
