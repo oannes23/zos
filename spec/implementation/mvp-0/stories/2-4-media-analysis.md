@@ -1,8 +1,9 @@
 # Story 2.4: Media Analysis
 
 **Epic**: Observation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
+**Completed**: 2026-01-24
 
 ## Goal
 
@@ -10,12 +11,12 @@ Analyze images attached to messages using a vision model, producing phenomenolog
 
 ## Acceptance Criteria
 
-- [ ] Images detected in message attachments
-- [ ] Vision model called for each image
-- [ ] Description stored in `media_analysis` table
-- [ ] Rate limiting prevents API exhaustion
-- [ ] Failures logged but don't block message storage
-- [ ] Uses `vision` model profile from config
+- [x] Images detected in message attachments
+- [x] Vision model called for each image
+- [x] Description stored in `media_analysis` table
+- [x] Rate limiting prevents API exhaustion
+- [x] Failures logged but don't block message storage
+- [x] Uses `vision` model profile from config
 
 ## Technical Notes
 
@@ -238,10 +239,10 @@ observation:
 
 ## Definition of Done
 
-- [ ] Images analyzed with vision model
-- [ ] Descriptions are phenomenological, not clinical
-- [ ] Rate limiting prevents API exhaustion
-- [ ] Failures logged, not fatal
+- [x] Images analyzed with vision model
+- [x] Descriptions are phenomenological, not clinical
+- [x] Rate limiting prevents API exhaustion
+- [x] Failures logged, not fatal
 
 ---
 

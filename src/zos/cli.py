@@ -1,12 +1,15 @@
 """Command-line interface for Zos."""
 
+import asyncio
 from pathlib import Path
 
 import click
 
 from zos import __version__
 from zos.config import Config
-from zos.logging import setup_logging
+from zos.logging import get_logger, setup_logging
+
+log = get_logger("cli")
 
 
 @click.group()
@@ -58,6 +61,40 @@ def cli(
 def version() -> None:
     """Print version information."""
     click.echo(f"zos {__version__}")
+
+
+@cli.command()
+@click.pass_context
+def observe(ctx: click.Context) -> None:
+    """Start the Discord observation bot.
+
+    Connects to Discord and begins observing community conversations.
+    This is the "eyes and ears" of Zos - attentive presence in communities.
+
+    Requires DISCORD_TOKEN environment variable to be set.
+    Use Ctrl+C or send SIGTERM for graceful shutdown.
+    """
+    from zos.observation import run_bot
+
+    config = ctx.obj["config"]
+
+    if not config.discord_token:
+        click.echo("Error: DISCORD_TOKEN environment variable not set", err=True)
+        click.echo("Set DISCORD_TOKEN to your bot token to connect to Discord.", err=True)
+        raise SystemExit(1)
+
+    log.info("observe_command_invoked")
+
+    try:
+        asyncio.run(run_bot(config))
+    except KeyboardInterrupt:
+        # This shouldn't normally be reached since we handle SIGINT,
+        # but it's a safety net for cases where signal handling fails
+        log.info("shutdown_requested_keyboard")
+    except Exception as e:
+        log.error("observe_failed", error=str(e))
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
 
 
 @cli.group()

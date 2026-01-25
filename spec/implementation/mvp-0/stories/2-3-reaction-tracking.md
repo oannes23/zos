@@ -1,8 +1,9 @@
 # Story 2.3: Reaction Tracking
 
 **Epic**: Observation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
+**Completed**: 2026-01-24
 
 ## Goal
 
@@ -10,12 +11,12 @@ Track reactions on messages, storing reactor/emoji/message associations for sali
 
 ## Acceptance Criteria
 
-- [ ] Reactions stored with message_id, user_id, emoji
-- [ ] Custom emoji distinguished from Unicode
-- [ ] Only opted-in users' reactions tracked individually
-- [ ] Reactions from `<chat>` users not individually tracked
-- [ ] Reaction removal handled (delete from DB)
-- [ ] Aggregate reaction counts updated on messages
+- [x] Reactions stored with message_id, user_id, emoji
+- [x] Custom emoji distinguished from Unicode
+- [x] Only opted-in users' reactions tracked individually
+- [x] Reactions from `<chat>` users not individually tracked
+- [x] Reaction removal handled (soft delete with removed_at)
+- [x] Aggregate reaction counts updated on messages
 
 ## Technical Notes
 
@@ -203,10 +204,10 @@ class Reaction(BaseModel):
 
 ## Definition of Done
 
-- [ ] Reactions appear in database
-- [ ] Custom emoji distinguishable
-- [ ] Removal synced on re-poll
-- [ ] Aggregates updated on messages
+- [x] Reactions appear in database
+- [x] Custom emoji distinguishable
+- [x] Removal synced on re-poll (soft delete with removed_at)
+- [x] Aggregates updated on messages
 
 ---
 

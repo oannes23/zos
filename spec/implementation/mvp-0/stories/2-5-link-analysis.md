@@ -1,7 +1,7 @@
 # Story 2.5: Link Analysis
 
 **Epic**: Observation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,13 +10,13 @@ Fetch and summarize linked content, including YouTube video transcripts for vide
 
 ## Acceptance Criteria
 
-- [ ] URLs extracted from message content
-- [ ] Page content fetched (respecting robots.txt)
-- [ ] Content summarized with LLM
-- [ ] YouTube videos get transcript extraction
-- [ ] Videos > 30 min get "TLDW" note
-- [ ] Rate limiting for fetches
-- [ ] Failures logged but don't block
+- [x] URLs extracted from message content
+- [x] Page content fetched (respecting robots.txt)
+- [x] Content summarized with LLM
+- [x] YouTube videos get transcript extraction
+- [x] Videos > 30 min get "TLDW" note
+- [x] Rate limiting for fetches
+- [x] Failures logged but don't block
 
 ## Technical Notes
 
@@ -295,10 +295,10 @@ Add to pyproject.toml:
 
 ## Definition of Done
 
-- [ ] Links extracted and summarized
-- [ ] YouTube transcripts fetched for short videos
-- [ ] Long videos get TLDW note
-- [ ] Rate limiting prevents abuse
+- [x] Links extracted and summarized
+- [x] YouTube transcripts fetched for short videos
+- [x] Long videos get TLDW note
+- [x] Rate limiting prevents abuse
 
 ---
 

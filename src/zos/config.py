@@ -163,6 +163,7 @@ class ObservationConfig(BaseModel):
     """Observation configuration."""
 
     vision_enabled: bool = True
+    vision_rate_limit_per_minute: int = 10
     link_fetch_enabled: bool = True
     youtube_transcript_enabled: bool = True
     video_duration_threshold_minutes: int = 30
@@ -175,10 +176,18 @@ class SchedulerConfig(BaseModel):
     reflection_cron: str = "0 13 * * *"
 
 
+class OperatorsConfig(BaseModel):
+    """Operators configuration for command access control."""
+
+    user_ids: list[str] = Field(default_factory=list)
+    role_id: str | None = None
+
+
 class DiscordConfig(BaseModel):
     """Discord configuration."""
 
     polling_interval_seconds: int = 60
+    operators: OperatorsConfig = Field(default_factory=OperatorsConfig)
 
 
 class DatabaseConfig(BaseModel):

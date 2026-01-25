@@ -1,7 +1,7 @@
 # Story 2.1: Discord Connection
 
 **Epic**: Observation
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Establish a discord.py bot that connects to Discord, maintains gateway presence,
 
 ## Acceptance Criteria
 
-- [ ] Bot connects to Discord gateway successfully
-- [ ] Bot logs "ready" with server/channel counts
-- [ ] Bot handles reconnection gracefully
-- [ ] Background task scaffold runs on interval
-- [ ] `zos observe` CLI command starts the bot
-- [ ] Graceful shutdown on SIGINT/SIGTERM
+- [x] Bot connects to Discord gateway successfully
+- [x] Bot logs "ready" with server/channel counts
+- [x] Bot handles reconnection gracefully
+- [x] Background task scaffold runs on interval
+- [x] `zos observe` CLI command starts the bot
+- [x] Graceful shutdown on SIGINT/SIGTERM
 
 ## Technical Notes
 
@@ -158,10 +158,10 @@ discord:
 
 ## Definition of Done
 
-- [ ] `zos observe` connects to Discord
-- [ ] Logs show ready state with counts
-- [ ] Ctrl+C shuts down cleanly
-- [ ] Reconnection works after brief disconnect
+- [x] `zos observe` connects to Discord
+- [x] Logs show ready state with counts
+- [x] Ctrl+C shuts down cleanly
+- [x] Reconnection works after brief disconnect (handled by discord.py automatically)
 
 ---
 

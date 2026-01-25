@@ -9,6 +9,11 @@ log_json: true
 # Discord settings
 discord:
   polling_interval_seconds: 60
+  # Operators have access to slash commands like /status, /silence, /reflect-now
+  operators:
+    user_ids:
+      # - "123456789012345678"  # Discord user IDs
+    role_id: null  # Optional: Discord role ID that grants operator access
 
 # Database settings
 database:
