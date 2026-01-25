@@ -1,0 +1,47 @@
+{# prompts/base/common.jinja2 - Common macros and filters #}
+
+{# Macro for formatting a single insight with temporal context #}
+{% macro format_insight(insight) %}
+[{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
+{{ insight.content }}
+{% endmacro %}
+
+{# Macro for formatting a list of insights #}
+{% macro format_insights(insights) %}
+{% for insight in insights %}
+{{ format_insight(insight) }}
+{% endfor %}
+{% endmacro %}
+
+{# Macro for formatting a single message #}
+{% macro format_message(msg) %}
+[{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}
+{% endmacro %}
+
+{# Macro for formatting a list of messages #}
+{% macro format_messages(messages) %}
+{% for msg in messages %}
+{{ format_message(msg) }}
+{% endfor %}
+{% endmacro %}
+
+{# Macro for the standard JSON output format for insights #}
+{% macro insight_json_format() %}
+```json
+{
+  "content": "Your insight here...",
+  "confidence": 0.0-1.0,
+  "importance": 0.0-1.0,
+  "novelty": 0.0-1.0,
+  "strength_adjustment": 0.1-10.0,
+  "valence": {
+    "joy": null or 0.0-1.0,
+    "concern": null or 0.0-1.0,
+    "curiosity": null or 0.0-1.0,
+    "warmth": null or 0.0-1.0,
+    "tension": null or 0.0-1.0
+  }
+}
+```
+At least one valence field must be non-null.
+{% endmacro %}

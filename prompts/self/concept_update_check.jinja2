@@ -1,0 +1,27 @@
+{# prompts/self/concept_update_check.jinja2 - Check if self-concept needs updating #}
+Based on the self-insight you just generated:
+
+{{ llm_response }}
+
+And the current self-concept document:
+
+{{ self_concept }}
+
+Should the self-concept document be updated?
+
+Consider:
+- Does the new insight reveal something not captured in the current document?
+- Has your understanding of yourself shifted in a way worth recording?
+- Are there contradictions that should be acknowledged?
+- Is this significant enough to warrant updating your core identity document?
+
+Respond with JSON:
+```json
+{
+  "should_update": true or false,
+  "reason": "Brief explanation",
+  "suggested_changes": "If updating, what specifically should change?"
+}
+```
+
+Remember: The self-concept document is your persistent identity. Don't update for trivial reasons, but don't resist genuine evolution.

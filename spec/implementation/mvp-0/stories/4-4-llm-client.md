@@ -1,7 +1,7 @@
 # Story 4.4: LLM Client
 
 **Epic**: Reflection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,13 +10,16 @@ Implement a thin LLM client wrapper with provider adapters and model profile res
 
 ## Acceptance Criteria
 
-- [ ] Model profiles resolve to provider/model
-- [ ] Anthropic adapter works
-- [ ] OpenAI adapter works (optional for MVP 0)
-- [ ] Usage tracking (input/output tokens)
-- [ ] Rate limiting per provider
-- [ ] Errors produce clear messages
-- [ ] Vision calls supported
+- [x] Model profiles resolve to provider/model
+- [x] Anthropic adapter works
+- [x] OpenAI adapter works (optional for MVP 0)
+- [x] Usage tracking (input/output tokens)
+- [x] Rate limiting per provider
+- [x] Errors produce clear messages
+- [x] Vision calls supported
+- [x] LLM call auditing to database (when layer_run_id provided)
+- [x] Latency tracking for all LLM calls
+- [x] Cost estimation for all LLM calls
 
 ## Technical Notes
 
@@ -315,10 +318,13 @@ def estimate_cost(
 
 ## Definition of Done
 
-- [ ] Profiles resolve correctly
-- [ ] Anthropic adapter works
-- [ ] Token tracking accurate
-- [ ] Rate limiting works
+- [x] Profiles resolve correctly
+- [x] Anthropic adapter works
+- [x] Token tracking accurate
+- [x] Rate limiting works
+- [x] LLM calls audited to llm_calls table when layer_run_id provided
+- [x] Latency (ms) tracked for all audited calls
+- [x] Cost estimation uses existing estimate_cost() function
 
 ---
 

@@ -4,6 +4,7 @@ Covers:
 - Rate limiter functionality
 - Model profile resolution
 - Vision analysis method signature
+- LLM call auditing
 """
 
 from __future__ import annotations
@@ -13,9 +14,12 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy import select
 
 from zos.config import Config, ModelProfile, ModelsConfig
+from zos.database import create_tables, get_engine, layer_runs, llm_calls, metadata
 from zos.llm import CompletionResult, ModelClient, RateLimiter, Usage, estimate_cost
+from zos.models import LLMCallType, LayerRunStatus, generate_id
 
 
 class TestUsage:
@@ -244,3 +248,463 @@ class TestCompletionResult:
         assert result.usage.total_tokens == 150
         assert result.model == "claude-3-5-haiku"
         assert result.provider == "anthropic"
+
+
+class TestModelClientWithEngine:
+    """Tests for ModelClient with database engine for auditing."""
+
+    def test_initialization_with_engine(self, tmp_path) -> None:
+        """ModelClient initializes with engine for auditing."""
+        config = Config(data_dir=tmp_path)
+        engine = get_engine(config)
+        create_tables(engine)
+        client = ModelClient(config, engine=engine)
+
+        assert client.config is config
+        assert client.engine is engine
+        assert client._anthropic is None
+
+    def test_initialization_without_engine(self) -> None:
+        """ModelClient works without engine (no auditing)."""
+        config = Config()
+        client = ModelClient(config)
+
+        assert client.config is config
+        assert client.engine is None
+
+
+class TestLLMCallAuditing:
+    """Tests for LLM call auditing functionality."""
+
+    @pytest.fixture
+    def db_engine(self, tmp_path):
+        """Create a test database engine."""
+        config = Config(data_dir=tmp_path)
+        engine = get_engine(config)
+        create_tables(engine)
+        return engine
+
+    @pytest.fixture
+    def config_with_models(self):
+        """Create a config with model profiles."""
+        config = Config()
+        config.models = ModelsConfig(
+            profiles={
+                "simple": ModelProfile(
+                    provider="anthropic", model="claude-3-5-haiku-20241022"
+                ),
+                "vision": ModelProfile(
+                    provider="anthropic", model="claude-3-5-haiku-20241022"
+                ),
+            },
+            providers={"anthropic": {"api_key_env": "ANTHROPIC_API_KEY"}},
+        )
+        return config
+
+    def _create_layer_run(self, engine, layer_run_id: str) -> None:
+        """Create a layer_run record for testing foreign key constraints."""
+        with engine.connect() as conn:
+            conn.execute(
+                layer_runs.insert().values(
+                    id=layer_run_id,
+                    layer_name="test-layer",
+                    layer_hash="abc123",
+                    started_at=datetime.now(timezone.utc),
+                    status="success",
+                    targets_matched=0,
+                    targets_processed=0,
+                    targets_skipped=0,
+                    insights_created=0,
+                )
+            )
+            conn.commit()
+
+    @pytest.mark.asyncio
+    async def test_complete_records_llm_call_when_layer_run_id_provided(
+        self, db_engine, config_with_models
+    ) -> None:
+        """complete() records LLM call to database when layer_run_id is provided."""
+        # Create a layer_run to satisfy foreign key constraint
+        layer_run_id = "test-layer-run-123"
+        self._create_layer_run(db_engine, layer_run_id)
+
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Hello, world!")]
+                mock_response.usage.input_tokens = 100
+                mock_response.usage.output_tokens = 50
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                result = await client.complete(
+                    prompt="Say hello",
+                    model_profile="simple",
+                    layer_run_id=layer_run_id,
+                    topic_key="user:456",
+                    call_type=LLMCallType.REFLECTION,
+                )
+
+        # Verify result
+        assert result.text == "Hello, world!"
+        assert result.usage.input_tokens == 100
+        assert result.usage.output_tokens == 50
+
+        # Verify LLM call was recorded
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 1
+            row = rows[0]
+            assert row.layer_run_id == layer_run_id
+            assert row.topic_key == "user:456"
+            assert row.call_type == "reflection"
+            assert row.model_profile == "simple"
+            assert row.model_provider == "anthropic"
+            assert row.model_name == "claude-3-5-haiku-20241022"
+            assert row.prompt == "Say hello"
+            assert row.response == "Hello, world!"
+            assert row.tokens_input == 100
+            assert row.tokens_output == 50
+            assert row.tokens_total == 150
+            assert row.success is True
+            assert row.error_message is None
+            assert row.latency_ms is not None
+            assert row.latency_ms >= 0
+            assert row.estimated_cost_usd is not None
+            assert row.estimated_cost_usd > 0
+
+    @pytest.mark.asyncio
+    async def test_complete_no_recording_without_layer_run_id(
+        self, db_engine, config_with_models
+    ) -> None:
+        """complete() does not record LLM call when layer_run_id is None."""
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Hello!")]
+                mock_response.usage.input_tokens = 50
+                mock_response.usage.output_tokens = 25
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                await client.complete(
+                    prompt="Say hello",
+                    model_profile="simple",
+                    # No layer_run_id provided
+                )
+
+        # Verify no LLM call was recorded
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 0
+
+    @pytest.mark.asyncio
+    async def test_complete_no_recording_without_engine(
+        self, config_with_models
+    ) -> None:
+        """complete() does not record LLM call when engine is None."""
+        client = ModelClient(config_with_models)  # No engine
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Hello!")]
+                mock_response.usage.input_tokens = 50
+                mock_response.usage.output_tokens = 25
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                # Should not raise even with layer_run_id
+                result = await client.complete(
+                    prompt="Say hello",
+                    model_profile="simple",
+                    layer_run_id="test-layer-run-123",
+                )
+
+        assert result.text == "Hello!"
+
+    @pytest.mark.asyncio
+    async def test_analyze_image_records_llm_call(
+        self, db_engine, config_with_models
+    ) -> None:
+        """analyze_image() records LLM call to database when layer_run_id is provided."""
+        # Create a layer_run to satisfy foreign key constraint
+        layer_run_id = "vision-layer-run-789"
+        self._create_layer_run(db_engine, layer_run_id)
+
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="A beautiful sunset")]
+                mock_response.usage.input_tokens = 200
+                mock_response.usage.output_tokens = 30
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                result = await client.analyze_image(
+                    image_base64="abc123base64data",
+                    media_type="image/png",
+                    prompt="Describe this image",
+                    model_profile="vision",
+                    layer_run_id=layer_run_id,
+                    topic_key="server:123:user:456",
+                )
+
+        # Verify result
+        assert result.text == "A beautiful sunset"
+
+        # Verify LLM call was recorded with vision-specific data
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 1
+            row = rows[0]
+            assert row.layer_run_id == layer_run_id
+            assert row.topic_key == "server:123:user:456"
+            assert row.call_type == "vision"
+            assert row.model_profile == "vision"
+            assert row.model_provider == "anthropic"
+            # Prompt includes image context indicator
+            assert "[Image: image/png]" in row.prompt
+            assert "Describe this image" in row.prompt
+            assert row.response == "A beautiful sunset"
+            assert row.tokens_input == 200
+            assert row.tokens_output == 30
+
+    @pytest.mark.asyncio
+    async def test_complete_with_custom_call_type(
+        self, db_engine, config_with_models
+    ) -> None:
+        """complete() records custom call_type correctly."""
+        # Create a layer_run to satisfy foreign key constraint
+        layer_run_id = "synthesis-run-001"
+        self._create_layer_run(db_engine, layer_run_id)
+
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Synthesized insight")]
+                mock_response.usage.input_tokens = 500
+                mock_response.usage.output_tokens = 100
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                await client.complete(
+                    prompt="Synthesize these insights",
+                    model_profile="simple",
+                    layer_run_id=layer_run_id,
+                    call_type=LLMCallType.SYNTHESIS,
+                )
+
+        # Verify call type was recorded
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 1
+            assert rows[0].call_type == "synthesis"
+
+    @pytest.mark.asyncio
+    async def test_complete_default_call_type_is_other(
+        self, db_engine, config_with_models
+    ) -> None:
+        """complete() uses OTHER as default call_type."""
+        # Create a layer_run to satisfy foreign key constraint
+        layer_run_id = "test-run"
+        self._create_layer_run(db_engine, layer_run_id)
+
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Response")]
+                mock_response.usage.input_tokens = 50
+                mock_response.usage.output_tokens = 20
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                await client.complete(
+                    prompt="Test",
+                    model_profile="simple",
+                    layer_run_id=layer_run_id,
+                    # No call_type specified
+                )
+
+        # Verify default call type
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 1
+            assert rows[0].call_type == "other"
+
+    @pytest.mark.asyncio
+    async def test_analyze_image_default_call_type_is_vision(
+        self, db_engine, config_with_models
+    ) -> None:
+        """analyze_image() uses VISION as default call_type."""
+        # Create a layer_run to satisfy foreign key constraint
+        layer_run_id = "vision-run"
+        self._create_layer_run(db_engine, layer_run_id)
+
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Image description")]
+                mock_response.usage.input_tokens = 150
+                mock_response.usage.output_tokens = 40
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                await client.analyze_image(
+                    image_base64="base64data",
+                    media_type="image/jpeg",
+                    prompt="Describe",
+                    model_profile="vision",
+                    layer_run_id=layer_run_id,
+                    # No call_type specified - should default to VISION
+                )
+
+        # Verify default call type for vision
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 1
+            assert rows[0].call_type == "vision"
+
+    @pytest.mark.asyncio
+    async def test_latency_tracking(
+        self, db_engine, config_with_models
+    ) -> None:
+        """LLM call latency is tracked in milliseconds."""
+        # Create a layer_run to satisfy foreign key constraint
+        layer_run_id = "latency-test-run"
+        self._create_layer_run(db_engine, layer_run_id)
+
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client with a small delay
+        async def delayed_create(*args, **kwargs):
+            await asyncio.sleep(0.05)  # 50ms delay
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(text="Response")]
+            mock_response.usage.input_tokens = 50
+            mock_response.usage.output_tokens = 20
+            return mock_response
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_anthropic.messages.create = delayed_create
+                mock_get_anthropic.return_value = mock_anthropic
+
+                await client.complete(
+                    prompt="Test",
+                    model_profile="simple",
+                    layer_run_id=layer_run_id,
+                )
+
+        # Verify latency was recorded (should be at least 50ms)
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 1
+            assert rows[0].latency_ms >= 50
+
+    @pytest.mark.asyncio
+    async def test_cost_estimation_recorded(
+        self, db_engine, config_with_models
+    ) -> None:
+        """LLM call cost estimation is recorded."""
+        # Create a layer_run to satisfy foreign key constraint
+        layer_run_id = "cost-test-run"
+        self._create_layer_run(db_engine, layer_run_id)
+
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Response")]
+                # Use 1M tokens each for easy calculation
+                mock_response.usage.input_tokens = 1_000_000
+                mock_response.usage.output_tokens = 1_000_000
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                await client.complete(
+                    prompt="Test",
+                    model_profile="simple",
+                    layer_run_id=layer_run_id,
+                )
+
+        # Verify cost was calculated correctly (Haiku: $0.25/M + $1.25/M = $1.50)
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 1
+            assert rows[0].estimated_cost_usd == pytest.approx(1.50, rel=0.01)

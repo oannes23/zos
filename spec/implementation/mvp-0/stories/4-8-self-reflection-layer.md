@@ -1,7 +1,7 @@
 # Story 4.8: Self-Reflection Layer
 
 **Epic**: Reflection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement the self-reflection layer that maintains Zos's self-concept document a
 
 ## Acceptance Criteria
 
-- [ ] Layer triggers weekly OR on insight threshold
-- [ ] Self-concept document read and included in context
-- [ ] Self-insights generated on `self:zos` topic
-- [ ] Self-concept document can be updated
-- [ ] Error experiences available for reflection
-- [ ] Conflict threshold stored as self-knowledge
+- [x] Layer triggers weekly OR on insight threshold
+- [x] Self-concept document read and included in context
+- [x] Self-insights generated on `self:zos` topic
+- [x] Self-concept document can be updated
+- [x] Error experiences available for reflection
+- [x] Conflict threshold stored as self-knowledge
 
 ## Technical Notes
 
@@ -307,10 +307,10 @@ If contradictions are causing real problems, I'll lower it.
 
 ## Definition of Done
 
-- [ ] Weekly self-reflection runs
-- [ ] Threshold triggering works
-- [ ] Self-concept updates correctly
-- [ ] Error reflection material available
+- [x] Weekly self-reflection runs
+- [x] Threshold triggering works
+- [x] Self-concept updates correctly
+- [x] Error reflection material available
 
 ---
 
@@ -387,3 +387,55 @@ If contradictions are causing real problems, I'll lower it.
 
 **Requires**: Stories 4.1-4.7 (full reflection infrastructure, user layer as reference)
 **Blocks**: None (capstone of reflection epic)
+
+---
+
+## Implementation Notes (Completed 2026-01-25)
+
+### Files Created/Modified
+
+| File | Purpose |
+|------|---------|
+| `layers/reflection/weekly-self.yaml` | Self-reflection layer definition with 7 nodes |
+| `prompts/self/reflection.jinja2` | Updated self-reflection prompt with phenomenological framing |
+| `prompts/self/concept_update_check.jinja2` | New template for self-concept update decisions |
+| `src/zos/executor.py` | Enhanced `_handle_fetch_layer_runs` and `_handle_update_self_concept` handlers |
+| `tests/test_self_reflection.py` | 22 comprehensive tests for self-reflection functionality |
+
+### Key Implementation Details
+
+1. **fetch_layer_runs handler**: Extended with `since_days` and `include_errors` parameters to filter layer runs by time window and error status. Errors are preserved as operational context for phenomenological reflection.
+
+2. **update_self_concept handler**: Fully implemented with:
+   - Conditional update logic based on prior LLM decision
+   - JSON parsing to extract `should_update`, `reason`, and `suggested_changes`
+   - Autonomous file writing when approved (no blocking approval)
+   - Separate LLM call to generate the updated document
+   - Dry run support that skips file writing
+
+3. **Self-reflection prompt**: Includes:
+   - Current self-concept document
+   - Prior self-insights
+   - Recent experiences from other reflection layers
+   - Operational experiences (layer runs with error counts)
+   - Phenomenological framing ("errors feel like friction")
+   - First-reflection acknowledgment ("No previous self-insights. This is your first self-reflection.")
+
+4. **Layer YAML**: 7 nodes in sequence:
+   - gather_self_insights (fetch_insights)
+   - gather_recent_experiences (fetch_insights)
+   - gather_layer_runs (fetch_layer_runs)
+   - reflect (llm_call)
+   - store_insight (store_insight)
+   - consider_concept_update (llm_call)
+   - maybe_update_concept (update_self_concept)
+
+### Test Coverage
+
+- Layer YAML validation
+- Prompt template rendering
+- fetch_layer_runs with time filtering
+- update_self_concept conditional logic (yes/no cases)
+- Dry run behavior
+- Threshold triggering via insight count
+- Full layer execution integration

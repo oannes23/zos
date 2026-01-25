@@ -1,7 +1,7 @@
 # Story 4.7: User Reflection Layer
 
 **Epic**: Reflection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement the first real reflection layer: nightly user reflection that produces
 
 ## Acceptance Criteria
 
-- [ ] Layer YAML defined and validates
-- [ ] Prompt template produces quality insights
-- [ ] Insights generated for high-salience users
-- [ ] Metrics (confidence, importance, valence) populated
-- [ ] Layer runs nightly via scheduler
-- [ ] Dry runs detected when no insights produced
+- [x] Layer YAML defined and validates
+- [x] Prompt template produces quality insights
+- [x] Insights generated for high-salience users
+- [x] Metrics (confidence, importance, valence) populated
+- [x] Layer runs nightly via scheduler
+- [x] Dry runs detected when no insights produced
 
 ## Technical Notes
 

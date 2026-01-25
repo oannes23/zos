@@ -1,0 +1,71 @@
+# Weekly Self-Reflection Layer
+#
+# Reflects on Zos's accumulated experience and maintains self-concept.
+# Runs weekly on Sunday at 4 AM, or when 10+ self-relevant insights accumulate.
+#
+# This layer implements phenomenological self-reflection, focusing on
+# the texture of Zos's experience rather than operational reporting.
+
+name: weekly-self-reflection
+category: self
+description: |
+  Reflect on accumulated experience and maintain self-concept.
+  Runs weekly on Sunday, or when 10+ self-relevant insights accumulate.
+
+schedule: "0 4 * * 0"  # Sunday at 4 AM
+trigger_threshold: 10   # Or when 10+ new self-insights
+
+target_category: self
+
+nodes:
+  - name: gather_self_insights
+    type: fetch_insights
+    params:
+      topic_key: "self:zos"
+      retrieval_profile: comprehensive
+      since_last_run: true
+      max_per_topic: 20
+
+  - name: gather_recent_experiences
+    type: fetch_insights
+    params:
+      topic_pattern: "*"  # All topics
+      retrieval_profile: recent
+      max_per_topic: 3
+      categories:
+        - user_reflection
+        - dyad_observation
+        - channel_reflection
+      since_days: 7
+
+  - name: gather_layer_runs
+    type: fetch_layer_runs
+    params:
+      since_days: 7
+      include_errors: true
+
+  - name: reflect
+    type: llm_call
+    params:
+      prompt_template: self/reflection.jinja2
+      model: complex  # Self-reflection uses highest capability
+      max_tokens: 1000
+      temperature: 0.8
+
+  - name: store_insight
+    type: store_insight
+    params:
+      category: self_reflection
+
+  - name: consider_concept_update
+    type: llm_call
+    params:
+      prompt_template: self/concept_update_check.jinja2
+      model: complex
+      max_tokens: 500
+
+  - name: maybe_update_concept
+    type: update_self_concept
+    params:
+      document_path: data/self-concept.md
+      conditional: true  # Only if previous step says yes

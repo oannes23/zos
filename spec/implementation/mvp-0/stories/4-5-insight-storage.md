@@ -1,7 +1,7 @@
 # Story 4.5: Insight Storage
 
 **Epic**: Reflection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement insight storage and retrieval with configurable profiles and temporal 
 
 ## Acceptance Criteria
 
-- [ ] Insights stored with all fields from schema
-- [ ] Retrieval profiles (recent, balanced, deep, comprehensive)
-- [ ] Retrieval returns formatted insights with temporal markers
-- [ ] Quarantined insights excluded from retrieval
-- [ ] Conflict tracking fields populated
-- [ ] Global topic refs computed at query time
+- [x] Insights stored with all fields from schema
+- [x] Retrieval profiles (recent, balanced, deep, comprehensive)
+- [x] Retrieval returns formatted insights with temporal markers
+- [x] Quarantined insights excluded from retrieval
+- [x] Conflict tracking fields populated
+- [x] Global topic refs computed at query time
 
 ## Technical Notes
 
@@ -312,10 +312,10 @@ async def get_insights_by_category(
 
 ## Definition of Done
 
-- [ ] All retrieval profiles work
-- [ ] Temporal formatting accurate
-- [ ] Quarantine respected
-- [ ] Integrated with executor
+- [x] All retrieval profiles work
+- [x] Temporal formatting accurate
+- [x] Quarantine respected
+- [ ] Integrated with executor (pending Story 4.3)
 
 ---
 

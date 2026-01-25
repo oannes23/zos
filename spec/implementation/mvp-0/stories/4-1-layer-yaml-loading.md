@@ -1,7 +1,7 @@
 # Story 4.1: Layer YAML Loading
 
 **Epic**: Reflection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement loading and validation of layer YAML definitions using Pydantic models
 
 ## Acceptance Criteria
 
-- [ ] Layer YAML files load from `layers/` directory
-- [ ] Pydantic models validate layer structure
-- [ ] Invalid YAML produces clear error messages
-- [ ] Content hash computed for versioning
-- [ ] Layers discoverable by name
-- [ ] Hot reload supported (re-read on demand)
+- [x] Layer YAML files load from `layers/` directory
+- [x] Pydantic models validate layer structure
+- [x] Invalid YAML produces clear error messages
+- [x] Content hash computed for versioning
+- [x] Layers discoverable by name
+- [x] Hot reload supported (re-read on demand)
 
 ## Technical Notes
 
@@ -299,12 +299,34 @@ nodes:
 
 ## Definition of Done
 
-- [ ] Layers load from directory
-- [ ] Validation catches errors with clear messages
-- [ ] CLI commands work
-- [ ] Content hash computed
+- [x] Layers load from directory
+- [x] Validation catches errors with clear messages
+- [x] CLI commands work
+- [x] Content hash computed
 
 ---
 
 **Requires**: Epic 1 complete
 **Blocks**: Stories 4.2-4.8
+
+---
+
+## Implementation Notes
+
+Implemented 2026-01-25:
+
+### Files Created/Modified
+
+| File | Purpose |
+|------|---------|
+| `src/zos/layers.py` | NodeType enum, Node model, LayerCategory enum, Layer model, LayerLoader class, format_validation_error function |
+| `src/zos/cli.py` | Added `zos layer list` and `zos layer validate` commands |
+| `layers/reflection/nightly-user.yaml` | Example user reflection layer |
+| `tests/test_layers.py` | 44 tests covering all acceptance criteria |
+
+### Additional Details
+
+- Added `fetch_layer_runs` node type for self-reflection accessing run history
+- Content hash uses SHA-256 truncated to first 16 hex characters
+- LayerLoader includes `list_layers()` method for cached layer names
+- CLI provides helpful error messages including available layers on not-found

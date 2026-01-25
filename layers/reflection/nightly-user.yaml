@@ -1,0 +1,44 @@
+# Nightly User Reflection Layer
+#
+# Reflects on each user's recent activity to build understanding.
+# Runs nightly at 3 AM, targeting users with highest salience.
+#
+# This layer implements phenomenological reflection on users, focusing on
+# the "felt sense" of who they are rather than clinical analysis.
+
+name: nightly-user-reflection
+category: user
+description: |
+  Reflect on each user's recent activity to build understanding.
+  Runs nightly at 3 AM, targeting users with highest salience.
+
+schedule: "0 3 * * *"
+target_category: user
+target_filter: "salience > 30"
+max_targets: 15
+
+nodes:
+  - name: fetch_recent_messages
+    type: fetch_messages
+    params:
+      lookback_hours: 24
+      limit_per_channel: 100
+
+  - name: fetch_prior_understanding
+    type: fetch_insights
+    params:
+      retrieval_profile: recent
+      max_per_topic: 5
+
+  - name: reflect
+    type: llm_call
+    params:
+      prompt_template: user/reflection.jinja2
+      model: reflection
+      max_tokens: 600
+      temperature: 0.7
+
+  - name: store
+    type: store_insight
+    params:
+      category: user_reflection

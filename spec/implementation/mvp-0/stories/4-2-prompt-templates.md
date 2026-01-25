@@ -1,7 +1,7 @@
 # Story 4.2: Prompt Template System
 
 **Epic**: Reflection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement Jinja2 prompt template loading with standard context injection, includ
 
 ## Acceptance Criteria
 
-- [ ] Templates load from `prompts/` directory
-- [ ] Jinja2 renders with context variables
-- [ ] `<chat>` guidance auto-injected into all templates
-- [ ] Self-concept document accessible in templates
-- [ ] Temporal formatting helpers available
-- [ ] Missing template produces clear error
+- [x] Templates load from `prompts/` directory
+- [x] Jinja2 renders with context variables
+- [x] `<chat>` guidance auto-injected into all templates
+- [x] Self-concept document accessible in templates
+- [x] Temporal formatting helpers available
+- [x] Missing template produces clear error
 
 ## Technical Notes
 

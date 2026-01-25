@@ -5,23 +5,27 @@ Provides a thin wrapper around LLM providers (primarily Anthropic) with:
 - Rate limiting per provider
 - Token usage tracking
 - Cost estimation
+- LLM call auditing (when layer_run_id is provided)
 
-This is a minimal implementation for MVP 0, supporting text completion
-and basic rate limiting. Full provider abstraction comes in Story 4.4.
+This implementation supports text completion, vision analysis, and optional
+database auditing for all LLM calls.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from zos.logging import get_logger
+from zos.models import LLMCall, LLMCallType
 
 if TYPE_CHECKING:
     from anthropic import AsyncAnthropic
+    from sqlalchemy.engine import Engine
 
     from zos.config import Config
 
@@ -140,15 +144,20 @@ class ModelClient:
 
     The client uses lazy initialization - provider clients are only
     created when first needed.
+
+    When an engine is provided, LLM calls can be audited to the database
+    by passing layer_run_id to complete() or analyze_image().
     """
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, engine: Engine | None = None) -> None:
         """Initialize the model client.
 
         Args:
             config: Application configuration with model profiles.
+            engine: Optional SQLAlchemy engine for LLM call auditing.
         """
         self.config = config
+        self.engine = engine
         self._anthropic: AsyncAnthropic | None = None
         self._rate_limiters: dict[str, RateLimiter] = {}
 
@@ -207,6 +216,10 @@ class ModelClient:
         model_profile: str = "simple",
         max_tokens: int = 500,
         temperature: float = 0.7,
+        *,
+        layer_run_id: str | None = None,
+        topic_key: str | None = None,
+        call_type: LLMCallType = LLMCallType.OTHER,
     ) -> CompletionResult:
         """Complete a text prompt.
 
@@ -215,6 +228,9 @@ class ModelClient:
             model_profile: Name of the model profile to use.
             max_tokens: Maximum tokens in the response.
             temperature: Sampling temperature (0-1).
+            layer_run_id: Optional layer run ID for auditing (enables DB recording).
+            topic_key: Optional topic key for auditing context.
+            call_type: Type of LLM call for categorization.
 
         Returns:
             CompletionResult with text, usage, and metadata.
@@ -236,10 +252,35 @@ class ModelClient:
         limiter = self._get_rate_limiter(provider)
         await limiter.acquire()
 
+        # Track timing for latency
+        start_time = time.monotonic()
+
         if provider == "anthropic":
-            return await self._anthropic_complete(prompt, model, max_tokens, temperature)
+            result = await self._anthropic_complete(prompt, model, max_tokens, temperature)
         else:
             raise ValueError(f"Unsupported provider: {provider}")
+
+        # Calculate latency
+        latency_ms = int((time.monotonic() - start_time) * 1000)
+
+        # Record LLM call if auditing is enabled
+        if layer_run_id is not None and self.engine is not None:
+            await self._record_llm_call(
+                layer_run_id=layer_run_id,
+                topic_key=topic_key,
+                call_type=call_type,
+                model_profile=model_profile,
+                provider=provider,
+                model=model,
+                prompt=prompt,
+                response=result.text,
+                usage=result.usage,
+                latency_ms=latency_ms,
+                success=True,
+                error_message=None,
+            )
+
+        return result
 
     async def _anthropic_complete(
         self,
@@ -314,6 +355,10 @@ class ModelClient:
         media_type: str,
         prompt: str,
         model_profile: str = "vision",
+        *,
+        layer_run_id: str | None = None,
+        topic_key: str | None = None,
+        call_type: LLMCallType = LLMCallType.VISION,
     ) -> CompletionResult:
         """Analyze an image with vision model.
 
@@ -322,6 +367,9 @@ class ModelClient:
             media_type: MIME type of the image (e.g., 'image/png').
             prompt: Analysis prompt.
             model_profile: Name of the model profile to use.
+            layer_run_id: Optional layer run ID for auditing (enables DB recording).
+            topic_key: Optional topic key for auditing context.
+            call_type: Type of LLM call for categorization (defaults to VISION).
 
         Returns:
             CompletionResult with analysis text and usage.
@@ -343,10 +391,38 @@ class ModelClient:
         limiter = self._get_rate_limiter(provider)
         await limiter.acquire()
 
+        # Track timing for latency
+        start_time = time.monotonic()
+
         if provider == "anthropic":
-            return await self._anthropic_vision(image_base64, media_type, prompt, model)
+            result = await self._anthropic_vision(image_base64, media_type, prompt, model)
         else:
             raise ValueError(f"Provider {provider} doesn't support vision")
+
+        # Calculate latency
+        latency_ms = int((time.monotonic() - start_time) * 1000)
+
+        # For vision calls, the prompt includes image context indicator
+        full_prompt = f"[Image: {media_type}]\n{prompt}"
+
+        # Record LLM call if auditing is enabled
+        if layer_run_id is not None and self.engine is not None:
+            await self._record_llm_call(
+                layer_run_id=layer_run_id,
+                topic_key=topic_key,
+                call_type=call_type,
+                model_profile=model_profile,
+                provider=provider,
+                model=model,
+                prompt=full_prompt,
+                response=result.text,
+                usage=result.usage,
+                latency_ms=latency_ms,
+                success=True,
+                error_message=None,
+            )
+
+        return result
 
     async def _anthropic_vision(
         self,
@@ -431,6 +507,85 @@ class ModelClient:
         except anthropic.APIError as e:
             log.error("api_error", provider="anthropic", call_type="vision", error=str(e))
             raise
+
+    async def _record_llm_call(
+        self,
+        layer_run_id: str,
+        topic_key: str | None,
+        call_type: LLMCallType,
+        model_profile: str,
+        provider: str,
+        model: str,
+        prompt: str,
+        response: str,
+        usage: Usage,
+        latency_ms: int,
+        success: bool,
+        error_message: str | None,
+    ) -> None:
+        """Record an LLM call to the database for auditing.
+
+        Args:
+            layer_run_id: The layer run ID this call is associated with.
+            topic_key: Optional topic key for context.
+            call_type: Type of LLM call.
+            model_profile: Model profile name used.
+            provider: Provider name.
+            model: Model name.
+            prompt: Full prompt text.
+            response: Full response text.
+            usage: Token usage.
+            latency_ms: Request latency in milliseconds.
+            success: Whether the call succeeded.
+            error_message: Error message if failed.
+        """
+        from zos.database import generate_id, llm_calls
+
+        # Calculate estimated cost
+        cost = estimate_cost(
+            provider=provider,
+            model=model,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+        )
+
+        # Create the LLM call record as a dict for direct insertion
+        # (avoiding Pydantic model to ensure enum serialization)
+        llm_call_id = generate_id()
+        llm_call_data = {
+            "id": llm_call_id,
+            "layer_run_id": layer_run_id,
+            "topic_key": topic_key,
+            "call_type": call_type.value,  # Serialize enum to string
+            "model_profile": model_profile,
+            "model_provider": provider,
+            "model_name": model,
+            "prompt": prompt,
+            "response": response,
+            "tokens_input": usage.input_tokens,
+            "tokens_output": usage.output_tokens,
+            "tokens_total": usage.total_tokens,
+            "estimated_cost_usd": cost,
+            "latency_ms": latency_ms,
+            "success": success,
+            "error_message": error_message,
+        }
+
+        # Insert into database
+        if self.engine is not None:
+            with self.engine.connect() as conn:
+                conn.execute(llm_calls.insert().values(**llm_call_data))
+                conn.commit()
+
+            log.debug(
+                "llm_call_recorded",
+                llm_call_id=llm_call_id,
+                layer_run_id=layer_run_id,
+                call_type=call_type.value,
+                tokens_total=usage.total_tokens,
+                cost_usd=cost,
+                latency_ms=latency_ms,
+            )
 
     async def close(self) -> None:
         """Close the client and release resources."""

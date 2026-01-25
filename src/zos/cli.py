@@ -237,5 +237,275 @@ def salience_decay(ctx: click.Context) -> None:
     click.echo(f"  Decay rate: {cfg.salience.decay_rate_per_day * 100:.1f}% per day")
 
 
+# =============================================================================
+# Layer Commands
+# =============================================================================
+
+
+@cli.group()
+def layer() -> None:
+    """Layer management commands."""
+    pass
+
+
+@layer.command(name="list")
+@click.option(
+    "-d",
+    "--dir",
+    "layers_dir",
+    type=click.Path(exists=True, path_type=Path),
+    default="layers",
+    help="Layers directory.",
+)
+def layer_list(layers_dir: Path) -> None:
+    """List all available layers.
+
+    Loads and validates all layer YAML files from the layers directory
+    and displays their names, categories, and schedules.
+    """
+    from pydantic import ValidationError
+
+    from zos.layers import LayerLoader, format_validation_error
+
+    loader = LayerLoader(layers_dir)
+
+    try:
+        layers = loader.load_all()
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    except ValueError as e:
+        # Validation error - already formatted
+        click.echo(str(e), err=True)
+        raise SystemExit(1)
+
+    if not layers:
+        click.echo("No layers found")
+        return
+
+    click.echo(f"Found {len(layers)} layer(s):\n")
+
+    for name in sorted(layers.keys()):
+        layer_obj = layers[name]
+        schedule = layer_obj.schedule or layer_obj.trigger or "manual"
+        click.echo(f"  {name}: {layer_obj.category.value} ({schedule})")
+
+
+@layer.command(name="validate")
+@click.argument("name")
+@click.option(
+    "-d",
+    "--dir",
+    "layers_dir",
+    type=click.Path(exists=True, path_type=Path),
+    default="layers",
+    help="Layers directory.",
+)
+def layer_validate(name: str, layers_dir: Path) -> None:
+    """Validate a specific layer by name.
+
+    Loads all layers from the directory and validates the specified layer,
+    displaying its configuration details if valid.
+    """
+    from pydantic import ValidationError
+
+    from zos.layers import LayerLoader, format_validation_error
+
+    loader = LayerLoader(layers_dir)
+
+    try:
+        layers = loader.load_all()
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    except ValueError as e:
+        # Validation error - already formatted
+        click.echo(str(e), err=True)
+        raise SystemExit(1)
+
+    if name not in layers:
+        click.echo(f"Error: Layer '{name}' not found", err=True)
+        click.echo(f"Available layers: {', '.join(sorted(layers.keys()))}", err=True)
+        raise SystemExit(1)
+
+    layer_obj = layers[name]
+    layer_hash = loader.get_hash(name)
+
+    click.echo(f"Layer '{name}' is valid")
+    click.echo(f"  Category: {layer_obj.category.value}")
+    click.echo(f"  Nodes: {len(layer_obj.nodes)}")
+    click.echo(f"  Hash: {layer_hash}")
+
+    if layer_obj.schedule:
+        click.echo(f"  Schedule: {layer_obj.schedule}")
+    if layer_obj.trigger:
+        click.echo(f"  Trigger: {layer_obj.trigger}")
+    if layer_obj.target_category:
+        click.echo(f"  Target category: {layer_obj.target_category}")
+    if layer_obj.target_filter:
+        click.echo(f"  Target filter: {layer_obj.target_filter}")
+    click.echo(f"  Max targets: {layer_obj.max_targets}")
+
+    if layer_obj.description:
+        click.echo(f"\n  Description:\n    {layer_obj.description.strip()}")
+
+
+# =============================================================================
+# Reflect Commands
+# =============================================================================
+
+
+@cli.group()
+def reflect() -> None:
+    """Reflection management commands."""
+    pass
+
+
+@reflect.command(name="trigger")
+@click.argument("layer_name")
+@click.option(
+    "-d",
+    "--dir",
+    "layers_dir",
+    type=click.Path(exists=True, path_type=Path),
+    default="layers",
+    help="Layers directory.",
+)
+@click.pass_context
+def reflect_trigger(ctx: click.Context, layer_name: str, layers_dir: Path) -> None:
+    """Manually trigger a layer execution.
+
+    Bypasses the schedule and executes the specified layer immediately.
+    Uses salience-based topic selection to choose which topics to process.
+
+    Example: zos reflect trigger nightly-user-reflection
+    """
+    from zos.database import create_tables, get_engine
+    from zos.executor import LayerExecutor
+    from zos.layers import LayerLoader
+    from zos.llm import ModelClient
+    from zos.salience import ReflectionSelector, SalienceLedger
+    from zos.scheduler import ReflectionScheduler
+    from zos.templates import TemplateEngine
+
+    cfg = ctx.obj["config"]
+    engine = get_engine(cfg)
+    create_tables(engine)
+
+    async def run():
+        # Set up components
+        loader = LayerLoader(layers_dir)
+        ledger = SalienceLedger(engine, cfg)
+        selector = ReflectionSelector(ledger, cfg)
+
+        # Load layers to verify the layer exists
+        try:
+            layers = loader.load_all()
+        except ValueError as e:
+            click.echo(str(e), err=True)
+            return None
+
+        if layer_name not in layers:
+            click.echo(f"Error: Layer '{layer_name}' not found", err=True)
+            click.echo(f"Available layers: {', '.join(sorted(layers.keys()))}", err=True)
+            return None
+
+        # Set up templates
+        templates = TemplateEngine(
+            templates_dir=Path("prompts"),
+            data_dir=cfg.data_dir,
+        )
+
+        # Set up LLM client
+        llm = ModelClient(cfg)
+
+        # Set up executor
+        executor = LayerExecutor(
+            engine=engine,
+            ledger=ledger,
+            templates=templates,
+            llm=llm,
+            config=cfg,
+            loader=loader,
+        )
+
+        # Create scheduler for the trigger
+        scheduler = ReflectionScheduler(
+            db_path=str(cfg.data_dir / "scheduler.db"),
+            executor=executor,
+            loader=loader,
+            selector=selector,
+            ledger=ledger,
+            config=cfg,
+        )
+
+        # Trigger the layer
+        return await scheduler.trigger_now(layer_name)
+
+    run_result = asyncio.run(run())
+
+    if run_result:
+        click.echo(f"Layer executed: {run_result.status.value}")
+        click.echo(f"  Targets matched: {run_result.targets_matched}")
+        click.echo(f"  Targets processed: {run_result.targets_processed}")
+        click.echo(f"  Insights created: {run_result.insights_created}")
+        if run_result.tokens_total:
+            click.echo(f"  Tokens used: {run_result.tokens_total}")
+        if run_result.estimated_cost_usd:
+            click.echo(f"  Estimated cost: ${run_result.estimated_cost_usd:.4f}")
+    else:
+        click.echo("Layer not found or no topics selected")
+
+
+@reflect.command(name="jobs")
+@click.option(
+    "-d",
+    "--dir",
+    "layers_dir",
+    type=click.Path(exists=True, path_type=Path),
+    default="layers",
+    help="Layers directory.",
+)
+@click.pass_context
+def reflect_jobs(ctx: click.Context, layers_dir: Path) -> None:
+    """List layers with cron schedules.
+
+    Shows all layers that have scheduled execution times.
+    Layers without schedules can be triggered manually with 'zos reflect trigger'.
+    """
+    from zos.layers import LayerLoader
+
+    # Load layers
+    loader = LayerLoader(layers_dir)
+
+    try:
+        layers = loader.load_all()
+    except ValueError as e:
+        click.echo(str(e), err=True)
+        raise SystemExit(1)
+
+    scheduled = [(name, layer) for name, layer in layers.items() if layer.schedule]
+    manual = [(name, layer) for name, layer in layers.items() if not layer.schedule]
+
+    if not scheduled:
+        click.echo("No scheduled reflection layers")
+    else:
+        click.echo(f"Scheduled reflection layers ({len(scheduled)}):\n")
+
+        for name, layer_obj in sorted(scheduled):
+            click.echo(f"  {name}")
+            click.echo(f"    Category: {layer_obj.category.value}")
+            click.echo(f"    Schedule: {layer_obj.schedule} (cron, UTC)")
+            if layer_obj.trigger_threshold:
+                click.echo(f"    Threshold trigger: {layer_obj.trigger_threshold} insights")
+            click.echo(f"    Max targets: {layer_obj.max_targets}")
+            click.echo()
+
+    if manual:
+        click.echo(f"\nManual layers ({len(manual)}):")
+        for name, layer_obj in sorted(manual):
+            click.echo(f"  {name}: {layer_obj.category.value}")
+
+
 if __name__ == "__main__":
     cli()
