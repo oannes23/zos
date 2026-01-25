@@ -57,6 +57,7 @@ from zos.models import (
 
 if TYPE_CHECKING:
     from zos.config import Config
+    from zos.salience import EarningCoordinator
 
 log = get_logger("observation")
 
@@ -139,6 +140,9 @@ class ZosBot(commands.Bot):
         ] = asyncio.Queue()
         self._media_analysis_task: asyncio.Task | None = None
 
+        # Earning coordinator for salience (lazy initialized when engine is available)
+        self._earning_coordinator: "EarningCoordinator | None" = None
+
     async def setup_hook(self) -> None:
         """Called when bot is ready to start tasks.
 
@@ -182,6 +186,22 @@ class ZosBot(commands.Bot):
         if self._llm_client is None:
             self._llm_client = ModelClient(self.config)
         return self._llm_client
+
+    def _get_earning_coordinator(self) -> "EarningCoordinator | None":
+        """Get or create the earning coordinator for salience earning.
+
+        Returns:
+            EarningCoordinator instance, or None if no engine is available.
+        """
+        if self.engine is None:
+            return None
+
+        if self._earning_coordinator is None:
+            from zos.salience import EarningCoordinator, SalienceLedger
+
+            ledger = SalienceLedger(self.engine, self.config)
+            self._earning_coordinator = EarningCoordinator(ledger, self.config)
+        return self._earning_coordinator
 
     async def on_ready(self) -> None:
         """Called when connected to Discord.
@@ -675,6 +695,25 @@ class ZosBot(commands.Bot):
             author_anonymized=author_id.startswith("<chat"),
         )
 
+        # Earn salience for this message
+        earning = self._get_earning_coordinator()
+        if earning:
+            try:
+                topics = await earning.process_message(msg)
+                if topics:
+                    log.debug(
+                        "salience_earned",
+                        message_id=msg.id,
+                        topics_earned=len(topics),
+                    )
+            except Exception as e:
+                log.warning(
+                    "earning_failed",
+                    message_id=msg.id,
+                    error=str(e),
+                )
+                # Don't fail message storage if earning fails
+
         # Queue media for analysis (doesn't block polling)
         if has_media and message.attachments:
             await self._queue_media_for_analysis(message)
@@ -834,13 +873,23 @@ class ZosBot(commands.Bot):
                     current_reactions.add((user_id, emoji_str))
 
                     # Store this reaction
-                    await self._store_reaction(
+                    is_new = await self._store_reaction(
                         message_id=message_id,
                         user_id=user_id,
                         emoji=emoji_str,
                         is_custom=is_custom,
                         server_id=server_id,
                     )
+
+                    # Earn salience for new reactions
+                    if is_new:
+                        await self._earn_reaction_salience(
+                            discord_message=message,
+                            user_id=user_id,
+                            emoji=emoji_str,
+                            is_custom=is_custom,
+                            server_id=server_id,
+                        )
             except discord.errors.Forbidden:
                 log.warning(
                     "reaction_users_forbidden",
@@ -879,7 +928,7 @@ class ZosBot(commands.Bot):
         emoji: str,
         is_custom: bool,
         server_id: str | None,
-    ) -> None:
+    ) -> bool:
         """Store a single reaction.
 
         Uses upsert to handle re-fetching the same reaction.
@@ -890,11 +939,15 @@ class ZosBot(commands.Bot):
             emoji: Serialized emoji string.
             is_custom: Whether this is a custom emoji.
             server_id: Server ID for custom emoji topics.
+
+        Returns:
+            True if this was a new reaction, False if it already existed.
         """
         if self.engine is None:
-            return
+            return False
 
         now = datetime.now(timezone.utc)
+        is_new_reaction = False
 
         with self.engine.connect() as conn:
             # Check if reaction already exists
@@ -915,7 +968,8 @@ class ZosBot(commands.Bot):
                 )
             else:
                 # New reaction - insert
-                reaction = Reaction(
+                is_new_reaction = True
+                reaction_model = Reaction(
                     id=generate_id(),
                     message_id=message_id,
                     user_id=user_id,
@@ -925,10 +979,80 @@ class ZosBot(commands.Bot):
                     created_at=now,
                 )
                 conn.execute(
-                    reactions.insert().values(**model_to_dict(reaction))
+                    reactions.insert().values(**model_to_dict(reaction_model))
                 )
 
             conn.commit()
+
+        return is_new_reaction
+
+    async def _earn_reaction_salience(
+        self,
+        discord_message: discord.Message,
+        user_id: str,
+        emoji: str,
+        is_custom: bool,
+        server_id: str | None,
+    ) -> None:
+        """Earn salience for a reaction.
+
+        This is called when a new reaction is stored to earn salience
+        for the relevant topics.
+
+        Args:
+            discord_message: Discord message the reaction is on.
+            user_id: ID of the user who reacted.
+            emoji: Serialized emoji string.
+            is_custom: Whether this is a custom emoji.
+            server_id: Server ID for custom emoji topics.
+        """
+        earning = self._get_earning_coordinator()
+        if not earning:
+            return
+
+        try:
+            # Build Message model for earning
+            message_id = str(discord_message.id)
+            author_id = self._resolve_author_id(discord_message.author, server_id)
+            is_dm = isinstance(discord_message.channel, discord.DMChannel)
+            scope = VisibilityScope.DM if is_dm else VisibilityScope.PUBLIC
+
+            msg_model = Message(
+                id=message_id,
+                channel_id=str(discord_message.channel.id),
+                server_id=server_id,
+                author_id=author_id,
+                content=discord_message.content,
+                created_at=discord_message.created_at,
+                visibility_scope=scope,
+                reply_to_id=None,
+                thread_id=None,
+                has_media=False,
+                has_links=False,
+            )
+
+            reaction_model = Reaction(
+                message_id=message_id,
+                user_id=user_id,
+                emoji=emoji,
+                is_custom=is_custom,
+                server_id=server_id,
+            )
+
+            topics = await earning.process_reaction(reaction_model, msg_model)
+            if topics:
+                log.debug(
+                    "reaction_salience_earned",
+                    message_id=message_id,
+                    topics_earned=len(topics),
+                )
+        except Exception as e:
+            log.warning(
+                "reaction_earning_failed",
+                message_id=str(discord_message.id),
+                error=str(e),
+            )
+            # Don't fail reaction storage if earning fails
 
     def _get_reactions_for_message(self, message_id: str) -> list[Reaction]:
         """Get all reactions for a message.

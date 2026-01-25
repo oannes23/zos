@@ -1,7 +1,7 @@
 # Story 3.5: Budget Groups
 
 **Epic**: Salience
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement budget group allocation for reflection selection, ensuring fair attent
 
 ## Acceptance Criteria
 
-- [ ] Topics categorized into budget groups
-- [ ] Budget percentages configurable
-- [ ] Selection algorithm respects group budgets
-- [ ] Self budget is separate pool
-- [ ] `select_for_reflection` returns prioritized topics
-- [ ] Groups: Social, Global, Spaces, Semantic, Culture, Self
+- [x] Topics categorized into budget groups
+- [x] Budget percentages configurable
+- [x] Selection algorithm respects group budgets
+- [x] Self budget is separate pool
+- [x] `select_for_reflection` returns prioritized topics
+- [x] Groups: Social, Global, Spaces, Semantic, Culture, Self
 
 ## Technical Notes
 
@@ -276,9 +276,9 @@ salience:
 
 ## Definition of Done
 
-- [ ] Topics classified into groups
-- [ ] Selection respects budgets
-- [ ] Self budget separate
+- [x] Topics classified into groups
+- [x] Selection respects budgets
+- [x] Self budget separate
 - [ ] Integration with reflection (Epic 4)
 
 ---

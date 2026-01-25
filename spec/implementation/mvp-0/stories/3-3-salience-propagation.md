@@ -1,7 +1,7 @@
 # Story 3.3: Salience Propagation
 
 **Epic**: Salience
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Large
 
 ## Goal
@@ -10,13 +10,13 @@ Implement salience propagation to related topics, including warm-only rules, glo
 
 ## Acceptance Criteria
 
-- [ ] Earning propagates to warm related topics
-- [ ] Cold topics (salience = 0) don't receive propagation
-- [ ] Overflow spills to related topics
-- [ ] Global topics warm on DM or second-server activity
-- [ ] Global ↔ server bidirectional propagation
-- [ ] Propagation factor configurable
-- [ ] No infinite propagation loops
+- [x] Earning propagates to warm related topics
+- [x] Cold topics (salience = 0) don't receive propagation
+- [x] Overflow spills to related topics
+- [x] Global topics warm on DM or second-server activity
+- [x] Global ↔ server bidirectional propagation
+- [x] Propagation factor configurable
+- [x] No infinite propagation loops
 
 ## Technical Notes
 
@@ -279,10 +279,10 @@ salience:
 
 ## Definition of Done
 
-- [ ] Propagation to warm topics works
-- [ ] Warm-only rule enforced
-- [ ] Global warming triggers correctly
-- [ ] Spillover on cap hit
+- [x] Propagation to warm topics works
+- [x] Warm-only rule enforced
+- [x] Global warming triggers correctly
+- [x] Spillover on cap hit
 
 ---
 

@@ -74,7 +74,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Overview | [overview.md](implementation/mvp-0/overview.md) | 🟢 | All design questions resolved |
 | Epic 1: Foundation | stories/1-*.md | 🟢 | Implemented 2026-01-24 |
 | Epic 2: Observation | stories/2-*.md | 🟢 | Implemented 2026-01-25 |
-| Epic 3: Salience | stories/3-*.md | 🟡 | Epic 1 (5 stories ready) |
+| Epic 3: Salience | stories/3-*.md | 🟢 | Implemented 2026-01-24 |
 | Epic 4: Reflection | stories/4-*.md | 🟡 | Epics 1-3 (8 stories ready) |
 | Epic 5: Introspection | stories/5-*.md | 🟡 | Epic 1 (9 stories ready) |
 
@@ -617,7 +617,7 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-01-25 — Epic 2: Observation implemented. 27 stories remaining across 4 epics._
+_2026-01-24 — Epic 3: Salience implemented. 22 stories remaining across 3 epics (Reflection, Introspection)._
 
 ## Pending Updates
 

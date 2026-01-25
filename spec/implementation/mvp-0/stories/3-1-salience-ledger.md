@@ -1,7 +1,7 @@
 # Story 3.1: Salience Ledger Operations
 
 **Epic**: Salience
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement the salience ledger with transaction recording and balance computation
 
 ## Acceptance Criteria
 
-- [ ] Transactions recorded with all fields from spec
-- [ ] Balance computable from transaction sum
-- [ ] Transaction types: earn, spend, retain, decay, propagate, spillover, warm
-- [ ] Last activity timestamp tracked per topic
-- [ ] Full transaction history queryable
-- [ ] Topic creation on first earn (lazy)
+- [x] Transactions recorded with all fields from spec
+- [x] Balance computable from transaction sum
+- [x] Transaction types: earn, spend, retain, decay, propagate, spillover, warm
+- [x] Last activity timestamp tracked per topic
+- [x] Full transaction history queryable
+- [x] Topic creation on first earn (lazy)
 
 ## Technical Notes
 
@@ -302,10 +302,10 @@ async def update_topic_activity(self, topic_key: str, timestamp: datetime):
 
 ## Definition of Done
 
-- [ ] All transaction types work
-- [ ] Balance computation accurate
-- [ ] Caps enforced
-- [ ] History queryable
+- [x] All transaction types work
+- [x] Balance computation accurate
+- [x] Caps enforced
+- [x] History queryable
 
 ---
 

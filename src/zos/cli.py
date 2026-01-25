@@ -200,5 +200,42 @@ def config_check(config_file: Path) -> None:
         raise SystemExit(1)
 
 
+@cli.group()
+def salience() -> None:
+    """Salience management commands."""
+    pass
+
+
+@salience.command(name="decay")
+@click.pass_context
+def salience_decay(ctx: click.Context) -> None:
+    """Manually trigger salience decay.
+
+    Applies decay to all inactive topics. Topics are considered inactive
+    if they haven't had activity in the last N days (configurable via
+    salience.decay_threshold_days).
+
+    This command is useful for testing or manual maintenance. In production,
+    decay runs automatically via the scheduler.
+    """
+    from zos.database import create_tables, get_engine
+    from zos.salience import SalienceLedger
+
+    cfg = ctx.obj["config"]
+    engine = get_engine(cfg)
+    create_tables(engine)
+
+    ledger = SalienceLedger(engine, cfg)
+
+    async def run() -> tuple[int, float]:
+        return await ledger.apply_decay()
+
+    count, total = asyncio.run(run())
+
+    click.echo(f"Decayed {count} topics, total {total:.2f} salience")
+    click.echo(f"  Threshold: {cfg.salience.decay_threshold_days} days")
+    click.echo(f"  Decay rate: {cfg.salience.decay_rate_per_day * 100:.1f}% per day")
+
+
 if __name__ == "__main__":
     cli()

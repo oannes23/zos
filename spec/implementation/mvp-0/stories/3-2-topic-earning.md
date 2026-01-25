@@ -1,7 +1,7 @@
 # Story 3.2: Topic Earning
 
 **Epic**: Salience
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,15 +10,15 @@ Implement earning rules that convert observed activity (messages, reactions, men
 
 ## Acceptance Criteria
 
-- [ ] Messages earn salience for author topic
-- [ ] Reactions earn for author, reactor, and dyad
-- [ ] Mentions earn boosted amount
-- [ ] Replies earn for both parties
-- [ ] Thread creation earns boosted amount
-- [ ] Media/links apply boost multiplier
-- [ ] Channels earn from all activity
-- [ ] `<chat>` users don't earn individual salience
-- [ ] DMs earn for global user topic
+- [x] Messages earn salience for author topic
+- [x] Reactions earn for author, reactor, and dyad
+- [x] Mentions earn boosted amount
+- [x] Replies earn for both parties
+- [x] Thread creation earns boosted amount
+- [x] Media/links apply boost multiplier
+- [x] Channels earn from all activity
+- [x] `<chat>` users don't earn individual salience
+- [x] DMs earn for global user topic
 
 ## Technical Notes
 
@@ -330,10 +330,10 @@ async def store_message(self, message, server_id):
 
 ## Definition of Done
 
-- [ ] All earning rules implemented
-- [ ] Weights configurable
-- [ ] Anonymous users handled correctly
-- [ ] Integrated with observation
+- [x] All earning rules implemented
+- [x] Weights configurable
+- [x] Anonymous users handled correctly
+- [x] Integrated with observation
 
 ---
 

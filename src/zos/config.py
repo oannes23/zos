@@ -96,8 +96,10 @@ class SalienceWeightsConfig(BaseModel):
     reaction: float = 0.5
     mention: float = 2.0
     reply: float = 1.5
-    media: float = 1.2
-    link: float = 1.2
+    thread_create: float = 2.0
+    dm_message: float = 1.5
+    emoji_use: float = 0.5
+    media_boost_factor: float = 1.2
 
 
 class SalienceBudgetConfig(BaseModel):
@@ -127,6 +129,7 @@ class SalienceConfig(BaseModel):
     propagation_factor: float = 0.3
     global_propagation_factor: float = 0.3
     spillover_factor: float = 0.5
+    initial_global_warmth: float = 5.0
     retention_rate: float = 0.3
     decay_threshold_days: int = 7
     decay_rate_per_day: float = 0.01
