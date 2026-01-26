@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Salience — Zos{% endblock %}
+
+{% block content %}
+<h1>Salience Dashboard</h1>
+<p class="text-muted">How Zos allocates attention across topics</p>
+
+<div class="budget-groups" hx-get="/ui/salience/groups" hx-trigger="load">
+    Loading...
+</div>
+
+<div class="top-topics mt-2">
+    <h2>Highest Salience Topics</h2>
+    <div hx-get="/ui/salience/top?limit=20" hx-trigger="load">
+        Loading...
+    </div>
+</div>
+{% endblock %}

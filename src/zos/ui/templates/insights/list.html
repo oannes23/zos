@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Insights — Zos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Insights</h1>
+    <div class="page-actions">
+        <input type="search"
+               name="q"
+               placeholder="Search insights..."
+               hx-get="/ui/insights/search"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#insights-list"
+               class="search-input">
+    </div>
+</div>
+
+<div class="filters">
+    <select name="category"
+            hx-get="/ui/insights/list"
+            hx-trigger="change"
+            hx-target="#insights-list"
+            hx-include="[name='q']">
+        <option value="">All categories</option>
+        <option value="user_reflection">User Reflection</option>
+        <option value="dyad_observation">Dyad Observation</option>
+        <option value="channel_reflection">Channel Reflection</option>
+        <option value="self_reflection">Self Reflection</option>
+        <option value="synthesis">Synthesis</option>
+        <option value="social_texture">Social Texture</option>
+    </select>
+</div>
+
+<div id="insights-list" hx-get="/ui/insights/list" hx-trigger="load">
+    Loading...
+</div>
+{% endblock %}

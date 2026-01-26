@@ -179,6 +179,13 @@ class SchedulerConfig(BaseModel):
     reflection_cron: str = "0 13 * * *"
 
 
+class DevelopmentConfig(BaseModel):
+    """Development configuration for dev-only features."""
+
+    dev_mode: bool = False
+    allow_mutations: bool = True
+
+
 class OperatorsConfig(BaseModel):
     """Operators configuration for command access control."""
 
@@ -223,6 +230,7 @@ class Config(BaseModel):
     privacy: PrivacyConfig = Field(default_factory=PrivacyConfig)
     observation: ObservationConfig = Field(default_factory=ObservationConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    development: DevelopmentConfig = Field(default_factory=DevelopmentConfig)
     servers: dict[str, ServerOverrideConfig] = Field(default_factory=dict)
 
     @field_validator("log_level")

@@ -1,0 +1,83 @@
+<div class="modal-content">
+    <div class="modal-header">
+        <h2>{{ run.layer_name }}</h2>
+        <button class="close-btn" onclick="this.closest('.modal').innerHTML = ''">&times;</button>
+    </div>
+
+    <div class="run-status">
+        <span class="badge badge-{{ run.status }} badge-large">{{ run.status | upper }}</span>
+        <span class="text-muted">{{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+    </div>
+
+    <div class="run-metrics mt-2">
+        <div class="metric-row">
+            <span class="metric-label">Duration</span>
+            <span>{{ run.duration_seconds | format_duration }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Targets Matched</span>
+            <span>{{ run.targets_matched }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Targets Processed</span>
+            <span>{{ run.targets_processed }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Targets Skipped</span>
+            <span class="{% if run.targets_skipped > 0 %}text-error{% endif %}">
+                {{ run.targets_skipped }}
+            </span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Insights Created</span>
+            <span>{{ run.insights_created }}</span>
+        </div>
+    </div>
+
+    <h3 class="mt-2">Model Usage</h3>
+    <div class="run-metrics">
+        <div class="metric-row">
+            <span class="metric-label">Profile</span>
+            <span>{{ run.model_profile or '—' }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Provider</span>
+            <span>{{ run.model_provider or '—' }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Model</span>
+            <span>{{ run.model_name or '—' }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Input Tokens</span>
+            <span>{{ run.tokens_input | format_number }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Output Tokens</span>
+            <span>{{ run.tokens_output | format_number }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Estimated Cost</span>
+            <span>{{ run.estimated_cost_usd | format_cost }}</span>
+        </div>
+    </div>
+
+    {% if run.errors %}
+    <h3 class="mt-2 text-error">Errors ({{ run.errors | length }})</h3>
+    <div class="errors-list">
+        {% for error in run.errors %}
+        <div class="error-item">
+            <div class="error-topic">{{ error.topic or 'General' }}</div>
+            <div class="error-message">{{ error.error }}</div>
+            {% if error.node %}
+            <div class="error-node text-muted">Node: {{ error.node }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="modal-footer">
+        <span class="text-muted">Layer hash: {{ run.layer_hash }}</span>
+    </div>
+</div>

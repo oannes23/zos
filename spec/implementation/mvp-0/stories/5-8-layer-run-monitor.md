@@ -1,7 +1,7 @@
 # Story 5.8: Layer Run Monitor
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement the UI for monitoring layer runs, viewing operational status, and inve
 
 ## Acceptance Criteria
 
-- [ ] List recent runs with status badges
-- [ ] Filter by layer, status
-- [ ] View run details with errors
-- [ ] Summary statistics
-- [ ] Token usage tracking
-- [ ] Cost estimates visible
+- [x] List recent runs with status badges
+- [x] Filter by layer, status
+- [x] View run details with errors
+- [x] Summary statistics
+- [x] Token usage tracking
+- [x] Cost estimates visible
 
 ## Technical Notes
 
@@ -452,10 +452,10 @@ async def run_detail_partial(
 
 ## Definition of Done
 
-- [ ] Runs list with filters
-- [ ] Stats summary
-- [ ] Error investigation
-- [ ] Cost tracking visible
+- [x] Runs list with filters
+- [x] Stats summary
+- [x] Error investigation
+- [x] Cost tracking visible
 
 ---
 

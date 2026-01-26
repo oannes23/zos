@@ -1,7 +1,7 @@
 # Story 5.6: Insights Browser
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement the UI for browsing and searching insights, the primary window into Zo
 
 ## Acceptance Criteria
 
-- [ ] List view with pagination
-- [ ] Filter by category
-- [ ] Search by content
-- [ ] Click to view detail
-- [ ] Temporal markers displayed
-- [ ] Valence visualization
+- [x] List view with pagination
+- [x] Filter by category
+- [x] Search by content
+- [x] Click to view detail
+- [x] Temporal markers displayed
+- [x] Valence visualization
 
 ## Technical Notes
 
@@ -367,10 +367,10 @@ def _format_insight_for_ui(insight: Insight) -> dict:
 
 ## Definition of Done
 
-- [ ] Browse insights by category
-- [ ] Search works
-- [ ] Detail view complete
-- [ ] Valence visualized
+- [x] Browse insights by category
+- [x] Search works
+- [x] Detail view complete
+- [x] Valence visualized
 
 ---
 

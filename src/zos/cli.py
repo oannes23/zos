@@ -97,6 +97,62 @@ def observe(ctx: click.Context) -> None:
         raise SystemExit(1)
 
 
+@cli.command()
+@click.option("--host", default="127.0.0.1", help="Host to bind.")
+@click.option("--port", default=8000, type=int, help="Port to bind.")
+@click.pass_context
+def api(ctx: click.Context, host: str, port: int) -> None:
+    """Start only the API server (no observation/reflection).
+
+    Provides introspection endpoints for querying insights, salience,
+    and operational state. Access the API documentation at /docs.
+
+    This is useful for development and debugging, or when running
+    the API separately from the observation/reflection processes.
+    """
+    import uvicorn
+
+    from zos.api import create_app
+    from zos.database import create_tables, get_engine
+    from zos.migrations import migrate
+    from zos.salience import SalienceLedger
+
+    cfg = ctx.obj["config"]
+
+    async def run():
+        # Set up database
+        engine = get_engine(cfg)
+        migrate(engine)
+        create_tables(engine)
+
+        # Create app and configure state
+        app = create_app(cfg)
+        app.state.config = cfg
+        app.state.db = engine
+        app.state.ledger = SalienceLedger(engine, cfg)
+
+        # Run the server
+        server_config = uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_level="info",
+        )
+        server = uvicorn.Server(server_config)
+        await server.serve()
+
+    log.info("api_command_invoked", host=host, port=port)
+
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        log.info("api_shutdown_requested")
+    except Exception as e:
+        log.error("api_failed", error=str(e))
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
 @cli.group()
 def db() -> None:
     """Database management commands."""

@@ -1,0 +1,46 @@
+{% for insight in insights %}
+<div class="card insight-card"
+     hx-get="/ui/insights/{{ insight.id }}"
+     hx-push-url="true"
+     hx-target="body"
+     hx-swap="innerHTML">
+    <div class="card-header">
+        <span class="card-title">{{ insight.topic_key }}</span>
+        <span class="badge badge-{{ insight.category }}">{{ insight.category }}</span>
+    </div>
+    <p class="insight-content">{{ insight.content | truncate(200) }}</p>
+    <div class="card-meta">
+        <span class="temporal-marker">{{ insight.temporal_marker }}</span>
+        <span class="confidence">{{ (insight.confidence * 100) | int }}% confident</span>
+    </div>
+    <div class="valence-bar">
+        {% if insight.valence.joy %}<span class="valence-joy" style="width: {{ insight.valence.joy * 20 }}px" title="Joy: {{ insight.valence.joy }}"></span>{% endif %}
+        {% if insight.valence.concern %}<span class="valence-concern" style="width: {{ insight.valence.concern * 20 }}px" title="Concern: {{ insight.valence.concern }}"></span>{% endif %}
+        {% if insight.valence.curiosity %}<span class="valence-curiosity" style="width: {{ insight.valence.curiosity * 20 }}px" title="Curiosity: {{ insight.valence.curiosity }}"></span>{% endif %}
+        {% if insight.valence.warmth %}<span class="valence-warmth" style="width: {{ insight.valence.warmth * 20 }}px" title="Warmth: {{ insight.valence.warmth }}"></span>{% endif %}
+        {% if insight.valence.tension %}<span class="valence-tension" style="width: {{ insight.valence.tension * 20 }}px" title="Tension: {{ insight.valence.tension }}"></span>{% endif %}
+    </div>
+</div>
+{% endfor %}
+
+{% if insights %}
+<div class="pagination">
+    {% if offset > 0 %}
+    <button hx-get="/ui/insights/list?offset={{ offset - limit }}&limit={{ limit }}{% if category %}&category={{ category }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
+            hx-target="#insights-list">
+        Previous
+    </button>
+    {% endif %}
+
+    <span class="page-info">{{ offset + 1 }}-{{ offset + insights|length }} of {{ total }}</span>
+
+    {% if offset + limit < total %}
+    <button hx-get="/ui/insights/list?offset={{ offset + limit }}&limit={{ limit }}{% if category %}&category={{ category }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
+            hx-target="#insights-list">
+        Next
+    </button>
+    {% endif %}
+</div>
+{% else %}
+<p class="empty-state">No insights found.</p>
+{% endif %}

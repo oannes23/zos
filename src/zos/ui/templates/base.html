@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Zos{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <nav class="main-nav">
+        <div class="nav-brand">
+            <a href="/ui/">Zos</a>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/ui/insights" {% if active == 'insights' %}class="active"{% endif %}>Insights</a></li>
+            <li><a href="/ui/salience" {% if active == 'salience' %}class="active"{% endif %}>Salience</a></li>
+            <li><a href="/ui/runs" {% if active == 'runs' %}class="active"{% endif %}>Layer Runs</a></li>
+            {% if dev_mode %}
+            <li class="nav-dev"><a href="/dev/create-insight" {% if active == 'dev' %}class="active"{% endif %}>Dev Tools</a></li>
+            {% endif %}
+        </ul>
+        <div class="nav-status">
+            <span class="status-indicator" hx-get="/ui/status" hx-trigger="load, every 30s" hx-swap="innerHTML">
+                Loading...
+            </span>
+        </div>
+    </nav>
+
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="main-footer">
+        <p>Zos v0.1.0 — <a href="/docs">API Docs</a></p>
+    </footer>
+</body>
+</html>

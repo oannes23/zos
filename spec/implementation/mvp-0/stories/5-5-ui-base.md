@@ -1,7 +1,7 @@
 # Story 5.5: UI Base
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Establish the htmx + Jinja2 UI foundation with base template, navigation, and st
 
 ## Acceptance Criteria
 
-- [ ] Base template with navigation
-- [ ] htmx loaded and working
-- [ ] Simple CSS styling (no build step)
-- [ ] Navigation between sections
-- [ ] UI served from FastAPI
-- [ ] Dark mode friendly
+- [x] Base template with navigation
+- [x] htmx loaded and working
+- [x] Simple CSS styling (no build step)
+- [x] Navigation between sections
+- [x] UI served from FastAPI
+- [x] Dark mode friendly
 
 ## Technical Notes
 
@@ -363,10 +363,10 @@ def setup_ui(app: FastAPI):
 
 ## Definition of Done
 
-- [ ] Base template complete
-- [ ] Navigation functional
-- [ ] htmx working
-- [ ] Dark theme applied
+- [x] Base template complete
+- [x] Navigation functional
+- [x] htmx working
+- [x] Dark theme applied
 
 ---
 

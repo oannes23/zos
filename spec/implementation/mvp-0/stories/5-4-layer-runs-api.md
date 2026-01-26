@@ -1,7 +1,7 @@
 # Story 5.4: Layer Runs API
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Small
 
 ## Goal
@@ -10,11 +10,11 @@ Implement API endpoints for querying layer run history and operational status.
 
 ## Acceptance Criteria
 
-- [ ] GET `/runs` lists recent layer runs
-- [ ] GET `/runs/{run_id}` returns run details with errors
-- [ ] Filter by layer name, status
-- [ ] Includes token usage and cost estimates
-- [ ] Dry runs distinguishable
+- [x] GET `/runs` lists recent layer runs
+- [x] GET `/runs/{run_id}` returns run details with errors
+- [x] Filter by layer name, status
+- [x] Includes token usage and cost estimates
+- [x] Dry runs distinguishable
 
 ## Technical Notes
 
@@ -318,10 +318,10 @@ async def get_layer_run_stats(self, since: datetime) -> dict:
 
 ## Definition of Done
 
-- [ ] All endpoints work
-- [ ] Filters functional
-- [ ] Stats accurate
-- [ ] Ready for monitoring UI
+- [x] All endpoints work
+- [x] Filters functional
+- [x] Stats accurate
+- [x] Ready for monitoring UI
 
 ---
 

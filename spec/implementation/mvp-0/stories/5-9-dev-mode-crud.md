@@ -1,7 +1,7 @@
 # Story 5.9: Dev Mode CRUD
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Small
 
 ## Goal
@@ -10,11 +10,11 @@ Implement development-only CRUD operations for insights, enabling manual data ad
 
 ## Acceptance Criteria
 
-- [ ] Create/update/delete insights via API
-- [ ] Operations protected by dev mode flag
-- [ ] Audit logging for all mutations
-- [ ] UI for manual insight creation
-- [ ] Bulk operations for cleanup
+- [x] Create/update/delete insights via API
+- [x] Operations protected by dev mode flag
+- [x] Audit logging for all mutations
+- [x] UI for manual insight creation
+- [x] Bulk operations for cleanup
 
 ## Technical Notes
 
@@ -346,10 +346,10 @@ Add dev link when dev mode is enabled:
 
 ## Definition of Done
 
-- [ ] CRUD endpoints work
-- [ ] Protected by dev mode
-- [ ] Audit logged
-- [ ] UI form functional
+- [x] CRUD endpoints work
+- [x] Protected by dev mode
+- [x] Audit logged
+- [x] UI form functional
 
 ---
 

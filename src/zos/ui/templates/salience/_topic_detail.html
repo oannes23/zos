@@ -1,0 +1,56 @@
+<div class="modal-content">
+    <div class="modal-header">
+        <h2>{{ topic.topic_key }}</h2>
+        <button class="close-btn" onclick="this.closest('.modal').innerHTML = ''">&times;</button>
+    </div>
+
+    <div class="topic-overview">
+        <div class="big-stat">
+            <span class="big-value">{{ topic.balance | round(1) }}</span>
+            <span class="big-label">/ {{ topic.cap }} salience</span>
+        </div>
+
+        <div class="utilization-big">
+            <div class="progress" style="height: 20px">
+                <div class="progress-bar
+                    {% if topic.utilization > 0.8 %}progress-high{% endif %}"
+                    style="width: {{ (topic.utilization * 100) | int }}%"></div>
+            </div>
+            <span>{{ (topic.utilization * 100) | int }}% utilized</span>
+        </div>
+    </div>
+
+    <h3 class="mt-2">Recent Transactions</h3>
+    {% if topic.recent_transactions %}
+    <table class="transactions-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Reason</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for tx in topic.recent_transactions %}
+            <tr>
+                <td class="text-muted">{{ tx.created_at | relative_time }}</td>
+                <td>
+                    <span class="badge badge-{{ tx.transaction_type }}">{{ tx.transaction_type }}</span>
+                </td>
+                <td class="{% if tx.amount >= 0 %}text-success{% else %}text-error{% endif %}">
+                    {% if tx.amount >= 0 %}+{% endif %}{{ tx.amount | round(2) }}
+                </td>
+                <td class="text-muted">{{ tx.reason or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted">No transactions recorded</p>
+    {% endif %}
+
+    <div class="modal-footer">
+        <a href="/ui/insights?topic={{ topic.topic_key | urlencode }}" class="btn">View Insights</a>
+    </div>
+</div>

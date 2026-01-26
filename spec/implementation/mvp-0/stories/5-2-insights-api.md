@@ -1,7 +1,7 @@
 # Story 5.2: Insights API
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,12 +10,12 @@ Implement API endpoints for querying insights by topic, searching, and listing r
 
 ## Acceptance Criteria
 
-- [ ] GET `/insights/{topic_key}` returns insights for a topic
-- [ ] GET `/insights` lists recent insights with pagination
-- [ ] GET `/insights/search` searches insight content
-- [ ] Retrieval profiles supported via query param
-- [ ] Quarantined insights excluded by default
-- [ ] Response includes temporal markers
+- [x] GET `/insights/{topic_key}` returns insights for a topic
+- [x] GET `/insights` lists recent insights with pagination
+- [x] GET `/insights/search` searches insight content
+- [x] Retrieval profiles supported via query param
+- [x] Quarantined insights excluded by default
+- [x] Response includes temporal markers
 
 ## Technical Notes
 
@@ -296,10 +296,10 @@ Topic keys contain colons, which need handling in URLs:
 
 ## Definition of Done
 
-- [ ] All endpoints work
-- [ ] Temporal markers included
-- [ ] Pagination correct
-- [ ] Search functional
+- [x] All endpoints work
+- [x] Temporal markers included
+- [x] Pagination correct
+- [x] Search functional
 
 ---
 

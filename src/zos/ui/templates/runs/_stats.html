@@ -1,0 +1,26 @@
+<div class="stats-cards">
+    <div class="stat-card">
+        <span class="stat-value">{{ stats.total_runs }}</span>
+        <span class="stat-label">Total Runs (7d)</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value text-success">{{ stats.successful }}</span>
+        <span class="stat-label">Successful</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value text-error">{{ stats.failed }}</span>
+        <span class="stat-label">Failed</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value text-muted">{{ stats.dry }}</span>
+        <span class="stat-label">Dry Runs</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ stats.total_insights }}</span>
+        <span class="stat-label">Insights Created</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ stats.total_cost | format_cost }}</span>
+        <span class="stat-label">Est. Cost</span>
+    </div>
+</div>

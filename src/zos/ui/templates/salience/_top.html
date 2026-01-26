@@ -1,0 +1,50 @@
+{% if topics %}
+<table class="topics-table">
+    <thead>
+        <tr>
+            <th>Topic</th>
+            <th>Group</th>
+            <th>Balance</th>
+            <th>Cap</th>
+            <th>Utilization</th>
+            <th>Last Activity</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for topic in topics %}
+        <tr class="clickable"
+            hx-get="/ui/salience/topic/{{ topic.topic_key | urlencode }}"
+            hx-target="#topic-detail-modal"
+            hx-swap="innerHTML">
+            <td>
+                <span class="topic-key">{{ topic.topic_key }}</span>
+            </td>
+            <td>
+                <span class="badge badge-{{ topic.budget_group }}">{{ topic.budget_group }}</span>
+            </td>
+            <td>{{ topic.balance | round(1) }}</td>
+            <td>{{ topic.cap }}</td>
+            <td>
+                <div class="progress" style="width: 100px">
+                    <div class="progress-bar
+                        {% if topic.balance / topic.cap > 0.8 %}progress-high{% endif %}"
+                        style="width: {{ (topic.balance / topic.cap * 100) | int }}%">
+                    </div>
+                </div>
+            </td>
+            <td class="text-muted">
+                {% if topic.last_activity %}
+                    {{ topic.last_activity | relative_time }}
+                {% else %}
+                    Never
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div id="topic-detail-modal" class="modal"></div>
+{% else %}
+<p class="text-muted">No topics with salience yet</p>
+{% endif %}

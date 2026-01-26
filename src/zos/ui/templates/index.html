@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Zos — Dashboard{% endblock %}
+
+{% block content %}
+<h1>Zos Dashboard</h1>
+
+<div class="dashboard-grid">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Recent Insights</span>
+            <a href="/ui/insights" class="text-muted">View all</a>
+        </div>
+        <div hx-get="/ui/insights/recent" hx-trigger="load" hx-swap="innerHTML">
+            Loading...
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Top Topics</span>
+            <a href="/ui/salience" class="text-muted">View all</a>
+        </div>
+        <div hx-get="/ui/salience/top" hx-trigger="load" hx-swap="innerHTML">
+            Loading...
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Recent Runs</span>
+            <a href="/ui/runs" class="text-muted">View all</a>
+        </div>
+        <div hx-get="/ui/runs/recent" hx-trigger="load" hx-swap="innerHTML">
+            Loading...
+        </div>
+    </div>
+</div>
+{% endblock %}

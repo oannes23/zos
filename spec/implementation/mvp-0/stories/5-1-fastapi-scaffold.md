@@ -1,7 +1,7 @@
 # Story 5.1: FastAPI Scaffold
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Small
 
 ## Goal
@@ -10,12 +10,12 @@ Establish the FastAPI application structure with health check, CORS, and auto-ge
 
 ## Acceptance Criteria
 
-- [ ] FastAPI app initializes
-- [ ] `/health` endpoint returns status
-- [ ] `/docs` shows OpenAPI documentation
-- [ ] CORS configured for local development
-- [ ] App integrates with main `serve` command
-- [ ] Structured logging for requests
+- [x] FastAPI app initializes
+- [x] `/health` endpoint returns status
+- [x] `/docs` shows OpenAPI documentation
+- [x] CORS configured for local development
+- [x] App integrates with `zos api` command
+- [x] Structured logging for requests
 
 ## Technical Notes
 
@@ -233,10 +233,10 @@ Currently no authentication (local development only).
 
 ## Definition of Done
 
-- [ ] `zos api` starts server
-- [ ] `/health` works
-- [ ] `/docs` shows documentation
-- [ ] Ready for additional routes
+- [x] `zos api` starts server
+- [x] `/health` works
+- [x] `/docs` shows documentation
+- [x] Ready for additional routes
 
 ---
 

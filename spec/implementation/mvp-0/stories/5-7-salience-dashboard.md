@@ -1,8 +1,9 @@
 # Story 5.7: Salience Dashboard
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
+**Completed**: 2026-01-25
 
 ## Goal
 
@@ -10,11 +11,11 @@ Implement the UI for visualizing salience balances, budget allocation, and atten
 
 ## Acceptance Criteria
 
-- [ ] Budget group overview with allocations
-- [ ] Top topics per group
-- [ ] Topic detail with transaction history
-- [ ] Utilization bars (balance/cap)
-- [ ] Visual hierarchy of attention
+- [x] Budget group overview with allocations
+- [x] Top topics per group
+- [x] Topic detail with transaction history
+- [x] Utilization bars (balance/cap)
+- [x] Visual hierarchy of attention
 
 ## Technical Notes
 
@@ -414,10 +415,10 @@ async def salience_topic_detail(
 
 ## Definition of Done
 
-- [ ] Budget groups visualized
-- [ ] Topic detail with history
-- [ ] Utilization clear
-- [ ] Interactive exploration
+- [x] Budget groups visualized
+- [x] Topic detail with history
+- [x] Utilization clear
+- [x] Interactive exploration
 
 ---
 

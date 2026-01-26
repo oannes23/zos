@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ insight.topic_key }} — Zos{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+    <a href="/ui/insights">Insights</a> / {{ insight.topic_key }}
+</nav>
+
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">{{ insight.topic_key }}</h1>
+        <span class="badge badge-{{ insight.category }}">{{ insight.category }}</span>
+    </div>
+
+    <div class="insight-content-full">
+        {{ insight.content }}
+    </div>
+
+    <div class="insight-meta mt-2">
+        <div class="meta-row">
+            <span class="meta-label">Created</span>
+            <span>{{ insight.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        </div>
+        <div class="meta-row">
+            <span class="meta-label">Memory</span>
+            <span>{{ insight.temporal_marker }}</span>
+        </div>
+        <div class="meta-row">
+            <span class="meta-label">Strength</span>
+            <span>{{ insight.strength | round(1) }}</span>
+        </div>
+    </div>
+
+    <h3 class="mt-2">Metrics</h3>
+    <div class="metrics-grid">
+        <div class="metric">
+            <span class="metric-value">{{ (insight.confidence * 100) | int }}%</span>
+            <span class="metric-label">Confidence</span>
+        </div>
+        <div class="metric">
+            <span class="metric-value">{{ (insight.importance * 100) | int }}%</span>
+            <span class="metric-label">Importance</span>
+        </div>
+        <div class="metric">
+            <span class="metric-value">{{ (insight.novelty * 100) | int }}%</span>
+            <span class="metric-label">Novelty</span>
+        </div>
+    </div>
+
+    <h3 class="mt-2">Emotional Valence</h3>
+    <div class="valence-detail">
+        {% for name, value in insight.valence.items() %}
+        {% if value is not none %}
+        <div class="valence-row">
+            <span class="valence-name">{{ name | capitalize }}</span>
+            <div class="progress" style="width: 200px">
+                <div class="progress-bar valence-{{ name }}" style="width: {{ value * 100 }}%"></div>
+            </div>
+            <span class="valence-value">{{ (value * 100) | int }}%</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    {% if insight.supersedes %}
+    <h3 class="mt-2">Supersedes</h3>
+    <a href="/ui/insights/{{ insight.supersedes }}">View previous insight</a>
+    {% endif %}
+</div>
+
+<div class="related-insights mt-2">
+    <h3>Other Insights on This Topic</h3>
+    <div hx-get="/ui/insights/topic/{{ insight.topic_key }}?exclude={{ insight.id }}"
+         hx-trigger="load">
+        Loading...
+    </div>
+</div>
+{% endblock %}

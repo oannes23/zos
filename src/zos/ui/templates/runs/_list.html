@@ -1,0 +1,64 @@
+<table class="runs-table">
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Layer</th>
+            <th>Status</th>
+            <th>Targets</th>
+            <th>Insights</th>
+            <th>Tokens</th>
+            <th>Cost</th>
+            <th>Duration</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for run in runs %}
+        <tr class="clickable"
+            hx-get="/ui/runs/{{ run.id }}"
+            hx-target="#run-detail-modal"
+            hx-swap="innerHTML">
+            <td>{{ run.started_at | relative_time }}</td>
+            <td>{{ run.layer_name }}</td>
+            <td>
+                <span class="badge badge-{{ run.status }}">{{ run.status }}</span>
+            </td>
+            <td>
+                {{ run.targets_processed }}
+                {% if run.targets_skipped > 0 %}
+                <span class="text-error">({{ run.targets_skipped }} skipped)</span>
+                {% endif %}
+            </td>
+            <td>{{ run.insights_created }}</td>
+            <td>{{ run.tokens_total | format_number }}</td>
+            <td>{{ run.estimated_cost_usd | format_cost }}</td>
+            <td>{{ run.duration_seconds | format_duration }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if runs %}
+<div class="pagination">
+    {% if offset > 0 %}
+    <button hx-get="/ui/runs/list?offset={{ offset - limit }}&limit={{ limit }}"
+            hx-target="#runs-list"
+            hx-include="[name='layer_name'],[name='status']">
+        Previous
+    </button>
+    {% endif %}
+
+    <span class="page-info">{{ offset + 1 }}-{{ offset + runs|length }} of {{ total }}</span>
+
+    {% if offset + limit < total %}
+    <button hx-get="/ui/runs/list?offset={{ offset + limit }}&limit={{ limit }}"
+            hx-target="#runs-list"
+            hx-include="[name='layer_name'],[name='status']">
+        Next
+    </button>
+    {% endif %}
+</div>
+{% else %}
+<p class="empty-state">No runs found.</p>
+{% endif %}
+
+<div id="run-detail-modal" class="modal"></div>

@@ -1,7 +1,7 @@
 # Story 5.3: Salience API
 
 **Epic**: Introspection
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 **Estimated complexity**: Medium
 
 ## Goal
@@ -10,11 +10,11 @@ Implement API endpoints for querying salience balances and transaction history.
 
 ## Acceptance Criteria
 
-- [ ] GET `/salience/{topic_key}` returns balance and recent transactions
-- [ ] GET `/salience` lists topics by salience (top N)
-- [ ] GET `/salience/groups` returns budget group summaries
-- [ ] Transaction history queryable
-- [ ] Balances computed from ledger
+- [x] GET `/salience/{topic_key}` returns balance and recent transactions
+- [x] GET `/salience` lists topics by salience (top N)
+- [x] GET `/salience/groups` returns budget group summaries
+- [x] Transaction history queryable
+- [x] Balances computed from ledger
 
 ## Technical Notes
 
@@ -298,10 +298,10 @@ async def get_transactions(
 
 ## Definition of Done
 
-- [ ] All endpoints work
-- [ ] Balances accurate
-- [ ] Groups summary works
-- [ ] Ready for dashboard
+- [x] All endpoints work
+- [x] Balances accurate
+- [x] Groups summary works
+- [x] Ready for dashboard
 
 ---
 

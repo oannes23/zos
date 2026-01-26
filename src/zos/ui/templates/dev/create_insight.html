@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Create Insight (Dev) - Zos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Create Insight <span class="badge badge-warning">Dev Mode</span></h1>
+    <p class="text-muted">Manual insight creation for development and testing.</p>
+</div>
+
+<form id="create-insight-form" class="card">
+    <div class="form-group">
+        <label for="topic_key">Topic Key</label>
+        <input type="text" id="topic_key" name="topic_key" required
+               placeholder="server:123:user:456"
+               class="form-control">
+        <small class="form-text">e.g., server:123:user:456, user:123, self:zos</small>
+    </div>
+
+    <div class="form-group">
+        <label for="category">Category</label>
+        <select id="category" name="category" required class="form-control">
+            <option value="user_reflection">User Reflection</option>
+            <option value="dyad_observation">Dyad Observation</option>
+            <option value="channel_reflection">Channel Reflection</option>
+            <option value="self_reflection">Self Reflection</option>
+            <option value="social_texture">Social Texture</option>
+            <option value="synthesis">Synthesis</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="content">Content</label>
+        <textarea id="content" name="content" rows="4" required
+                  placeholder="The insight content..."
+                  class="form-control"></textarea>
+    </div>
+
+    <h3>Metrics</h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="confidence">Confidence</label>
+            <input type="number" id="confidence" name="confidence" value="0.5"
+                   min="0" max="1" step="0.1" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="importance">Importance</label>
+            <input type="number" id="importance" name="importance" value="0.5"
+                   min="0" max="1" step="0.1" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="novelty">Novelty</label>
+            <input type="number" id="novelty" name="novelty" value="0.5"
+                   min="0" max="1" step="0.1" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="strength_adjustment">Strength</label>
+            <input type="number" id="strength_adjustment" name="strength_adjustment" value="1.0"
+                   min="0.1" max="10" step="0.1" class="form-control">
+        </div>
+    </div>
+
+    <h3>Valence <small class="text-muted">(at least one required)</small></h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="valence_joy">Joy</label>
+            <input type="number" id="valence_joy" name="valence_joy"
+                   min="0" max="1" step="0.1" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="valence_curiosity">Curiosity</label>
+            <input type="number" id="valence_curiosity" name="valence_curiosity" value="0.5"
+                   min="0" max="1" step="0.1" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="valence_warmth">Warmth</label>
+            <input type="number" id="valence_warmth" name="valence_warmth"
+                   min="0" max="1" step="0.1" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="valence_concern">Concern</label>
+            <input type="number" id="valence_concern" name="valence_concern"
+                   min="0" max="1" step="0.1" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="valence_tension">Tension</label>
+            <input type="number" id="valence_tension" name="valence_tension"
+                   min="0" max="1" step="0.1" class="form-control">
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Create Insight</button>
+    </div>
+</form>
+
+<div id="result" class="mt-2"></div>
+
+<script>
+document.getElementById('create-insight-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const form = e.target;
+    const resultDiv = document.getElementById('result');
+
+    // Build JSON body from form
+    const data = {
+        topic_key: form.topic_key.value,
+        category: form.category.value,
+        content: form.content.value,
+        confidence: parseFloat(form.confidence.value),
+        importance: parseFloat(form.importance.value),
+        novelty: parseFloat(form.novelty.value),
+        strength_adjustment: parseFloat(form.strength_adjustment.value),
+    };
+
+    // Only include valence fields if they have values
+    if (form.valence_joy.value) data.valence_joy = parseFloat(form.valence_joy.value);
+    if (form.valence_curiosity.value) data.valence_curiosity = parseFloat(form.valence_curiosity.value);
+    if (form.valence_warmth.value) data.valence_warmth = parseFloat(form.valence_warmth.value);
+    if (form.valence_concern.value) data.valence_concern = parseFloat(form.valence_concern.value);
+    if (form.valence_tension.value) data.valence_tension = parseFloat(form.valence_tension.value);
+
+    try {
+        const response = await fetch('/dev/insights', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            resultDiv.innerHTML = '<div class="alert alert-success">Insight created with ID: ' + result.id + '</div>';
+            form.content.value = '';  // Clear content for next entry
+        } else {
+            resultDiv.innerHTML = '<div class="alert alert-error">Error: ' + (result.detail || JSON.stringify(result)) + '</div>';
+        }
+    } catch (err) {
+        resultDiv.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+</script>
+{% endblock %}

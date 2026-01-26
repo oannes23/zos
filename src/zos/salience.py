@@ -1310,6 +1310,191 @@ class SalienceLedger:
 
         return False
 
+    # =========================================================================
+    # API Query Methods (Story 5.3)
+    # =========================================================================
+
+    async def get_top_topics(
+        self,
+        group: "BudgetGroup | None" = None,
+        limit: int = 50,
+    ) -> list["TopicWithBalance"]:
+        """Get topics sorted by salience balance.
+
+        Args:
+            group: Optional budget group filter.
+            limit: Maximum number of topics to return.
+
+        Returns:
+            List of TopicWithBalance objects sorted by balance descending.
+        """
+        # Subquery for balances
+        balance_subquery = (
+            select(
+                salience_ledger.c.topic_key,
+                func.sum(salience_ledger.c.amount).label("balance"),
+            )
+            .group_by(salience_ledger.c.topic_key)
+            .subquery()
+        )
+
+        # Join with topics
+        stmt = (
+            select(
+                topics,
+                func.coalesce(balance_subquery.c.balance, 0.0).label("balance"),
+            )
+            .outerjoin(balance_subquery, topics.c.key == balance_subquery.c.topic_key)
+            .where(func.coalesce(balance_subquery.c.balance, 0.0) > 0)
+            .order_by(balance_subquery.c.balance.desc())
+            .limit(limit)
+        )
+
+        if group:
+            # Filter by budget group
+            categories = self._group_to_categories(group)
+            if group == BudgetGroup.GLOBAL:
+                stmt = stmt.where(
+                    and_(
+                        topics.c.is_global == True,
+                        topics.c.category.in_(categories),
+                    )
+                )
+            elif group == BudgetGroup.SELF:
+                stmt = stmt.where(topics.c.category == "self")
+            else:
+                stmt = stmt.where(
+                    and_(
+                        topics.c.is_global == False,
+                        topics.c.category.in_(categories),
+                    )
+                )
+
+        with self.engine.connect() as conn:
+            rows = conn.execute(stmt).fetchall()
+
+            return [
+                TopicWithBalance(
+                    key=row.key,
+                    category=TopicCategory(row.category),
+                    is_global=row.is_global,
+                    provisional=row.provisional,
+                    created_at=_ensure_utc(row.created_at),
+                    last_activity_at=_ensure_utc(row.last_activity_at),
+                    metadata=row.metadata,
+                    balance=float(row.balance) if row.balance else 0.0,
+                )
+                for row in rows
+            ]
+
+    def _group_to_categories(self, group: "BudgetGroup") -> list[str]:
+        """Map budget group to topic categories.
+
+        Args:
+            group: The budget group.
+
+        Returns:
+            List of category strings for this group.
+        """
+        group_categories: dict[BudgetGroup, list[str]] = {
+            BudgetGroup.SOCIAL: ["user", "dyad", "user_in_channel", "dyad_in_channel"],
+            BudgetGroup.GLOBAL: ["user", "dyad"],
+            BudgetGroup.SPACES: ["channel", "thread"],
+            BudgetGroup.SEMANTIC: ["subject", "role"],
+            BudgetGroup.CULTURE: ["emoji"],
+            BudgetGroup.SELF: ["self"],
+        }
+        return group_categories.get(group, [])
+
+    async def get_topics_by_group(
+        self,
+        group: "BudgetGroup",
+        server_id: str | None = None,
+    ) -> list[Topic]:
+        """Get all topics in a budget group.
+
+        Args:
+            group: The budget group to query.
+            server_id: Optional server ID to filter server-scoped topics.
+
+        Returns:
+            List of Topic instances in this group.
+        """
+        categories = self._group_to_categories(group)
+
+        with self.engine.connect() as conn:
+            if group == BudgetGroup.GLOBAL:
+                # Global topics don't start with server:
+                stmt = select(topics).where(
+                    and_(
+                        topics.c.is_global == True,
+                        topics.c.category.in_(categories),
+                    )
+                )
+            elif group == BudgetGroup.SELF:
+                # Self topics can be global or server-scoped
+                stmt = select(topics).where(topics.c.category == "self")
+                if server_id:
+                    # Include both global self and server-specific self
+                    stmt = select(topics).where(
+                        and_(
+                            topics.c.category == "self",
+                            or_(
+                                topics.c.is_global == True,
+                                topics.c.key.like(f"server:{server_id}:%"),
+                            ),
+                        )
+                    )
+            else:
+                # Server-scoped topics
+                stmt = select(topics).where(
+                    and_(
+                        topics.c.is_global == False,
+                        topics.c.category.in_(categories),
+                    )
+                )
+                if server_id:
+                    stmt = stmt.where(topics.c.key.like(f"server:{server_id}:%"))
+
+            rows = conn.execute(stmt).fetchall()
+
+            return [
+                Topic(
+                    key=row.key,
+                    category=TopicCategory(row.category),
+                    is_global=row.is_global,
+                    provisional=row.provisional,
+                    created_at=_ensure_utc(row.created_at),
+                    last_activity_at=_ensure_utc(row.last_activity_at),
+                    metadata=row.metadata,
+                )
+                for row in rows
+            ]
+
+
+class TopicWithBalance:
+    """Topic with computed salience balance."""
+
+    def __init__(
+        self,
+        key: str,
+        category: TopicCategory,
+        is_global: bool,
+        provisional: bool,
+        created_at: datetime,
+        last_activity_at: datetime | None,
+        metadata: dict | None,
+        balance: float,
+    ):
+        self.key = key
+        self.category = category
+        self.is_global = is_global
+        self.provisional = provisional
+        self.created_at = created_at
+        self.last_activity_at = last_activity_at
+        self.metadata = metadata
+        self.balance = balance
+
 
 class EarningCoordinator:
     """Coordinates salience earning from observed activity.

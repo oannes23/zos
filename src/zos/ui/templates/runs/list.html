@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Layer Runs — Zos{% endblock %}
+
+{% block content %}
+<h1>Layer Runs</h1>
+<p class="text-muted">Reflection execution history and operational status</p>
+
+<div class="stats-row" hx-get="/ui/runs/stats" hx-trigger="load">
+    Loading stats...
+</div>
+
+<div class="filters mt-2">
+    <select name="layer_name"
+            hx-get="/ui/runs/list"
+            hx-trigger="change"
+            hx-target="#runs-list"
+            hx-include="[name='status']">
+        <option value="">All layers</option>
+        {% for layer in layers %}
+        <option value="{{ layer }}">{{ layer }}</option>
+        {% endfor %}
+    </select>
+
+    <select name="status"
+            hx-get="/ui/runs/list"
+            hx-trigger="change"
+            hx-target="#runs-list"
+            hx-include="[name='layer_name']">
+        <option value="">All statuses</option>
+        <option value="success">Success</option>
+        <option value="partial">Partial</option>
+        <option value="failed">Failed</option>
+        <option value="dry">Dry Run</option>
+    </select>
+</div>
+
+<div id="runs-list" class="mt-1" hx-get="/ui/runs/list" hx-trigger="load">
+    Loading...
+</div>
+{% endblock %}
