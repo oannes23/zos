@@ -116,7 +116,7 @@ class TestVisionDisabled:
         attachment.content_type = "image/png"
         message.attachments = [attachment]
 
-        await bot._queue_media_for_analysis(message)
+        await bot._queue_media_for_analysis(message, "user123")
 
         # Queue should remain empty
         assert bot._media_analysis_queue.empty()
@@ -466,7 +466,7 @@ class TestMediaQueueing:
 
         message.attachments = [attachment1, attachment2]
 
-        await bot._queue_media_for_analysis(message)
+        await bot._queue_media_for_analysis(message, "user123")
 
         # Both images should be queued
         assert bot._media_analysis_queue.qsize() == 2
@@ -487,7 +487,7 @@ class TestMediaQueueing:
 
         message.attachments = [attachment]
 
-        await bot._queue_media_for_analysis(message)
+        await bot._queue_media_for_analysis(message, "user456")
 
         # No items should be queued
         assert bot._media_analysis_queue.empty()
@@ -516,10 +516,32 @@ class TestMediaQueueing:
 
         message.attachments = [image_attachment, video_attachment, pdf_attachment]
 
-        await bot._queue_media_for_analysis(message)
+        await bot._queue_media_for_analysis(message, "user789")
 
         # Only the image should be queued
         assert bot._media_analysis_queue.qsize() == 1
+
+    @pytest.mark.asyncio
+    async def test_anonymous_user_media_not_queued(self) -> None:
+        """Media from anonymous users (<chat>) is not queued for analysis."""
+        config = Config()
+        config.observation.vision_enabled = True
+        bot = ZosBot(config)
+
+        message = MagicMock()
+        message.id = "msg999"
+
+        attachment = MagicMock()
+        attachment.content_type = "image/png"
+        attachment.filename = "anon_image.png"
+
+        message.attachments = [attachment]
+
+        # Anonymous user ID (privacy gate boundary)
+        await bot._queue_media_for_analysis(message, "<chat_42>")
+
+        # Media should NOT be queued - privacy boundary
+        assert bot._media_analysis_queue.empty()
 
 
 class TestVisionPrompt:

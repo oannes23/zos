@@ -715,8 +715,9 @@ class ZosBot(commands.Bot):
                 # Don't fail message storage if earning fails
 
         # Queue media for analysis (doesn't block polling)
+        # Privacy boundary: never analyze media from anonymous users
         if has_media and message.attachments:
-            await self._queue_media_for_analysis(message)
+            await self._queue_media_for_analysis(message, author_id)
 
     # =========================================================================
     # Privacy Gate
@@ -1154,16 +1155,32 @@ class ZosBot(commands.Bot):
     async def _queue_media_for_analysis(
         self,
         message: discord.Message,
+        author_id: str,
     ) -> None:
         """Queue any image attachments for vision analysis.
 
         Messages are stored immediately with has_media=true. Images are
         queued for separate analysis that doesn't block polling.
 
+        Privacy boundary: Anonymous users (<chat>) have their media logged
+        but NOT analyzed. This respects the privacy gate - we don't process
+        visual content from users who haven't opted into identity tracking.
+
         Args:
             message: Discord message with potential media attachments.
+            author_id: Resolved author ID (may be <chat_N> for anonymous users).
         """
         if not self.config.observation.vision_enabled:
+            return
+
+        # Privacy boundary: never analyze media from anonymous users
+        if author_id.startswith("<chat"):
+            if message.attachments:
+                log.debug(
+                    "media_skipped_anonymous",
+                    message_id=str(message.id),
+                    attachment_count=len(message.attachments),
+                )
             return
 
         for attachment in message.attachments:
@@ -1374,6 +1391,7 @@ class ZosBot(commands.Bot):
 
         # Close the Discord connection
         await self.close()
+        await asyncio.sleep(0)  # Allow pending aiohttp callbacks to finalize
         log.info("shutdown_complete")
 
 

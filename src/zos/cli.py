@@ -102,6 +102,8 @@ def observe(ctx: click.Context) -> None:
         log.error("observe_failed", error=str(e))
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
+    finally:
+        engine.dispose()
 
 
 @cli.command()
