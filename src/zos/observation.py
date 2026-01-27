@@ -1398,7 +1398,7 @@ def setup_signal_handlers(bot: ZosBot, loop: asyncio.AbstractEventLoop) -> None:
     log.debug("signal_handlers_registered", signals=["SIGINT", "SIGTERM"])
 
 
-async def run_bot(config: Config) -> None:
+async def run_bot(config: Config, engine: Engine | None = None) -> None:
     """Run the Discord observation bot.
 
     This is the main entry point for the observe command.
@@ -1406,8 +1406,9 @@ async def run_bot(config: Config) -> None:
 
     Args:
         config: Application configuration with discord_token.
+        engine: SQLAlchemy database engine for message storage.
     """
-    bot = ZosBot(config)
+    bot = ZosBot(config, engine)
     loop = asyncio.get_running_loop()
 
     # Setup signal handlers for graceful shutdown

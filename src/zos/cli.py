@@ -74,6 +74,8 @@ def observe(ctx: click.Context) -> None:
     Requires DISCORD_TOKEN environment variable to be set.
     Use Ctrl+C or send SIGTERM for graceful shutdown.
     """
+    from zos.database import create_tables, get_engine
+    from zos.migrations import migrate
     from zos.observation import run_bot
 
     config = ctx.obj["config"]
@@ -83,10 +85,15 @@ def observe(ctx: click.Context) -> None:
         click.echo("Set DISCORD_TOKEN to your bot token to connect to Discord.", err=True)
         raise SystemExit(1)
 
+    # Initialize database
+    engine = get_engine(config)
+    migrate(engine)
+    create_tables(engine)
+
     log.info("observe_command_invoked")
 
     try:
-        asyncio.run(run_bot(config))
+        asyncio.run(run_bot(config, engine))
     except KeyboardInterrupt:
         # This shouldn't normally be reached since we handle SIGINT,
         # but it's a safety net for cases where signal handling fails
