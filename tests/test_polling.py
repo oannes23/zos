@@ -787,3 +787,17 @@ class TestBotInitialization:
         assert bot.intents.message_content is True
         assert bot.intents.reactions is True
         assert bot.intents.members is True
+
+    def test_bot_initializes_reaction_rate_limiter(
+        self, test_config: Config
+    ) -> None:
+        """Bot should initialize reaction rate limiter."""
+        bot = ZosBot(test_config)
+        assert bot._reaction_user_limiter is not None
+
+    def test_bot_initializes_media_queue_with_maxsize(
+        self, test_config: Config
+    ) -> None:
+        """Bot should initialize media queue with configured maxsize."""
+        bot = ZosBot(test_config)
+        assert bot._media_analysis_queue.maxsize == 100

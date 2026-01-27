@@ -134,10 +134,15 @@ class ZosBot(commands.Bot):
             calls_per_minute=config.observation.vision_rate_limit_per_minute
         )
 
+        # Reaction rate limiter
+        self._reaction_user_limiter = RateLimiter(
+            calls_per_minute=config.observation.reaction_user_rate_limit_per_minute
+        )
+
         # Queue for pending media analysis tasks
         self._media_analysis_queue: asyncio.Queue[
             tuple[str, discord.Attachment]
-        ] = asyncio.Queue()
+        ] = asyncio.Queue(maxsize=config.observation.media_queue_max_size)
         self._media_analysis_task: asyncio.Task | None = None
 
         # Earning coordinator for salience (lazy initialized when engine is available)
@@ -298,7 +303,11 @@ class ZosBot(commands.Bot):
                         error=str(e),
                     )
 
-        log.debug("poll_messages_tick_complete", messages_stored=total_messages)
+        log.debug(
+            "poll_messages_tick_complete",
+            messages_stored=total_messages,
+            media_queue_depth=self._media_analysis_queue.qsize(),
+        )
 
     @poll_messages.before_loop
     async def before_poll(self) -> None:
@@ -558,6 +567,28 @@ class ZosBot(commands.Bot):
         channel_id = str(channel.id)
         last_polled = self._get_last_polled(channel_id)
 
+        # Initialize poll_state on first encounter
+        if last_polled is None:
+            if not self.config.observation.allow_backfill_on_startup:
+                # Start from NOW, ignore history
+                now = datetime.now(timezone.utc)
+                self._set_last_polled(channel_id, now)
+                log.info(
+                    "channel_first_poll_initialized",
+                    channel_id=channel_id,
+                    channel_name=channel.name,
+                    timestamp=now.isoformat(),
+                    backfill_disabled=True,
+                )
+                return 0  # No messages to process
+            else:
+                # Allow backfill (existing behavior)
+                log.info(
+                    "channel_first_poll_backfill_enabled",
+                    channel_id=channel_id,
+                    channel_name=channel.name,
+                )
+
         messages_stored = 0
         last_message_at: datetime | None = None
 
@@ -605,6 +636,26 @@ class ZosBot(commands.Bot):
 
         channel_id = str(channel.id)
         last_polled = self._get_last_polled(channel_id)
+
+        # Initialize poll_state on first encounter
+        if last_polled is None:
+            if not self.config.observation.allow_backfill_on_startup:
+                # Start from NOW, ignore history
+                now = datetime.now(timezone.utc)
+                self._set_last_polled(channel_id, now)
+                log.info(
+                    "dm_channel_first_poll_initialized",
+                    channel_id=channel_id,
+                    timestamp=now.isoformat(),
+                    backfill_disabled=True,
+                )
+                return 0  # No messages to process
+            else:
+                # Allow backfill (existing behavior)
+                log.info(
+                    "dm_channel_first_poll_backfill_enabled",
+                    channel_id=channel_id,
+                )
 
         messages_stored = 0
         last_message_at: datetime | None = None
@@ -862,6 +913,9 @@ class ZosBot(commands.Bot):
 
             # Fetch users who reacted
             try:
+                # Apply rate limiting before fetching reaction users
+                await self._reaction_user_limiter.acquire()
+
                 async for user in reaction.users():
                     # Apply privacy gate
                     user_id = self._resolve_author_id(user, server_id)
@@ -1221,6 +1275,15 @@ class ZosBot(commands.Bot):
 
         for attachment in message.attachments:
             if self._is_image(attachment):
+                # Log warning if queue is getting full
+                queue_size = self._media_analysis_queue.qsize()
+                if queue_size > self.config.observation.media_queue_max_size * 0.8:
+                    log.warning(
+                        "media_queue_near_full",
+                        queue_size=queue_size,
+                        max_size=self.config.observation.media_queue_max_size,
+                    )
+
                 await self._media_analysis_queue.put(
                     (str(message.id), attachment)
                 )
