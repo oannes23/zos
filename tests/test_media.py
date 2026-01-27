@@ -101,6 +101,109 @@ class TestImageDetection:
         assert bot._is_image(attachment) is False
 
 
+class TestMediaTypeInference:
+    """Tests for inferring media type from filename when content_type is missing."""
+
+    def test_infer_from_content_type_when_present(self) -> None:
+        """Uses content_type when available."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = "image/png"
+        attachment.filename = "test.png"
+
+        assert bot._infer_media_type(attachment) == "image/png"
+
+    def test_infer_png_from_filename(self) -> None:
+        """Infers PNG from .png extension when content_type is None."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = None
+        attachment.filename = "Aua6XAu.png"
+
+        assert bot._infer_media_type(attachment) == "image/png"
+
+    def test_infer_jpeg_from_jpg_extension(self) -> None:
+        """Infers JPEG from .jpg extension."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = None
+        attachment.filename = "photo.jpg"
+
+        assert bot._infer_media_type(attachment) == "image/jpeg"
+
+    def test_infer_jpeg_from_jpeg_extension(self) -> None:
+        """Infers JPEG from .jpeg extension."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = None
+        attachment.filename = "photo.jpeg"
+
+        assert bot._infer_media_type(attachment) == "image/jpeg"
+
+    def test_infer_gif_from_filename(self) -> None:
+        """Infers GIF from .gif extension."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = None
+        attachment.filename = "animation.gif"
+
+        assert bot._infer_media_type(attachment) == "image/gif"
+
+    def test_infer_webp_from_filename(self) -> None:
+        """Infers WebP from .webp extension."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = None
+        attachment.filename = "modern.webp"
+
+        assert bot._infer_media_type(attachment) == "image/webp"
+
+    def test_case_insensitive_extension_matching(self) -> None:
+        """Extension matching is case-insensitive."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = None
+        attachment.filename = "UPPERCASE.PNG"
+
+        assert bot._infer_media_type(attachment) == "image/png"
+
+    def test_defaults_to_jpeg_when_no_info(self) -> None:
+        """Defaults to image/jpeg when no content_type or recognized extension."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = None
+        attachment.filename = "unknown.xyz"
+
+        assert bot._infer_media_type(attachment) == "image/jpeg"
+
+    def test_defaults_to_jpeg_when_no_filename(self) -> None:
+        """Defaults to image/jpeg when filename is None."""
+        config = Config()
+        bot = ZosBot(config)
+
+        attachment = MagicMock()
+        attachment.content_type = None
+        attachment.filename = None
+
+        assert bot._infer_media_type(attachment) == "image/jpeg"
+
+
 class TestVisionDisabled:
     """Tests for when vision is disabled in config."""
 

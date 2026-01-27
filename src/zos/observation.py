@@ -1152,6 +1152,42 @@ class ZosBot(commands.Bot):
         """
         return attachment.content_type in SUPPORTED_IMAGE_TYPES
 
+    def _infer_media_type(self, attachment: discord.Attachment) -> str:
+        """Infer media type from attachment, with fallback to filename extension.
+
+        Discord attachments should have content_type set, but occasionally don't.
+        When missing, infer from file extension to avoid sending wrong media type to vision API.
+
+        Args:
+            attachment: Discord attachment to infer type for.
+
+        Returns:
+            MIME type string (e.g., "image/png", "image/jpeg").
+        """
+        # Prefer the explicit content type if available
+        if attachment.content_type:
+            return attachment.content_type
+
+        # Fall back to filename extension
+        if attachment.filename:
+            filename_lower = attachment.filename.lower()
+            if filename_lower.endswith('.png'):
+                return "image/png"
+            elif filename_lower.endswith(('.jpg', '.jpeg')):
+                return "image/jpeg"
+            elif filename_lower.endswith('.gif'):
+                return "image/gif"
+            elif filename_lower.endswith('.webp'):
+                return "image/webp"
+
+        # Last resort default
+        log.warning(
+            "media_type_unknown",
+            filename=attachment.filename,
+            defaulting_to="image/jpeg"
+        )
+        return "image/jpeg"
+
     async def _queue_media_for_analysis(
         self,
         message: discord.Message,
@@ -1257,18 +1293,20 @@ class ZosBot(commands.Bot):
                 size_bytes=len(image_data),
             )
 
+            # Infer media type (handles missing content_type gracefully)
+            media_type_str = self._infer_media_type(attachment)
+
             # Call vision model
             llm = self._get_llm_client()
             result = await llm.analyze_image(
                 image_base64=image_base64,
-                media_type=attachment.content_type or "image/jpeg",
+                media_type=media_type_str,
                 prompt=VISION_PROMPT,
                 model_profile="vision",
             )
 
             # Determine media type enum from content type
-            content_type = attachment.content_type or "image/jpeg"
-            if "gif" in content_type:
+            if "gif" in media_type_str:
                 media_type = MediaType.GIF
             else:
                 media_type = MediaType.IMAGE
