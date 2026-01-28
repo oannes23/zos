@@ -250,6 +250,14 @@ class ReflectionScheduler:
         group = self._category_to_group(layer.category)
         topics = selected.get(group, [])
 
+        # Filter by target_category if specified
+        if layer.target_category:
+            topics = [
+                t
+                for t in topics
+                if self._topic_matches_category(t, layer.target_category)
+            ]
+
         # Apply layer's max_targets
         return topics[: layer.max_targets]
 
@@ -304,6 +312,29 @@ class ReflectionScheduler:
             LayerCategory.SYNTHESIS: BudgetGroup.GLOBAL,
         }
         return mapping.get(category, BudgetGroup.SOCIAL)
+
+    def _topic_matches_category(self, topic_key: str, target_category: str) -> bool:
+        """Check if a topic key matches the target category.
+
+        Args:
+            topic_key: The topic key to check (e.g., "server:123:user:456" or "server:123:dyad:456:789").
+            target_category: The category to match against (e.g., "user", "dyad").
+
+        Returns:
+            True if the topic matches the category.
+        """
+        parts = topic_key.split(":")
+        if len(parts) < 2:
+            return False
+
+        # Extract category from topic key
+        # Format: server:X:category:... or just category:...
+        if parts[0] == "server" and len(parts) >= 3:
+            topic_category = parts[2]
+        else:
+            topic_category = parts[0]
+
+        return topic_category == target_category
 
     async def check_self_reflection_trigger(self) -> LayerRun | None:
         """Check if self-reflection should trigger based on insight count.

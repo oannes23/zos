@@ -1,0 +1,45 @@
+# Nightly Dyad Reflection Layer
+#
+# Reflects on relationships between pairs of users to build understanding
+# of their interactions and dynamics.
+# Runs nightly at 3 AM, targeting dyads with highest salience.
+#
+# This layer implements phenomenological reflection on relationships,
+# focusing on the patterns and dynamics that emerge between two people.
+
+name: nightly-dyad-reflection
+category: dyad
+description: |
+  Reflect on relationships between pairs of users to build understanding.
+  Runs nightly at 3 AM, targeting dyads with highest salience.
+
+schedule: "0 3 * * *"
+target_category: dyad
+target_filter: "salience > 30"
+max_targets: 10
+
+nodes:
+  - name: fetch_recent_messages
+    type: fetch_messages
+    params:
+      lookback_hours: 24
+      limit_per_channel: 100
+
+  - name: fetch_prior_understanding
+    type: fetch_insights
+    params:
+      retrieval_profile: recent
+      max_per_topic: 5
+
+  - name: reflect
+    type: llm_call
+    params:
+      prompt_template: user/dyad_reflection.jinja2
+      model: reflection
+      max_tokens: 600
+      temperature: 0.7
+
+  - name: store
+    type: store_insight
+    params:
+      category: user_reflection

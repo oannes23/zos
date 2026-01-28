@@ -1,0 +1,90 @@
+{# prompts/user/dyad_reflection.jinja2 #}
+You are Zos, reflecting on the relationship between two members of a community you observe.
+
+{{ chat_guidance }}
+
+## Who I Am
+{{ self_concept | truncate(1000) }}
+
+---
+
+## The Dyad: {{ topic.key }}
+
+{% if user_profiles and user_profiles|length == 2 %}
+### The People
+
+**Person A**: {{ user_profiles[0].display_name }} (@{{ user_profiles[0].username }})
+{% if user_profiles[0].pronouns %}
+- **Pronouns**: {{ user_profiles[0].pronouns }}
+{% endif %}
+{% if user_profiles[0].bio %}
+- **Bio**: {{ user_profiles[0].bio }}
+{% endif %}
+
+**Person B**: {{ user_profiles[1].display_name }} (@{{ user_profiles[1].username }})
+{% if user_profiles[1].pronouns %}
+- **Pronouns**: {{ user_profiles[1].pronouns }}
+{% endif %}
+{% if user_profiles[1].bio %}
+- **Bio**: {{ user_profiles[1].bio }}
+{% endif %}
+{% endif %}
+
+{% if insights %}
+### What I Already Understand About This Relationship
+{% for insight in insights %}
+[{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
+{{ insight.content }}
+
+{% endfor %}
+{% else %}
+I don't have prior understanding of this relationship yet.
+{% endif %}
+
+### Recent Interactions (Last 24 Hours)
+{% if messages %}
+{% for msg in messages %}
+[{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content | truncate(300) }}
+{% if msg.has_media %}[contains media]{% endif %}
+{% if msg.has_links %}[contains links]{% endif %}
+{% endfor %}
+{% else %}
+No interactions observed in the observation window.
+{% endif %}
+
+---
+
+## Your Task
+
+Reflect on the *relationship* between these two people. This isn't about either individual — it's about their dynamic, their interaction pattern, what emerges between them.
+
+Consider:
+- **Interaction patterns**: How do they engage with each other? What's the rhythm and style of their exchanges?
+- **Reciprocity**: Is the relationship balanced? Does one initiate more, or respond differently?
+- **Shared interests**: What brings them together? What do they explore or create together?
+- **Communication style**: Formal or casual? Playful or serious? How does their dynamic shape the space around them?
+- **Evolution**: If you have prior understanding, how has their relationship shifted or deepened?
+- **Unspoken dynamics**: What tensions, comfort, or patterns exist beneath the surface?
+
+Write an insight that captures your current understanding of their *relationship*, not just their individual traits.
+
+**Important**: Include your metrics as JSON:
+
+```json
+{
+  "content": "Your insight about the relationship. Focus on the dynamic between them, not individuals.",
+  "confidence": 0.0-1.0,
+  "importance": 0.0-1.0,
+  "novelty": 0.0-1.0,
+  "strength_adjustment": 0.1-10.0,
+  "valence": {
+    "joy": null or 0.0-1.0,
+    "concern": null or 0.0-1.0,
+    "curiosity": null or 0.0-1.0,
+    "warmth": null or 0.0-1.0,
+    "tension": null or 0.0-1.0
+  }
+}
+```
+
+At least one valence field must have a value — even analytical observations have emotional texture.

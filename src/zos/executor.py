@@ -532,6 +532,40 @@ class LayerExecutor:
 
         return (None, None)
 
+    def _extract_dyad_from_topic(
+        self, topic_key: str
+    ) -> tuple[str | None, str | None, str | None]:
+        """Extract user IDs and server_id from a dyad topic key.
+
+        Args:
+            topic_key: Topic key (e.g., "dyad:<id1>:<id2>" or "server:<sid>:dyad:<id1>:<id2>").
+
+        Returns:
+            (user_id_1, user_id_2, server_id) tuple. server_id is None for global dyad topics.
+        """
+        # Global dyad topic: "dyad:<user_id_1>:<user_id_2>"
+        if topic_key.startswith("dyad:"):
+            parts = topic_key.split(":")
+            if len(parts) >= 3:
+                return (parts[1], parts[2], None)
+            return (None, None, None)
+
+        # Server-scoped dyad topic: "server:<server_id>:dyad:<user_id_1>:<user_id_2>"
+        if ":dyad:" in topic_key:
+            parts = topic_key.split(":")
+            # Find server_id (after "server:")
+            server_id = None
+            if parts[0] == "server" and len(parts) >= 2:
+                server_id = parts[1]
+            # Find user IDs (after ":dyad:")
+            dyad_idx = parts.index("dyad") if "dyad" in parts else -1
+            if dyad_idx >= 0 and dyad_idx + 2 < len(parts):
+                user_id_1 = parts[dyad_idx + 1]
+                user_id_2 = parts[dyad_idx + 2]
+                return (user_id_1, user_id_2, server_id)
+
+        return (None, None, None)
+
     async def _get_user_profile(
         self,
         user_id: str,
@@ -613,14 +647,25 @@ class LayerExecutor:
             for i in ctx.insights
         ]
 
-        # Fetch user profile for user reflections
+        # Fetch user profile(s) for user and dyad reflections
         user_profile = None
+        user_profiles = None
         if ctx.topic.category == TopicCategory.USER:
             # Extract user_id and server_id from topic key
             # User topic keys: "user:<user_id>" (global) or "server:<server_id>:user:<user_id>"
             user_id, server_id = self._extract_user_from_topic(ctx.topic.key)
             if user_id:
                 user_profile = await self._get_user_profile(user_id, server_id)
+        elif ctx.topic.category == TopicCategory.DYAD:
+            # Extract both user IDs and server_id from topic key
+            # Dyad topic keys: "dyad:<id1>:<id2>" (global) or "server:<sid>:dyad:<id1>:<id2>"
+            user_id_1, user_id_2, server_id = self._extract_dyad_from_topic(ctx.topic.key)
+            if user_id_1 and user_id_2:
+                profile_1 = await self._get_user_profile(user_id_1, server_id)
+                profile_2 = await self._get_user_profile(user_id_2, server_id)
+                # Only include profiles if both are found
+                if profile_1 and profile_2:
+                    user_profiles = [profile_1, profile_2]
 
         # Render template
         prompt = self.templates.render(
@@ -628,6 +673,7 @@ class LayerExecutor:
             {
                 "topic": ctx.topic,
                 "user_profile": user_profile,
+                "user_profiles": user_profiles,
                 "messages": format_messages_for_prompt(messages_data, {}),
                 "insights": format_insights_for_prompt(insights_data),
                 "layer_runs": ctx.layer_runs,
