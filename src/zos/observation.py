@@ -763,7 +763,7 @@ class ZosBot(commands.Bot):
         if last_polled is None:
             backfill_hours = self.config.observation.backfill_hours
             last_polled = datetime.now(timezone.utc) - timedelta(hours=backfill_hours)
-            log.info(
+            log.debug(
                 "channel_first_poll_backfill_limited",
                 channel_id=channel_id,
                 channel_name=channel.name,
@@ -902,7 +902,7 @@ class ZosBot(commands.Bot):
         if last_polled is None:
             backfill_hours = self.config.observation.backfill_hours
             last_polled = datetime.now(timezone.utc) - timedelta(hours=backfill_hours)
-            log.info(
+            log.debug(
                 "dm_channel_first_poll_backfill_limited",
                 channel_id=channel_id,
                 backfill_hours=backfill_hours,
