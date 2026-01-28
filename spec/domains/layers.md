@@ -2,7 +2,7 @@
 
 **Status**: 🟢 Complete
 **Last interrogated**: 2026-01-23 (acknowledgment layer deprecated; replaced by reactions)
-**Last verified**: —
+**Last verified**: 2026-01-28
 **Depends on**: Topics, Salience, Insights, Privacy, Chattiness
 **Depended on by**: None (top of dependency chain for cognition)
 
@@ -125,6 +125,7 @@ Filter expressions support:
 |------|---------|--------|---------|
 | `fetch_messages` | Retrieve conversation history | topic key, time range | messages list |
 | `fetch_insights` | Retrieve prior understanding | topic key, retrieval config | insights list |
+| `fetch_reactions` | Retrieve user's reaction patterns | topic key, time range | grouped reactions list |
 | `llm_call` | Process through language model | prompt template, context | generated text |
 | `reduce` | Combine multiple outputs | list of items | aggregated result |
 | `store_insight` | Persist new understanding | insight content, topic | stored insight |
@@ -157,6 +158,14 @@ params:
   max_per_topic: 5
   max_age_days: 30
   include_conflicting: false
+  members_of_topic: false  # For dyads: fetch insights about each member
+```
+
+**fetch_reactions**:
+```yaml
+params:
+  lookback_days: 7
+  min_reactions: 5  # Minimum reactions to include user
 ```
 
 **llm_call**:
@@ -345,6 +354,10 @@ Templates have access to:
 - `messages`: Fetched messages
 - `insights`: Prior insights (with temporal markers)
 - `context`: Accumulated context from prior nodes
+- `user_profile`: User profile data (display name, bio, etc.) for user topics
+- `user_profiles`: Both user profiles for dyad topics
+- `reactions`: Grouped reaction data (when fetch_reactions used)
+- `individual_insights`: Per-member insights for dyads (when members_of_topic=true)
 - Config values and helper functions
 
 ### Standard `<chat>` Guidance Injection
@@ -576,14 +589,14 @@ nodes:
   - name: get_messages
     type: fetch_messages
     params:
-      lookback_hours: 24
+      lookback_hours: 72
       limit_per_channel: 50
 
   - name: get_prior
     type: fetch_insights
     params:
       retrieval_profile: recent
-      max_per_topic: 3
+      max_per_topic: 10
 
   - name: reflect
     type: llm_call
@@ -612,12 +625,13 @@ trigger_threshold: 10   # Or when 10+ new self-insights
 target_category: self
 
 nodes:
-  - name: gather_self_insights
+  - name: gather_recent_experiences
     type: fetch_insights
     params:
       topic_key: "self:zos"
       retrieval_profile: comprehensive
-      since_last_run: true
+      since_days: 14
+      max_per_topic: 7
 
   - name: gather_server_selves
     type: fetch_insights
@@ -673,6 +687,45 @@ nodes:
     type: synthesize_to_global
     params:
       target_topic: "user:{{target_user_id}}"
+```
+
+### Weekly Emoji Pattern Analysis
+
+```yaml
+name: weekly-emoji-patterns
+category: user
+description: |
+  Analyze user emoji reaction patterns to understand their
+  expressive style and what resonates with them.
+
+schedule: "0 4 * * 0"  # Sunday at 4 AM
+target_category: user
+target_filter: "salience > 30"
+max_targets: 10
+
+nodes:
+  - name: fetch_reactions
+    type: fetch_reactions
+    params:
+      lookback_days: 7
+      min_reactions: 5
+
+  - name: get_prior
+    type: fetch_insights
+    params:
+      retrieval_profile: recent
+      max_per_topic: 5
+
+  - name: reflect
+    type: llm_call
+    params:
+      prompt_template: user/emoji_reflection.jinja2
+      model: reflection
+
+  - name: save
+    type: store_insight
+    params:
+      category: user_reflection
 ```
 
 ---
@@ -960,4 +1013,4 @@ Chaining is limited to prevent runaway responses:
 
 ---
 
-_Last updated: 2026-01-23 — Model configuration section added; error reflection decision; acknowledgment layer deprecated_
+_Last updated: 2026-01-28 — fetch_reactions node type, user profile context, updated reflection windows_

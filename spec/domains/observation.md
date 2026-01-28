@@ -2,7 +2,7 @@
 
 **Status**: 🟢 Complete
 **Last interrogated**: 2026-01-23
-**Last verified**: —
+**Last verified**: 2026-01-28
 **Depends on**: Topics (emoji topic creation), Privacy (reaction tracking rules)
 **Depended on by**: Layers (consumes observed data), Salience (reaction-based earning), Insights (social texture)
 
@@ -231,13 +231,18 @@ observation:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `polling_interval_seconds` | 60 | How often to check for new activity |
+| `polling_interval_seconds` | 300 | How often to check for new activity |
 | `vision_enabled` | true | Run vision analysis on images |
 | `link_fetch_enabled` | true | Fetch and summarize linked content |
 | `youtube_transcript_enabled` | true | Fetch YouTube transcripts |
 | `video_duration_threshold_minutes` | 30 | Max video length for full analysis |
 | `reaction_batch_size` | 100 | Reactions to process per poll cycle |
 | `link_fetch_timeout_seconds` | 30 | Timeout for fetching linked content |
+| `vision_rate_limit_per_minute` | 10 | Max vision API calls per minute |
+| `reaction_user_rate_limit_per_minute` | 20 | Max Discord API calls for user reactions per minute |
+| `media_queue_max_size` | 100 | Maximum pending media items in analysis queue |
+| `reaction_resync_hours` | 24 | Hours of reaction history to resync on startup |
+| `backfill_hours` | 24 | Hours of message history to backfill on startup |
 
 ---
 
@@ -293,4 +298,4 @@ Observation uses batch polling, not Discord gateway events. This is intentional 
 
 ---
 
-_Last updated: 2026-01-23_
+_Last updated: 2026-01-28 — Updated polling interval default, added rate limiting configuration_
