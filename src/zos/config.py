@@ -170,7 +170,7 @@ class ObservationConfig(BaseModel):
     link_fetch_enabled: bool = True
     youtube_transcript_enabled: bool = True
     video_duration_threshold_minutes: int = 30
-    allow_backfill_on_startup: bool = False
+    backfill_hours: int = 24
     reaction_user_rate_limit_per_minute: int = 20
     media_queue_max_size: int = 100
     reaction_resync_hours: int = 24

@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands, tasks
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Engine
 
@@ -567,27 +567,16 @@ class ZosBot(commands.Bot):
         channel_id = str(channel.id)
         last_polled = self._get_last_polled(channel_id)
 
-        # Initialize poll_state on first encounter
+        # Initialize poll_state on first encounter with limited backfill
         if last_polled is None:
-            if not self.config.observation.allow_backfill_on_startup:
-                # Start from NOW, ignore history
-                now = datetime.now(timezone.utc)
-                self._set_last_polled(channel_id, now)
-                log.info(
-                    "channel_first_poll_initialized",
-                    channel_id=channel_id,
-                    channel_name=channel.name,
-                    timestamp=now.isoformat(),
-                    backfill_disabled=True,
-                )
-                return 0  # No messages to process
-            else:
-                # Allow backfill (existing behavior)
-                log.info(
-                    "channel_first_poll_backfill_enabled",
-                    channel_id=channel_id,
-                    channel_name=channel.name,
-                )
+            backfill_hours = self.config.observation.backfill_hours
+            last_polled = datetime.now(timezone.utc) - timedelta(hours=backfill_hours)
+            log.info(
+                "channel_first_poll_backfill_limited",
+                channel_id=channel_id,
+                channel_name=channel.name,
+                backfill_hours=backfill_hours,
+            )
 
         messages_stored = 0
         last_message_at: datetime | None = None
@@ -616,39 +605,87 @@ class ZosBot(commands.Bot):
                 messages_stored=messages_stored,
             )
 
-        # Phase 2: Re-sync reactions on recent messages (last N hours)
+        # Phase 2: Re-sync reactions by checking stored messages from database
         # This catches reactions added to older messages after they were first polled
         resync_hours = self.config.observation.reaction_resync_hours
         resync_cutoff = datetime.now(timezone.utc) - timedelta(hours=resync_hours)
 
-        # Only re-sync if we have established polling history and it overlaps with resync window
-        if last_polled and last_polled > resync_cutoff:
+        # Query messages from database (last N hours, non-deleted, limit for performance)
+        with self.engine.connect() as conn:
+            stmt = (
+                select(messages.c.id, messages.c.channel_id, messages.c.reactions_aggregate)
+                .where(
+                    and_(
+                        messages.c.channel_id == channel_id,
+                        messages.c.created_at >= resync_cutoff,
+                        messages.c.deleted_at.is_(None),
+                    )
+                )
+                .order_by(messages.c.created_at.desc())
+                .limit(100)  # Only check 100 most recent messages for performance
+            )
+            stored_messages = conn.execute(stmt).fetchall()
+
+        # Re-fetch each message from Discord to check for reaction changes
+        reactions_resynced = 0
+        messages_checked = 0
+        for row in stored_messages:
+            message_id = row.id
+            messages_checked += 1
+
+            # Skip if no reactions recorded in DB (optimization)
+            if not row.reactions_aggregate:
+                continue
+
+            try:
+                discord_message = await channel.fetch_message(int(message_id))
+                if discord_message.reactions:
+                    await self._sync_reactions(discord_message, server_id)
+                    reactions_resynced += 1
+            except discord.NotFound:
+                # Message was deleted from Discord
+                await self._mark_message_deleted(message_id)
+            except discord.Forbidden:
+                log.warning(
+                    "message_fetch_forbidden",
+                    message_id=message_id,
+                    channel_id=channel_id,
+                )
+                continue
+            except Exception as e:
+                log.error(
+                    "message_fetch_error",
+                    message_id=message_id,
+                    channel_id=channel_id,
+                    error=str(e),
+                )
+                continue
+
+        if reactions_resynced > 0:
             log.debug(
-                "reaction_resync_started",
+                "reaction_resync_completed",
                 channel_id=channel_id,
                 channel_name=channel.name,
-                resync_cutoff=resync_cutoff.isoformat(),
+                messages_checked=messages_checked,
+                with_reactions=reactions_resynced,
             )
 
-            reactions_resynced = 0
-            async for message in channel.history(
-                after=resync_cutoff,
-                limit=100,
-                oldest_first=False,
-            ):
-                if message.reactions:
-                    await self._sync_reactions(message, server_id)
-                    reactions_resynced += 1
-
-            if reactions_resynced > 0:
-                log.debug(
-                    "reaction_resync_completed",
-                    channel_id=channel_id,
-                    channel_name=channel.name,
-                    messages_checked=reactions_resynced,
-                )
-
         return messages_stored
+
+    async def _mark_message_deleted(self, message_id: str) -> None:
+        """Mark a message as deleted (soft delete).
+
+        Args:
+            message_id: Discord message snowflake ID.
+        """
+        with self.engine.connect() as conn:
+            conn.execute(
+                messages.update()
+                .where(messages.c.id == message_id)
+                .values(deleted_at=datetime.now(timezone.utc))
+            )
+            conn.commit()
+            log.debug("message_marked_deleted", message_id=message_id)
 
     async def _poll_dm_channel(self, channel: discord.DMChannel) -> int:
         """Poll a DM channel for new messages.
@@ -669,25 +706,15 @@ class ZosBot(commands.Bot):
         channel_id = str(channel.id)
         last_polled = self._get_last_polled(channel_id)
 
-        # Initialize poll_state on first encounter
+        # Initialize poll_state on first encounter with limited backfill
         if last_polled is None:
-            if not self.config.observation.allow_backfill_on_startup:
-                # Start from NOW, ignore history
-                now = datetime.now(timezone.utc)
-                self._set_last_polled(channel_id, now)
-                log.info(
-                    "dm_channel_first_poll_initialized",
-                    channel_id=channel_id,
-                    timestamp=now.isoformat(),
-                    backfill_disabled=True,
-                )
-                return 0  # No messages to process
-            else:
-                # Allow backfill (existing behavior)
-                log.info(
-                    "dm_channel_first_poll_backfill_enabled",
-                    channel_id=channel_id,
-                )
+            backfill_hours = self.config.observation.backfill_hours
+            last_polled = datetime.now(timezone.utc) - timedelta(hours=backfill_hours)
+            log.info(
+                "dm_channel_first_poll_backfill_limited",
+                channel_id=channel_id,
+                backfill_hours=backfill_hours,
+            )
 
         messages_stored = 0
         last_message_at: datetime | None = None
