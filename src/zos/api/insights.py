@@ -40,6 +40,7 @@ class InsightResponse(BaseModel):
 
     id: str
     topic_key: str
+    topic_key_original: Optional[str] = None  # Present when readable=true
     category: str
     content: str
     created_at: datetime
@@ -58,6 +59,7 @@ class InsightListResponse(BaseModel):
     Includes pagination metadata for navigating through results.
     """
 
+    readable: bool = False  # True when human-readable names are enabled
     insights: list[InsightResponse]
     total: int
     offset: int
@@ -122,7 +124,12 @@ def _strength_label(strength: float) -> str:
         return "distant memory"
 
 
-def _format_insight_response(insight, temporal_marker: str | None = None) -> InsightResponse:
+def _format_insight_response(
+    insight,
+    temporal_marker: str | None = None,
+    readable_topic_key: str | None = None,
+    original_topic_key: str | None = None,
+) -> InsightResponse:
     """Format insight for API response.
 
     Handles both Insight and FormattedInsight objects by checking
@@ -131,6 +138,8 @@ def _format_insight_response(insight, temporal_marker: str | None = None) -> Ins
     Args:
         insight: Either an Insight model or FormattedInsight.
         temporal_marker: Optional pre-computed temporal marker.
+        readable_topic_key: Optional human-readable topic key (when readable=true).
+        original_topic_key: Optional original topic key (when readable=true).
 
     Returns:
         InsightResponse for API output.
@@ -145,9 +154,13 @@ def _format_insight_response(insight, temporal_marker: str | None = None) -> Ins
         strength_label = _strength_label(insight.strength)
         marker = f"{strength_label} from {age}"
 
+    # Use readable topic key if provided, otherwise use original
+    topic_key = readable_topic_key if readable_topic_key else insight.topic_key
+
     return InsightResponse(
         id=insight.id,
-        topic_key=insight.topic_key,
+        topic_key=topic_key,
+        topic_key_original=original_topic_key,
         category=insight.category,
         content=insight.content,
         created_at=insight.created_at,
@@ -182,6 +195,7 @@ def _format_insight_response(insight, temporal_marker: str | None = None) -> Ins
 async def search_insights(
     q: str = Query(..., min_length=2, description="Search query"),
     category: Optional[str] = Query(None, description="Filter by insight category"),
+    readable: bool = Query(False, description="Replace IDs with human-readable names"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     limit: int = Query(20, ge=1, le=100, description="Maximum results to return"),
     db: "Engine" = Depends(get_db),
@@ -194,6 +208,7 @@ async def search_insights(
     Args:
         q: Search query string (minimum 2 characters).
         category: Optional category filter.
+        readable: If true, resolve IDs to human-readable names.
         offset: Pagination offset.
         limit: Maximum results per page.
 
@@ -201,11 +216,13 @@ async def search_insights(
         InsightListResponse with matching insights and pagination info.
     """
     from zos.api.db_queries import search_insights as db_search
+    from zos.api.readable import NameResolver
 
     log.info(
         "insights_search",
         query=q,
         category=category,
+        readable=readable,
         offset=offset,
         limit=limit,
     )
@@ -218,8 +235,27 @@ async def search_insights(
         limit=limit,
     )
 
+    # Resolve names if readable mode is enabled
+    if readable and insights:
+        resolver = NameResolver(db)
+        topic_keys = [i.topic_key for i in insights]
+        resolved = await resolver.resolve_batch(topic_keys)
+        resolved_map = {orig: readable_key for readable_key, orig in resolved}
+
+        formatted = [
+            _format_insight_response(
+                i,
+                readable_topic_key=resolved_map.get(i.topic_key, i.topic_key),
+                original_topic_key=i.topic_key,
+            )
+            for i in insights
+        ]
+    else:
+        formatted = [_format_insight_response(i) for i in insights]
+
     return InsightListResponse(
-        insights=[_format_insight_response(i) for i in insights],
+        readable=readable,
+        insights=formatted,
         total=total,
         offset=offset,
         limit=limit,
@@ -230,6 +266,7 @@ async def search_insights(
 async def list_insights(
     category: Optional[str] = Query(None, description="Filter by insight category"),
     since: Optional[datetime] = Query(None, description="Only include insights after this time"),
+    readable: bool = Query(False, description="Replace IDs with human-readable names"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     limit: int = Query(20, ge=1, le=100, description="Maximum results to return"),
     db: "Engine" = Depends(get_db),
@@ -242,6 +279,7 @@ async def list_insights(
     Args:
         category: Optional category filter.
         since: Optional datetime filter for insights after this time.
+        readable: If true, resolve IDs to human-readable names.
         offset: Pagination offset.
         limit: Maximum results per page.
 
@@ -249,11 +287,13 @@ async def list_insights(
         InsightListResponse with insights and pagination info.
     """
     from zos.api.db_queries import list_insights as db_list
+    from zos.api.readable import NameResolver
 
     log.info(
         "insights_list",
         category=category,
         since=since,
+        readable=readable,
         offset=offset,
         limit=limit,
     )
@@ -266,8 +306,27 @@ async def list_insights(
         limit=limit,
     )
 
+    # Resolve names if readable mode is enabled
+    if readable and insights:
+        resolver = NameResolver(db)
+        topic_keys = [i.topic_key for i in insights]
+        resolved = await resolver.resolve_batch(topic_keys)
+        resolved_map = {orig: readable_key for readable_key, orig in resolved}
+
+        formatted = [
+            _format_insight_response(
+                i,
+                readable_topic_key=resolved_map.get(i.topic_key, i.topic_key),
+                original_topic_key=i.topic_key,
+            )
+            for i in insights
+        ]
+    else:
+        formatted = [_format_insight_response(i) for i in insights]
+
     return InsightListResponse(
-        insights=[_format_insight_response(i) for i in insights],
+        readable=readable,
+        insights=formatted,
         total=total,
         offset=offset,
         limit=limit,
@@ -278,6 +337,7 @@ async def list_insights(
 async def get_insights_for_topic(
     topic_key: str,
     profile: str = Query("balanced", description="Retrieval profile: recent, balanced, deep, comprehensive"),
+    readable: bool = Query(False, description="Replace IDs with human-readable names"),
     limit: int = Query(10, ge=1, le=100, description="Maximum insights to return"),
     include_quarantined: bool = Query(False, description="Include quarantined insights"),
     db: "Engine" = Depends(get_db),
@@ -292,18 +352,21 @@ async def get_insights_for_topic(
     Args:
         topic_key: The topic key to query (e.g., "server:123:user:456").
         profile: Retrieval profile name (recent, balanced, deep, comprehensive).
+        readable: If true, resolve IDs to human-readable names.
         limit: Maximum number of insights.
         include_quarantined: Whether to include quarantined insights.
 
     Returns:
         List of InsightResponse objects for the topic.
     """
+    from zos.api.readable import NameResolver
     from zos.insights import get_insight
 
     log.info(
         "insights_for_topic",
         topic_key=topic_key,
         profile=profile,
+        readable=readable,
         limit=limit,
         include_quarantined=include_quarantined,
     )
@@ -342,10 +405,32 @@ async def get_insights_for_topic(
 
     # Fetch full insight data for each formatted insight
     # (FormattedInsight only has a subset of fields, but we need all for API response)
-    results = []
+    insights_with_markers = []
     for fi in formatted_insights:
         insight = await get_insight(db, fi.id)
         if insight:
-            results.append(_format_insight_response(insight, fi.temporal_marker))
+            insights_with_markers.append((insight, fi.temporal_marker))
+
+    # Resolve names if readable mode is enabled
+    if readable and insights_with_markers:
+        resolver = NameResolver(db)
+        topic_keys = [i.topic_key for i, _ in insights_with_markers]
+        resolved = await resolver.resolve_batch(topic_keys)
+        resolved_map = {orig: readable_key for readable_key, orig in resolved}
+
+        results = [
+            _format_insight_response(
+                insight,
+                temporal_marker=marker,
+                readable_topic_key=resolved_map.get(insight.topic_key, insight.topic_key),
+                original_topic_key=insight.topic_key,
+            )
+            for insight, marker in insights_with_markers
+        ]
+    else:
+        results = [
+            _format_insight_response(insight, temporal_marker=marker)
+            for insight, marker in insights_with_markers
+        ]
 
     return results

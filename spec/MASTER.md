@@ -76,7 +76,7 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Epic 2: Observation | stories/2-*.md | 🟢 | Implemented 2026-01-25 |
 | Epic 3: Salience | stories/3-*.md | 🟢 | Implemented 2026-01-24 |
 | Epic 4: Reflection | stories/4-*.md | 🟢 | Implemented 2026-01-25 |
-| Epic 5: Introspection | stories/5-*.md | 🟢 | Implemented 2026-01-25 |
+| Epic 5: Introspection | stories/5-*.md | 🟢 | Implemented 2026-01-25; 5-10 Human-Readable API added 2026-01-28 |
 
 ### MVP 1
 
