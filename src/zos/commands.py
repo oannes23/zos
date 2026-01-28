@@ -173,22 +173,72 @@ class OperatorCommands(commands.Cog):
         This bypasses the scheduled reflection timing and runs
         reflection immediately. Useful for testing and after
         significant community events.
-
-        Note: Full implementation in Epic 4.
         """
         if not await self.operator_check(interaction):
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Placeholder for Epic 4 implementation
-        # result = await self.bot.trigger_reflection()
-        await interaction.followup.send(
-            "Reflection trigger not yet implemented (Epic 4).\n"
-            "This will run reflection layers on warm topics.",
-            ephemeral=True,
-        )
+        # Check if scheduler is available
+        if not self.bot.scheduler:
+            await interaction.followup.send(
+                "❌ Reflection not available.\n"
+                "Scheduler not initialized. Use `zos serve` to run with reflection support.",
+                ephemeral=True,
+            )
+            return
+
         log.info("reflect_now_command", user=str(interaction.user))
+
+        # Get all scheduled layers
+        try:
+            layers = self.bot.scheduler.loader.load_all()
+            scheduled_layers = [
+                (name, layer)
+                for name, layer in layers.items()
+                if layer.schedule
+            ]
+
+            if not scheduled_layers:
+                await interaction.followup.send(
+                    "No scheduled reflection layers found.",
+                    ephemeral=True,
+                )
+                return
+
+            # Trigger each scheduled layer
+            results = []
+            for layer_name, layer in scheduled_layers:
+                run = await self.bot.scheduler.trigger_now(layer_name)
+                if run:
+                    results.append((layer_name, run))
+
+            # Format results
+            if not results:
+                message = "✅ Reflection triggered, but no topics had sufficient salience."
+            else:
+                lines = ["✅ Reflection completed:\n"]
+                for layer_name, run in results:
+                    lines.append(f"**{layer_name}**")
+                    lines.append(f"  • Status: {run.status.value}")
+                    lines.append(f"  • Targets processed: {run.targets_processed}")
+                    lines.append(f"  • Insights created: {run.insights_created}")
+                    if run.tokens_total:
+                        lines.append(f"  • Tokens: {run.tokens_total}")
+                    if run.estimated_cost_usd:
+                        lines.append(f"  • Cost: ${run.estimated_cost_usd:.4f}")
+                    lines.append("")
+
+                message = "\n".join(lines)
+
+            await interaction.followup.send(message, ephemeral=True)
+
+        except Exception as e:
+            log.error("reflect_now_failed", error=str(e), user=str(interaction.user))
+            await interaction.followup.send(
+                f"❌ Reflection failed: {str(e)}",
+                ephemeral=True,
+            )
 
     @app_commands.command(name="insights", description="Query insights for a topic")
     @app_commands.describe(topic="Topic key (e.g., server:123:user:456)")

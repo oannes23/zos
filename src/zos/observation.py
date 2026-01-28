@@ -58,6 +58,7 @@ from zos.models import (
 if TYPE_CHECKING:
     from zos.config import Config
     from zos.salience import EarningCoordinator
+    from zos.scheduler import ReflectionScheduler
 
 log = get_logger("observation")
 
@@ -103,12 +104,19 @@ class ZosBot(commands.Bot):
         dev_mode: When True, CRUD operations on insights are enabled.
     """
 
-    def __init__(self, config: Config, engine: Engine | None = None) -> None:
+    def __init__(
+        self,
+        config: Config,
+        engine: Engine | None = None,
+        scheduler: "ReflectionScheduler | None" = None,
+    ) -> None:
         """Initialize the bot with required intents.
 
         Args:
             config: Application configuration.
             engine: SQLAlchemy database engine. If None, polling will be skipped.
+            scheduler: ReflectionScheduler for triggering reflection. If None,
+                      reflection commands will be unavailable.
         """
         # Minimal intents for observation
         intents = discord.Intents.default()
@@ -120,6 +128,7 @@ class ZosBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
         self.config = config
         self.engine = engine
+        self.scheduler = scheduler
         self._shutdown_requested = False
 
         # Operator-controlled state
@@ -1576,7 +1585,11 @@ def setup_signal_handlers(bot: ZosBot, loop: asyncio.AbstractEventLoop) -> None:
     log.debug("signal_handlers_registered", signals=["SIGINT", "SIGTERM"])
 
 
-async def run_bot(config: Config, engine: Engine | None = None) -> None:
+async def run_bot(
+    config: Config,
+    engine: Engine | None = None,
+    scheduler: "ReflectionScheduler | None" = None,
+) -> None:
     """Run the Discord observation bot.
 
     This is the main entry point for the observe command.
@@ -1585,8 +1598,9 @@ async def run_bot(config: Config, engine: Engine | None = None) -> None:
     Args:
         config: Application configuration with discord_token.
         engine: SQLAlchemy database engine for message storage.
+        scheduler: Optional ReflectionScheduler for reflection commands.
     """
-    bot = ZosBot(config, engine)
+    bot = ZosBot(config, engine, scheduler)
     loop = asyncio.get_running_loop()
 
     # Setup signal handlers for graceful shutdown

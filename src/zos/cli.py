@@ -64,6 +64,168 @@ def version() -> None:
 
 
 @cli.command()
+@click.option("--host", default="127.0.0.1", help="API host to bind.")
+@click.option("--port", default=8000, type=int, help="API port to bind.")
+@click.option(
+    "--layers-dir",
+    type=click.Path(exists=True, path_type=Path),
+    default="layers",
+    help="Layers directory.",
+)
+@click.option(
+    "--prompts-dir",
+    type=click.Path(exists=True, path_type=Path),
+    default="prompts",
+    help="Prompts directory.",
+)
+@click.pass_context
+def serve(
+    ctx: click.Context,
+    host: str,
+    port: int,
+    layers_dir: Path,
+    prompts_dir: Path,
+) -> None:
+    """Start the full Zos service (observation + reflection + API).
+
+    This is the unified command that runs all components together:
+    - Discord observation bot (polls messages, tracks reactions)
+    - Reflection scheduler (runs layers on cron schedules)
+    - Introspection API (queries insights, salience, layer runs)
+
+    All components share the same database and configuration.
+    Use Ctrl+C or send SIGTERM for graceful shutdown.
+
+    Requires DISCORD_TOKEN environment variable to be set.
+    """
+    import uvicorn
+    from uvicorn import Config as UvicornConfig
+    from uvicorn import Server
+
+    from zos.api import create_app
+    from zos.database import create_tables, get_engine
+    from zos.executor import LayerExecutor
+    from zos.layers import LayerLoader
+    from zos.llm import ModelClient
+    from zos.migrations import migrate
+    from zos.observation import run_bot
+    from zos.salience import ReflectionSelector, SalienceLedger
+    from zos.scheduler import ReflectionScheduler
+    from zos.templates import TemplateEngine
+
+    config = ctx.obj["config"]
+
+    if not config.discord_token:
+        click.echo("Error: DISCORD_TOKEN environment variable not set", err=True)
+        click.echo("Set DISCORD_TOKEN to your bot token to connect to Discord.", err=True)
+        raise SystemExit(1)
+
+    # Initialize database
+    engine = get_engine(config)
+    migrate(engine)
+    create_tables(engine)
+
+    log.info(
+        "serve_command_invoked",
+        api_host=host,
+        api_port=port,
+        layers_dir=str(layers_dir),
+        prompts_dir=str(prompts_dir),
+    )
+
+    async def run():
+        """Run all components concurrently."""
+        try:
+            # Set up reflection components
+            loader = LayerLoader(layers_dir)
+            ledger = SalienceLedger(engine, config)
+            selector = ReflectionSelector(ledger, config)
+            templates = TemplateEngine(
+                templates_dir=prompts_dir,
+                data_dir=config.data_dir,
+            )
+            llm = ModelClient(config)
+
+            executor = LayerExecutor(
+                engine=engine,
+                ledger=ledger,
+                templates=templates,
+                llm=llm,
+                config=config,
+                loader=loader,
+            )
+
+            # Create and start scheduler
+            scheduler = ReflectionScheduler(
+                db_path=str(config.data_dir / "scheduler.db"),
+                executor=executor,
+                loader=loader,
+                selector=selector,
+                ledger=ledger,
+                config=config,
+            )
+            scheduler.start()
+            log.info("scheduler_started")
+
+            # Create API app and configure state
+            app = create_app(config)
+            app.state.config = config
+            app.state.db = engine
+            app.state.ledger = ledger
+
+            # Create uvicorn server
+            uvicorn_config = UvicornConfig(
+                app,
+                host=host,
+                port=port,
+                log_level="info",
+            )
+            server = Server(uvicorn_config)
+
+            # Run bot and API concurrently
+            # The bot task will run until cancelled or shutdown
+            # The API task runs the uvicorn server
+            api_task = asyncio.create_task(server.serve())
+            bot_task = asyncio.create_task(run_bot(config, engine, scheduler))
+
+            # Wait for both tasks
+            # If either completes or fails, cancel the other
+            done, pending = await asyncio.wait(
+                [bot_task, api_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            # Cancel pending tasks
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            # Check for exceptions in completed tasks
+            for task in done:
+                if not task.cancelled() and task.exception():
+                    raise task.exception()  # type: ignore[misc]
+
+        finally:
+            # Clean up scheduler
+            scheduler.stop()
+            log.info("scheduler_stopped")
+
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        log.info("serve_shutdown_requested")
+    except Exception as e:
+        log.error("serve_failed", error=str(e))
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    finally:
+        engine.dispose()
+
+
+@cli.command()
 @click.pass_context
 def observe(ctx: click.Context) -> None:
     """Start the Discord observation bot.
