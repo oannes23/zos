@@ -275,16 +275,8 @@ class LayerExecutor:
         model_name: str | None = None
 
         for topic_key in topics:
-            topic = await self._get_topic(topic_key)
-            if not topic:
-                log.warning("topic_not_found", topic=topic_key, layer=layer.name)
-                targets_skipped += 1
-                all_errors.append({
-                    "topic": topic_key,
-                    "error": "Topic not found",
-                    "node": None,
-                })
-                continue
+            # Ensure topic exists (creates if needed)
+            topic = await self.ledger.ensure_topic(topic_key)
 
             ctx = ExecutionContext(
                 topic=topic,
@@ -1116,7 +1108,11 @@ Begin the document with "# Self-Concept" and maintain the existing sections wher
                     content=row.content,
                     created_at=row.created_at,
                     visibility_scope=VisibilityScope(row.visibility_scope),
-                    reactions_aggregate=row.reactions_aggregate,
+                    reactions_aggregate=(
+                        json.loads(row.reactions_aggregate)
+                        if row.reactions_aggregate and isinstance(row.reactions_aggregate, str)
+                        else row.reactions_aggregate
+                    ),
                     reply_to_id=row.reply_to_id,
                     thread_id=row.thread_id,
                     has_media=row.has_media,

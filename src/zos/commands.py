@@ -16,7 +16,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from zos.insights import get_insights_for_topic
 from zos.logging import get_logger
+from zos.salience import BudgetGroup, SalienceLedger, get_budget_group
 
 if TYPE_CHECKING:
     from zos.observation import ZosBot
@@ -116,7 +118,8 @@ class OperatorCommands(commands.Cog):
         Provides a window into Zos's current state:
         - Whether observation is silenced
         - Dev mode status
-        - Placeholder for future: warm topics, recent layer runs, insight counts
+        - Top topics by salience
+        - Total insights accumulated
         """
         if not await self.operator_check(interaction):
             return
@@ -127,19 +130,50 @@ class OperatorCommands(commands.Cog):
         is_silenced = self.bot.is_silenced
         dev_mode = self.bot.dev_mode
 
-        # Format response
-        # Note: Detailed status (warm topics, layer runs, insights) will be
-        # implemented as database queries are added in Epic 3/4
         lines = [
             "**Zos Status**",
             "",
             f"Silenced: {'Yes' if is_silenced else 'No'}",
             f"Dev Mode: {'Enabled' if dev_mode else 'Disabled'}",
             "",
-            "**Warm Topics:** (not yet implemented)",
-            "**Recent Layer Runs:** (not yet implemented)",
-            "**Total Insights:** (not yet implemented)",
         ]
+
+        # Get warm topics if database is available
+        if self.bot.engine:
+            try:
+                from sqlalchemy import select, func
+                from zos.database import insights as insights_table
+
+                ledger = SalienceLedger(self.bot.engine, self.config)
+                topics_with_balance = await ledger.get_top_topics(group=None, limit=5)
+
+                if topics_with_balance:
+                    lines.append("**Warm Topics:**")
+                    for topic_data in topics_with_balance:
+                        display_key = topic_data.key
+                        if len(display_key) > 40:
+                            display_key = display_key[:37] + "..."
+                        lines.append(f"  • `{display_key}` ({topic_data.balance:.1f})")
+                else:
+                    lines.append("**Warm Topics:** None yet")
+
+                # Get total insight count
+                async with self.bot.engine.begin() as conn:
+                    result = await conn.execute(
+                        select(func.count()).select_from(insights_table)
+                    )
+                    insight_count = result.scalar() or 0
+                    lines.append("")
+                    lines.append(f"**Total Insights:** {insight_count}")
+
+            except Exception as e:
+                log.error("status_query_failed", error=str(e))
+                lines.append("")
+                lines.append("**Warm Topics:** (query failed)")
+                lines.append("**Total Insights:** (query failed)")
+        else:
+            lines.append("**Warm Topics:** (database not available)")
+            lines.append("**Total Insights:** (database not available)")
 
         await interaction.followup.send("\n".join(lines), ephemeral=True)
         log.info("status_command", user=str(interaction.user))
@@ -248,8 +282,6 @@ class OperatorCommands(commands.Cog):
         Provides a view into Zos's accumulated understanding of a
         particular topic - what has been learned over time.
 
-        Note: Full implementation in Epic 4.
-
         Args:
             topic: The topic key to query (e.g., server:123:user:456).
         """
@@ -258,15 +290,41 @@ class OperatorCommands(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
 
-        # Placeholder for Epic 4 implementation
-        # insights = await self.db.get_insights_for_topic(topic, limit=5)
-        await interaction.followup.send(
-            f"Insights query not yet implemented (Epic 4).\n"
-            f"Topic: `{topic}`\n\n"
-            "This will show recent insights for the topic.",
-            ephemeral=True,
+        # Get insights for the topic
+        if not self.bot.engine:
+            await interaction.followup.send(
+                "❌ Database not available.",
+                ephemeral=True,
+            )
+            return
+
+        insights = await get_insights_for_topic(
+            self.bot.engine, self.config, topic, limit=5
         )
-        log.info("insights_command", topic=topic, user=str(interaction.user))
+
+        if not insights:
+            await interaction.followup.send(
+                f"No insights found for topic: `{topic}`",
+                ephemeral=True,
+            )
+            return
+
+        # Format the response
+        lines = [f"**Insights for Topic:** `{topic}`", ""]
+        for insight in insights:
+            # Truncate long insights for Discord message limits
+            content = insight.content
+            if len(content) > 200:
+                content = content[:197] + "..."
+
+            timestamp = insight.created_at.strftime("%Y-%m-%d %H:%M")
+            lines.append(
+                f"**{insight.category}** ({timestamp})\n"
+                f"{content}\n"
+            )
+
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
+        log.info("insights_command", topic=topic, user=str(interaction.user), insight_count=len(insights))
 
     @app_commands.command(name="topics", description="List all topics with salience")
     async def topics(self, interaction: discord.Interaction) -> None:
@@ -274,22 +332,52 @@ class OperatorCommands(commands.Cog):
 
         Shows what Zos is currently paying attention to - which
         topics have accumulated enough activity to warrant reflection.
-
-        Note: Full implementation in Epic 3.
         """
         if not await self.operator_check(interaction):
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Placeholder for Epic 3 implementation
-        # topics = await self.db.get_all_topics_with_salience(limit=20)
-        await interaction.followup.send(
-            "Topics listing not yet implemented (Epic 3).\n\n"
-            "This will show topics ordered by salience balance.",
-            ephemeral=True,
-        )
-        log.info("topics_command", user=str(interaction.user))
+        # Get the salience ledger
+        if not self.bot.engine:
+            await interaction.followup.send(
+                "❌ Database not available.",
+                ephemeral=True,
+            )
+            return
+
+        ledger = SalienceLedger(self.bot.engine, self.config)
+
+        # Get top topics across all groups
+        topics_with_balance = await ledger.get_top_topics(group=None, limit=20)
+
+        if not topics_with_balance:
+            await interaction.followup.send(
+                "No topics with salience found.",
+                ephemeral=True,
+            )
+            return
+
+        # Format the response
+        lines = ["**Top Topics by Salience**", ""]
+        for topic_data in topics_with_balance:
+            budget_group = get_budget_group(topic_data.key)
+            cap = ledger.get_cap(topic_data.key)
+            utilization = (topic_data.balance / cap * 100) if cap > 0 else 0
+
+            # Truncate long topic keys for readability
+            display_key = topic_data.key
+            if len(display_key) > 50:
+                display_key = display_key[:47] + "..."
+
+            lines.append(
+                f"• `{display_key}`\n"
+                f"  Balance: {topic_data.balance:.1f}/{cap:.1f} ({utilization:.0f}%) • "
+                f"Group: {budget_group.value}"
+            )
+
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
+        log.info("topics_command", user=str(interaction.user), topic_count=len(topics_with_balance))
 
     @app_commands.command(
         name="layer-run", description="Manually run a specific layer"
@@ -303,8 +391,6 @@ class OperatorCommands(commands.Cog):
         Runs a named layer outside of its scheduled time. Useful
         for testing layer changes or processing specific topics.
 
-        Note: Full implementation in Epic 4.
-
         Args:
             layer_name: The name of the layer to run.
         """
@@ -313,22 +399,58 @@ class OperatorCommands(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
 
-        # Placeholder for Epic 4 implementation
-        # if layer_name not in self.bot.available_layers:
-        #     await interaction.followup.send(
-        #         f"Unknown layer: `{layer_name}`\n"
-        #         f"Available: {', '.join(self.bot.available_layers)}",
-        #         ephemeral=True
-        #     )
-        #     return
-        # result = await self.bot.run_layer(layer_name)
+        # Check if scheduler is available
+        if not self.bot.scheduler:
+            await interaction.followup.send(
+                "❌ Reflection scheduler not available.",
+                ephemeral=True,
+            )
+            return
 
-        await interaction.followup.send(
-            f"Layer run not yet implemented (Epic 4).\n"
-            f"Layer: `{layer_name}`\n\n"
-            "This will execute the named layer manually.",
-            ephemeral=True,
-        )
+        # Get all available layers
+        try:
+            layers = self.bot.scheduler.loader.load_all()
+            available_layer_names = [name for name, _ in layers]
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Failed to load layers: {e}",
+                ephemeral=True,
+            )
+            log.error("layer_run_load_failed", error=str(e))
+            return
+
+        # Check if the layer exists
+        if layer_name not in available_layer_names:
+            await interaction.followup.send(
+                f"❌ Unknown layer: `{layer_name}`\n\n"
+                f"Available layers: {', '.join(f'`{name}`' for name in available_layer_names)}",
+                ephemeral=True,
+            )
+            return
+
+        # Trigger the layer
+        try:
+            run = await self.bot.scheduler.trigger_now(layer_name)
+            if run:
+                await interaction.followup.send(
+                    f"✅ Layer `{layer_name}` executed successfully.\n\n"
+                    f"Run ID: `{run.id}`\n"
+                    f"Insights generated: {run.insight_count}",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    f"⚠️ Layer `{layer_name}` execution completed but returned no result.",
+                    ephemeral=True,
+                )
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Failed to run layer `{layer_name}`: {e}",
+                ephemeral=True,
+            )
+            log.error("layer_run_failed", layer_name=layer_name, error=str(e))
+            return
+
         log.info("layer_run_command", layer_name=layer_name, user=str(interaction.user))
 
     @app_commands.command(name="dev-mode", description="Toggle dev mode")

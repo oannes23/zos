@@ -139,6 +139,11 @@ def serve(
             # Set up reflection components
             loader = LayerLoader(layers_dir)
             ledger = SalienceLedger(engine, config)
+
+            # Ensure core topics exist on startup
+            await ledger.ensure_topic("self:zos")
+            log.info("core_topics_initialized")
+
             selector = ReflectionSelector(ledger, config)
             templates = TemplateEngine(
                 templates_dir=prompts_dir,

@@ -86,6 +86,8 @@ class MockZosBot:
         )
         self.is_silenced = False
         self.dev_mode = False
+        self.engine = None  # No database in mock by default
+        self.scheduler = None  # No scheduler in mock by default
 
 
 class TestOperatorCheck:
@@ -312,7 +314,7 @@ class TestPlaceholderCommands:
 
     @pytest.mark.asyncio
     async def test_reflect_now_placeholder(self) -> None:
-        """Reflect-now should indicate it's not yet implemented."""
+        """Reflect-now should show reflection unavailable when no scheduler."""
         bot = MockZosBot(operator_user_ids=["123456"])
         cog = OperatorCommands(bot)  # type: ignore[arg-type]
         interaction = MockInteraction(user_id="123456", command_name="reflect-now")
@@ -321,12 +323,11 @@ class TestPlaceholderCommands:
             await cog.reflect_now.callback(cog, interaction)  # type: ignore[arg-type]
 
         response_text = interaction.followup.send.call_args[0][0]
-        assert "not yet implemented" in response_text.lower()
-        assert "epic 4" in response_text.lower()
+        assert "reflection not available" in response_text.lower()
 
     @pytest.mark.asyncio
     async def test_insights_placeholder(self) -> None:
-        """Insights should indicate it's not yet implemented."""
+        """Insights should show database unavailable when no engine."""
         bot = MockZosBot(operator_user_ids=["123456"])
         cog = OperatorCommands(bot)  # type: ignore[arg-type]
         interaction = MockInteraction(user_id="123456", command_name="insights")
@@ -335,12 +336,11 @@ class TestPlaceholderCommands:
             await cog.insights.callback(cog, interaction, topic="server:123:user:456")  # type: ignore[arg-type]
 
         response_text = interaction.followup.send.call_args[0][0]
-        assert "not yet implemented" in response_text.lower()
-        assert "server:123:user:456" in response_text
+        assert "database not available" in response_text.lower()
 
     @pytest.mark.asyncio
     async def test_topics_placeholder(self) -> None:
-        """Topics should indicate it's not yet implemented."""
+        """Topics should show database unavailable when no engine."""
         bot = MockZosBot(operator_user_ids=["123456"])
         cog = OperatorCommands(bot)  # type: ignore[arg-type]
         interaction = MockInteraction(user_id="123456", command_name="topics")
@@ -349,12 +349,11 @@ class TestPlaceholderCommands:
             await cog.topics.callback(cog, interaction)  # type: ignore[arg-type]
 
         response_text = interaction.followup.send.call_args[0][0]
-        assert "not yet implemented" in response_text.lower()
-        assert "epic 3" in response_text.lower()
+        assert "database not available" in response_text.lower()
 
     @pytest.mark.asyncio
     async def test_layer_run_placeholder(self) -> None:
-        """Layer-run should indicate it's not yet implemented."""
+        """Layer-run should show scheduler unavailable when no scheduler."""
         bot = MockZosBot(operator_user_ids=["123456"])
         cog = OperatorCommands(bot)  # type: ignore[arg-type]
         interaction = MockInteraction(user_id="123456", command_name="layer-run")
@@ -363,8 +362,7 @@ class TestPlaceholderCommands:
             await cog.layer_run.callback(cog, interaction, layer_name="user_reflection")  # type: ignore[arg-type]
 
         response_text = interaction.followup.send.call_args[0][0]
-        assert "not yet implemented" in response_text.lower()
-        assert "user_reflection" in response_text
+        assert "scheduler not available" in response_text.lower()
 
 
 class TestEphemeralResponses:
