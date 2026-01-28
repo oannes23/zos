@@ -332,7 +332,7 @@ def test_nightly_user_layer_node_params() -> None:
         (n for n in layer.nodes if n.type == NodeType.FETCH_MESSAGES), None
     )
     assert fetch_msgs is not None
-    assert fetch_msgs.params.get("lookback_hours") == 24
+    assert fetch_msgs.params.get("lookback_hours") == 72
     assert fetch_msgs.params.get("limit_per_channel") == 100
 
     # Find fetch_insights node
@@ -341,7 +341,7 @@ def test_nightly_user_layer_node_params() -> None:
     )
     assert fetch_insights is not None
     assert fetch_insights.params.get("retrieval_profile") == "recent"
-    assert fetch_insights.params.get("max_per_topic") == 5
+    assert fetch_insights.params.get("max_per_topic") == 10
 
     # Find llm_call node
     llm_call = next((n for n in layer.nodes if n.type == NodeType.LLM_CALL), None)

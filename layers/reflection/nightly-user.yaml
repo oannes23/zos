@@ -21,14 +21,14 @@ nodes:
   - name: fetch_recent_messages
     type: fetch_messages
     params:
-      lookback_hours: 24
+      lookback_hours: 72
       limit_per_channel: 100
 
   - name: fetch_prior_understanding
     type: fetch_insights
     params:
       retrieval_profile: recent
-      max_per_topic: 5
+      max_per_topic: 10
 
   - name: reflect
     type: llm_call

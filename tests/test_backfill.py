@@ -1,7 +1,7 @@
 """Tests for backfill protection and cost spiral prevention.
 
 Covers:
-- First poll initialization with/without backfill
+- First poll initialization with limited backfill
 - Poll state initialization for guild channels
 - Poll state initialization for DM channels
 - Subsequent polls after initialization
@@ -12,6 +12,7 @@ Covers:
 
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from typing import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,6 +27,41 @@ from zos.database import (
     servers,
 )
 from zos.observation import ZosBot
+
+
+class MockAsyncIterator:
+    """Mock async iterator for testing channel.history()."""
+
+    def __init__(self, items: list | None = None):
+        self.items = iter(items or [])
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self.items)
+        except StopIteration:
+            raise StopAsyncIteration
+
+
+def create_mock_author(
+    user_id: int = 555555555,
+    display_name: str = "TestUser",
+    username: str = "testuser"
+) -> MagicMock:
+    """Create a properly configured mock Discord user/member for tests."""
+    author = MagicMock()
+    author.id = user_id
+    author.display_name = display_name
+    author.name = username
+    author.discriminator = "0"
+    author.avatar = None
+    author.bot = False
+    author.created_at = datetime.now(timezone.utc)
+    author.joined_at = None
+    author.roles = []
+    return author
 
 
 # =============================================================================
@@ -44,13 +80,13 @@ def test_config(tmp_path: Path) -> Config:
 
 @pytest.fixture
 def test_config_backfill_enabled(tmp_path: Path) -> Config:
-    """Create a test configuration with backfill enabled."""
-    config = Config(
+    """Create a test configuration with default backfill (24 hours)."""
+    # Note: backfill_hours controls how far back to fetch on first poll.
+    # Default is 24 hours. There's no explicit on/off flag.
+    return Config(
         data_dir=tmp_path,
         log_level="DEBUG",
     )
-    config.observation.allow_backfill_on_startup = True
-    return config
 
 
 @pytest.fixture
@@ -88,10 +124,10 @@ class TestFirstPollInitialization:
     """Tests for poll_state initialization on first poll."""
 
     @pytest.mark.asyncio
-    async def test_first_poll_no_backfill_guild_channel(
+    async def test_first_poll_empty_channel(
         self, bot: ZosBot, engine, now
     ) -> None:
-        """First poll should initialize poll_state without fetching messages."""
+        """First poll of empty channel should return 0 without setting poll_state."""
         # Setup: create server and channel
         mock_guild = MagicMock()
         mock_guild.id = 111111111
@@ -103,28 +139,25 @@ class TestFirstPollInitialization:
         mock_channel.id = 222222222
         mock_channel.name = "test-channel"
 
-        # Mock the history iterator to verify it's not called
-        history_mock = AsyncMock()
-        mock_channel.history = MagicMock(return_value=history_mock)
-        history_mock.__aiter__ = MagicMock(return_value=AsyncMock())
+        # Mock the history iterator to return no messages
+        mock_channel.history = MagicMock(return_value=MockAsyncIterator([]))
 
-        # First poll - should initialize without fetching
+        # First poll - returns 0 because no messages exist
         count = await bot._poll_channel(mock_channel, "111111111")
 
-        # Should return 0 messages (nothing fetched)
+        # Should return 0 messages
         assert count == 0
 
-        # Poll state should be initialized
+        # Poll state is NOT set when no messages are stored
+        # (poll_state tracks last message time, not poll time)
         last_polled = bot._get_last_polled("222222222")
-        assert last_polled is not None
-        # Should be recent (within last second)
-        assert (datetime.now(timezone.utc) - last_polled).total_seconds() < 2
+        assert last_polled is None
 
     @pytest.mark.asyncio
-    async def test_first_poll_no_backfill_dm_channel(
+    async def test_first_poll_empty_dm_channel(
         self, bot: ZosBot, engine, now
     ) -> None:
-        """First poll should initialize poll_state for DM channels."""
+        """First poll of empty DM should return 0 without setting poll_state."""
         import discord
 
         mock_dm = MagicMock(spec=discord.DMChannel)
@@ -132,28 +165,24 @@ class TestFirstPollInitialization:
         mock_dm.recipient = MagicMock()
         mock_dm.recipient.id = 444444444
 
-        # Mock the history iterator
-        history_mock = AsyncMock()
-        mock_dm.history = MagicMock(return_value=history_mock)
-        history_mock.__aiter__ = MagicMock(return_value=AsyncMock())
+        # Mock the history iterator to return no messages
+        mock_dm.history = MagicMock(return_value=MockAsyncIterator([]))
 
-        # First poll - should initialize without fetching
+        # First poll - returns 0 because no messages exist
         count = await bot._poll_dm_channel(mock_dm)
 
-        # Should return 0 messages (nothing fetched)
+        # Should return 0 messages
         assert count == 0
 
-        # Poll state should be initialized
+        # Poll state is NOT set when no messages are stored
         last_polled = bot._get_last_polled("333333333")
-        assert last_polled is not None
-        # Should be recent
-        assert (datetime.now(timezone.utc) - last_polled).total_seconds() < 2
+        assert last_polled is None
 
     @pytest.mark.asyncio
     async def test_first_poll_with_backfill_enabled(
         self, bot_backfill_enabled: ZosBot, engine
     ) -> None:
-        """When backfill enabled, first poll should fetch historical messages."""
+        """First poll should fetch historical messages within backfill window."""
         # Setup
         mock_guild = MagicMock()
         mock_guild.id = 111111111
@@ -165,12 +194,11 @@ class TestFirstPollInitialization:
         mock_channel.name = "test-channel"
         await bot_backfill_enabled._ensure_channel(mock_channel, "111111111")
 
-        # Create mock messages
+        # Create mock message with properly configured author
         mock_message = MagicMock()
         mock_message.id = 555555555
         mock_message.channel = mock_channel
-        mock_message.author = MagicMock()
-        mock_message.author.id = 666666666
+        mock_message.author = create_mock_author(666666666)
         mock_message.content = "Historical message"
         mock_message.created_at = datetime.now(timezone.utc) - timedelta(days=1)
         mock_message.attachments = []
@@ -180,14 +208,9 @@ class TestFirstPollInitialization:
         mock_message.reactions = []
 
         # Mock history to return one message
-        async def mock_history_iter():
-            yield mock_message
+        mock_channel.history = MagicMock(return_value=MockAsyncIterator([mock_message]))
 
-        history_mock = MagicMock()
-        history_mock.__aiter__ = lambda self: mock_history_iter()
-        mock_channel.history = MagicMock(return_value=history_mock)
-
-        # Poll with backfill enabled
+        # Poll - should fetch the historical message
         count = await bot_backfill_enabled._poll_channel(mock_channel, "111111111")
 
         # Should have fetched the historical message
@@ -210,24 +233,17 @@ class TestFirstPollInitialization:
         await bot._ensure_channel(mock_channel, "111111111")
 
         # Mock history - empty for first poll
-        async def empty_history():
-            return
-            yield  # Make it a generator
-
-        history_mock = MagicMock()
-        history_mock.__aiter__ = lambda self: empty_history()
-        mock_channel.history = MagicMock(return_value=history_mock)
+        mock_channel.history = MagicMock(return_value=MockAsyncIterator([]))
 
         # First poll - initializes
         count1 = await bot._poll_channel(mock_channel, "111111111")
         assert count1 == 0
 
-        # Create a new message
+        # Create a new message with properly configured author
         mock_message = MagicMock()
         mock_message.id = 777777777
         mock_message.channel = mock_channel
-        mock_message.author = MagicMock()
-        mock_message.author.id = 888888888
+        mock_message.author = create_mock_author(888888888)
         mock_message.content = "New message"
         mock_message.created_at = datetime.now(timezone.utc)
         mock_message.attachments = []
@@ -237,10 +253,7 @@ class TestFirstPollInitialization:
         mock_message.reactions = []
 
         # Mock history to return the new message
-        async def new_message_history():
-            yield mock_message
-
-        history_mock.__aiter__ = lambda self: new_message_history()
+        mock_channel.history = MagicMock(return_value=MockAsyncIterator([mock_message]))
 
         # Second poll - should fetch new messages normally
         count2 = await bot._poll_channel(mock_channel, "111111111")
@@ -293,12 +306,11 @@ class TestReactionRateLimiting:
         mock_channel.name = "test-channel"
         await bot._ensure_channel(mock_channel, "111111111")
 
-        # Create and store a message first
+        # Create and store a message first with properly configured author
         mock_message = MagicMock()
         mock_message.id = 333333333
         mock_message.channel = mock_channel
-        mock_message.author = MagicMock()
-        mock_message.author.id = 444444444
+        mock_message.author = create_mock_author(444444444)
         mock_message.content = "Test message"
         mock_message.created_at = datetime.now(timezone.utc)
         mock_message.attachments = []
@@ -438,9 +450,9 @@ class TestMediaQueueLimits:
 class TestBackfillConfiguration:
     """Tests for backfill-related configuration."""
 
-    def test_default_config_no_backfill(self, test_config: Config) -> None:
-        """Default config should have backfill disabled."""
-        assert test_config.observation.allow_backfill_on_startup is False
+    def test_default_backfill_hours(self, test_config: Config) -> None:
+        """Default config should have backfill_hours set to 24."""
+        assert test_config.observation.backfill_hours == 24
 
     def test_default_reaction_rate_limit(self, test_config: Config) -> None:
         """Default config should have reaction rate limit set."""

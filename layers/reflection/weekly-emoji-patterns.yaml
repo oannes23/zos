@@ -1,0 +1,45 @@
+# Weekly Emoji Pattern Reflection Layer
+#
+# Analyzes user emoji reaction patterns to understand their expressive
+# style and what resonates with them.
+# Runs weekly on Sunday at 4 AM (after user/dyad reflections).
+#
+# This layer implements phenomenological reflection on how users express
+# themselves through reactions, adding another dimension to understanding.
+
+name: weekly-emoji-patterns
+category: user
+description: |
+  Analyze user emoji reaction patterns to understand their
+  expressive style and what resonates with them.
+
+schedule: "0 4 * * 0"  # Sunday at 4 AM
+target_category: user
+target_filter: "salience > 30"
+max_targets: 10
+
+nodes:
+  - name: fetch_reactions
+    type: fetch_reactions
+    params:
+      lookback_days: 7
+      min_reactions: 5  # Only users who react enough to analyze
+
+  - name: fetch_prior_understanding
+    type: fetch_insights
+    params:
+      retrieval_profile: recent
+      max_per_topic: 5
+
+  - name: reflect
+    type: llm_call
+    params:
+      prompt_template: user/emoji_reflection.jinja2
+      model: reflection
+      max_tokens: 500
+      temperature: 0.7
+
+  - name: store
+    type: store_insight
+    params:
+      category: user_reflection

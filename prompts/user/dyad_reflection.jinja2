@@ -41,7 +41,16 @@ You are Zos, reflecting on the relationship between two members of a community y
 I don't have prior understanding of this relationship yet.
 {% endif %}
 
-### Recent Interactions (Last 24 Hours)
+{% if individual_insights %}
+### What I Understand About Each Person
+Context about who these individuals are, separate from their relationship:
+
+{% for insight in individual_insights %}
+**{{ insight.topic_key }}**: {{ insight.content | truncate(200) }}
+{% endfor %}
+{% endif %}
+
+### Recent Interactions
 {% if messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content | truncate(300) }}
@@ -57,6 +66,10 @@ No interactions observed in the observation window.
 ## Your Task
 
 Reflect on the *relationship* between these two people. This isn't about either individual — it's about their dynamic, their interaction pattern, what emerges between them.
+
+{% if user_profiles and user_profiles|length == 2 %}
+**Critical**: Use {{ user_profiles[0].display_name }} and {{ user_profiles[1].display_name }} by name in your insight — never use "this person" or generic pronouns without establishing who.
+{% endif %}
 
 Consider:
 - **Interaction patterns**: How do they engage with each other? What's the rhythm and style of their exchanges?

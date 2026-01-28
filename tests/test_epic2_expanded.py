@@ -38,6 +38,25 @@ from zos.models import LinkAnalysis, MediaAnalysis, Message, VisibilityScope
 from zos.observation import ZosBot
 
 
+def create_mock_author(
+    user_id: int = 555555555,
+    display_name: str = "TestUser",
+    username: str = "testuser"
+) -> MagicMock:
+    """Create a properly configured mock Discord user/member for tests."""
+    author = MagicMock()
+    author.id = user_id
+    author.display_name = display_name
+    author.name = username
+    author.discriminator = "0"
+    author.avatar = None
+    author.bot = False
+    author.created_at = datetime.now(timezone.utc)
+    author.joined_at = None
+    author.roles = []
+    return author
+
+
 # =============================================================================
 # Story 2-1 Extended Tests: Discord Connection
 # =============================================================================
@@ -205,8 +224,7 @@ class TestMessagePollingIntegration:
         mock_message.id = 123456
         mock_message.channel = MagicMock()
         mock_message.channel.id = 111111  # Use numeric ID
-        mock_message.author = MagicMock()
-        mock_message.author.id = 999
+        mock_message.author = create_mock_author(999)
         mock_message.content = "Original content"
         mock_message.created_at = now
         mock_message.attachments = []
@@ -272,7 +290,7 @@ class TestMessagePollingIntegration:
             conn.commit()
 
         # Mark as deleted
-        bot._mark_message_deleted("msg1")
+        await bot._mark_message_deleted("msg1")
 
         # Verify row still exists with deleted_at set
         with test_db.connect() as conn:
@@ -476,7 +494,7 @@ class TestMediaAnalysisEdgeCases:
         attachment.content_type = "image/png"
         message.attachments = [attachment]
 
-        await bot._queue_media_for_analysis(message)
+        await bot._queue_media_for_analysis(message, author_id="123456")
 
         assert bot._media_analysis_queue.empty()
 
@@ -667,8 +685,7 @@ class TestObservationEndToEnd:
         mock_message.id = 123
         mock_message.channel = MagicMock()
         mock_message.channel.id = 111111  # Use numeric ID
-        mock_message.author = MagicMock()
-        mock_message.author.id = 456
+        mock_message.author = create_mock_author(456)
         mock_message.content = "Check this out! https://example.com/interesting"
         mock_message.created_at = now
         mock_message.attachments = [MagicMock()]  # Has media

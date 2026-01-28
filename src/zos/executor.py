@@ -26,6 +26,7 @@ from zos.database import (
     insights as insights_table,
     layer_runs as layer_runs_table,
     messages as messages_table,
+    reactions as reactions_table,
     topics as topics_table,
     user_profiles as user_profiles_table,
 )
@@ -116,6 +117,8 @@ class ExecutionContext:
     # Accumulated data
     messages: list[Message] = field(default_factory=list)
     insights: list[FormattedInsight] = field(default_factory=list)
+    individual_insights: list[FormattedInsight] = field(default_factory=list)
+    reactions: list[dict[str, Any]] = field(default_factory=list)
     layer_runs: list[LayerRun] = field(default_factory=list)
     llm_response: str | None = None
     reduced_results: list[Any] = field(default_factory=list)
@@ -217,6 +220,7 @@ class LayerExecutor:
         self.handlers: dict[NodeType, NodeHandler] = {
             NodeType.FETCH_MESSAGES: self._handle_fetch_messages,
             NodeType.FETCH_INSIGHTS: self._handle_fetch_insights,
+            NodeType.FETCH_REACTIONS: self._handle_fetch_reactions,
             NodeType.FETCH_LAYER_RUNS: self._handle_fetch_layer_runs,
             NodeType.LLM_CALL: self._handle_llm_call,
             NodeType.STORE_INSIGHT: self._handle_store_insight,
@@ -278,18 +282,18 @@ class LayerExecutor:
         model_name: str | None = None
 
         for topic_key in topics:
-            # Ensure topic exists (creates if needed)
-            topic = await self.ledger.ensure_topic(topic_key)
-
-            ctx = ExecutionContext(
-                topic=topic,
-                layer=layer,
-                run_id=run_id,
-                dry_run=dry_run,
-            )
-
             current_node: Node | None = None
             try:
+                # Ensure topic exists (creates if needed)
+                topic = await self.ledger.ensure_topic(topic_key)
+
+                ctx = ExecutionContext(
+                    topic=topic,
+                    layer=layer,
+                    run_id=run_id,
+                    dry_run=dry_run,
+                )
+
                 # Execute each node in sequence
                 for node in layer.nodes:
                     current_node = node
@@ -438,6 +442,9 @@ class LayerExecutor:
     async def _handle_fetch_insights(self, node: Node, ctx: ExecutionContext) -> None:
         """Fetch prior insights for the topic.
 
+        Supports `members_of_topic` param for dyad reflection: fetches individual
+        user insights for each member of the dyad.
+
         Args:
             node: The node with params.
             ctx: The execution context.
@@ -445,21 +452,67 @@ class LayerExecutor:
         params = node.params
         profile = params.get("retrieval_profile", "balanced")
         max_per_topic = params.get("max_per_topic", 5)
+        members_of_topic = params.get("members_of_topic", False)
+        categories = params.get("categories")
 
-        insights = await self.insight_retriever.retrieve(
-            ctx.topic.key,
-            profile=profile,
-            limit=max_per_topic,
-        )
+        if members_of_topic and ctx.topic.category == TopicCategory.DYAD:
+            # Fetch individual insights for each dyad member
+            user_id_1, user_id_2, server_id = self._extract_dyad_from_topic(
+                ctx.topic.key
+            )
+            individual_insights: list[FormattedInsight] = []
 
-        ctx.insights = insights
+            for user_id in [user_id_1, user_id_2]:
+                if user_id:
+                    # Construct user topic key
+                    if server_id:
+                        user_topic = f"server:{server_id}:user:{user_id}"
+                    else:
+                        user_topic = f"user:{user_id}"
 
-        log.debug(
-            "insights_fetched",
-            topic=ctx.topic.key,
-            count=len(insights),
-            profile=profile,
-        )
+                    user_insights = await self.insight_retriever.retrieve(
+                        user_topic,
+                        profile=profile,
+                        limit=max_per_topic,
+                    )
+
+                    # Filter by category if specified
+                    if categories:
+                        user_insights = [
+                            i for i in user_insights if i.category in categories
+                        ]
+
+                    # Add topic_key to each insight for template access
+                    for insight in user_insights:
+                        # Store the topic key in a way templates can access
+                        insight.topic_key = user_topic  # type: ignore[attr-defined]
+
+                    individual_insights.extend(user_insights)
+
+            ctx.individual_insights = individual_insights
+
+            log.debug(
+                "individual_insights_fetched",
+                topic=ctx.topic.key,
+                count=len(individual_insights),
+                profile=profile,
+            )
+        else:
+            # Standard insight fetch for the topic
+            insights = await self.insight_retriever.retrieve(
+                ctx.topic.key,
+                profile=profile,
+                limit=max_per_topic,
+            )
+
+            ctx.insights = insights
+
+            log.debug(
+                "insights_fetched",
+                topic=ctx.topic.key,
+                count=len(insights),
+                profile=profile,
+            )
 
     async def _handle_fetch_layer_runs(
         self, node: Node, ctx: ExecutionContext
@@ -502,6 +555,147 @@ class LayerExecutor:
             since_days=since_days,
             error_count=error_count,
         )
+
+    async def _handle_fetch_reactions(
+        self, node: Node, ctx: ExecutionContext
+    ) -> None:
+        """Fetch emoji reaction patterns for a user topic.
+
+        Retrieves reactions made by the user, grouped by emoji for pattern
+        analysis. This enables reflection on how users express themselves
+        through reactions.
+
+        Args:
+            node: The node with params.
+            ctx: The execution context.
+        """
+        params = node.params
+        lookback_days = params.get("lookback_days", 7)
+        min_reactions = params.get("min_reactions", 5)
+
+        # Extract user_id from topic
+        user_id, server_id = self._extract_user_from_topic(ctx.topic.key)
+        if not user_id:
+            log.warning(
+                "fetch_reactions_no_user",
+                topic=ctx.topic.key,
+            )
+            return
+
+        reactions = await self._get_reactions_for_user(
+            user_id=user_id,
+            server_id=server_id,
+            lookback_days=lookback_days,
+        )
+
+        # Only proceed if user has enough reactions
+        if len(reactions) < min_reactions:
+            log.debug(
+                "fetch_reactions_insufficient",
+                user_id=user_id,
+                count=len(reactions),
+                min_required=min_reactions,
+            )
+            ctx.reactions = []
+            return
+
+        # Group reactions by emoji for pattern analysis
+        emoji_counts: dict[str, int] = {}
+        emoji_examples: dict[str, list[str]] = {}
+
+        for reaction in reactions:
+            emoji = reaction["emoji"]
+            emoji_counts[emoji] = emoji_counts.get(emoji, 0) + 1
+
+            # Store a few example message contexts
+            if emoji not in emoji_examples:
+                emoji_examples[emoji] = []
+            if len(emoji_examples[emoji]) < 3 and reaction.get("message_content"):
+                emoji_examples[emoji].append(
+                    reaction["message_content"][:100]
+                )
+
+        # Format for template consumption
+        formatted_reactions = [
+            {
+                "emoji": emoji,
+                "count": count,
+                "examples": emoji_examples.get(emoji, []),
+            }
+            for emoji, count in sorted(
+                emoji_counts.items(), key=lambda x: x[1], reverse=True
+            )
+        ]
+
+        ctx.reactions = formatted_reactions
+
+        log.debug(
+            "reactions_fetched",
+            user_id=user_id,
+            total_reactions=len(reactions),
+            unique_emojis=len(emoji_counts),
+        )
+
+    async def _get_reactions_for_user(
+        self,
+        user_id: str,
+        server_id: str | None,
+        lookback_days: int,
+    ) -> list[dict[str, Any]]:
+        """Get reactions made by a user.
+
+        Args:
+            user_id: Discord user ID.
+            server_id: Server ID (None for global lookup).
+            lookback_days: How many days to look back.
+
+        Returns:
+            List of reaction dictionaries with emoji and context.
+        """
+        since = utcnow() - timedelta(days=lookback_days)
+
+        with self.engine.connect() as conn:
+            # Join reactions with messages to get context
+            conditions = [
+                reactions_table.c.user_id == user_id,
+                reactions_table.c.created_at >= since,
+                reactions_table.c.removed_at.is_(None),
+            ]
+
+            if server_id:
+                conditions.append(reactions_table.c.server_id == server_id)
+
+            stmt = (
+                select(
+                    reactions_table.c.emoji,
+                    reactions_table.c.is_custom,
+                    reactions_table.c.created_at,
+                    messages_table.c.content.label("message_content"),
+                    messages_table.c.author_id.label("message_author"),
+                )
+                .select_from(
+                    reactions_table.join(
+                        messages_table,
+                        reactions_table.c.message_id == messages_table.c.id,
+                    )
+                )
+                .where(and_(*conditions))
+                .order_by(reactions_table.c.created_at.desc())
+                .limit(500)  # Cap for performance
+            )
+
+            rows = conn.execute(stmt).fetchall()
+
+            return [
+                {
+                    "emoji": row.emoji,
+                    "is_custom": row.is_custom,
+                    "created_at": row.created_at,
+                    "message_content": row.message_content,
+                    "message_author": row.message_author,
+                }
+                for row in rows
+            ]
 
     def _extract_user_from_topic(self, topic_key: str) -> tuple[str | None, str | None]:
         """Extract user_id and server_id from a user topic key.
@@ -676,6 +870,8 @@ class LayerExecutor:
                 "user_profiles": user_profiles,
                 "messages": format_messages_for_prompt(messages_data, {}),
                 "insights": format_insights_for_prompt(insights_data),
+                "individual_insights": ctx.individual_insights,
+                "reactions": ctx.reactions,
                 "layer_runs": ctx.layer_runs,
                 "llm_response": ctx.llm_response,  # Prior LLM response (for chained calls)
             },

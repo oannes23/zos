@@ -785,7 +785,7 @@ async def test_layer_run_records_errors(
     assert run.errors is not None
     assert len(run.errors) == 1
     assert run.errors[0]["topic"] == "nonexistent:topic:1"
-    assert "not found" in run.errors[0]["error"].lower()
+    assert "invalid topic key format" in run.errors[0]["error"].lower()
 
 
 # =============================================================================

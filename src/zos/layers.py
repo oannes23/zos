@@ -40,10 +40,12 @@ class NodeType(str, Enum):
     - synthesize_to_global: Consolidate server-scoped insights to global topic
     - update_self_concept: Update the self-concept.md document
     - fetch_layer_runs: Retrieve layer run history for self-reflection
+    - fetch_reactions: Retrieve emoji reaction patterns for a user
     """
 
     FETCH_MESSAGES = "fetch_messages"
     FETCH_INSIGHTS = "fetch_insights"
+    FETCH_REACTIONS = "fetch_reactions"
     LLM_CALL = "llm_call"
     STORE_INSIGHT = "store_insight"
     REDUCE = "reduce"

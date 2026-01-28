@@ -95,7 +95,7 @@ def test_config_defaults() -> None:
     assert config.data_dir == Path("./data")
     assert config.log_level == "INFO"
     assert config.log_json is True
-    assert config.discord.polling_interval_seconds == 60
+    assert config.discord.polling_interval_seconds == 300
     assert config.database.path == "zos.db"
 
 
@@ -239,7 +239,7 @@ def test_minimal_config(minimal_config_yaml: Path) -> None:
     config = Config.load(minimal_config_yaml)
 
     assert config.log_level == "INFO"
-    assert config.discord.polling_interval_seconds == 60
+    assert config.discord.polling_interval_seconds == 300
     assert config.salience.warm_threshold == 1.0
 
 
@@ -870,7 +870,7 @@ def test_config_load_empty_yaml_file(tmp_path: Path) -> None:
     config = Config.load(config_path)
     assert config.log_level == "INFO"
     assert config.log_json is True
-    assert config.discord.polling_interval_seconds == 60
+    assert config.discord.polling_interval_seconds == 300
 
 
 def test_config_load_yaml_with_null(tmp_path: Path) -> None:

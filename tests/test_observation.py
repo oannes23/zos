@@ -302,9 +302,9 @@ class TestConfigIntegration:
         assert bot.config.discord.polling_interval_seconds == 90
 
     def test_default_polling_interval(self) -> None:
-        """Default polling interval should be 60 seconds."""
+        """Default polling interval should be 300 seconds."""
         config = Config()
-        assert config.discord.polling_interval_seconds == 60
+        assert config.discord.polling_interval_seconds == 300
 
 
 class TestRunBot:

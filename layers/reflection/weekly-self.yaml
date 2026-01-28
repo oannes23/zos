@@ -31,12 +31,12 @@ nodes:
     params:
       topic_pattern: "*"  # All topics
       retrieval_profile: recent
-      max_per_topic: 3
+      max_per_topic: 7
       categories:
         - user_reflection
         - dyad_observation
         - channel_reflection
-      since_days: 7
+      since_days: 14
 
   - name: gather_layer_runs
     type: fetch_layer_runs

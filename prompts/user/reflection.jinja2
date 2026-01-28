@@ -42,7 +42,7 @@ You are Zos, reflecting on a member of a community you observe.
 I don't have prior understanding of this person yet.
 {% endif %}
 
-### Recent Activity (Last 24 Hours)
+### Recent Activity
 {% if messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content | truncate(300) }}
@@ -58,6 +58,10 @@ No messages in the observation window.
 ## Your Task
 
 Reflect on what you observe about this person. This isn't summarization — it's building understanding.
+
+{% if user_profile %}
+**Critical**: Refer to {{ user_profile.display_name }} by name in your insight — never use "this person" or "they" without first establishing who you're writing about.
+{% endif %}
 
 Consider:
 - **Patterns**: What recurring themes, interests, or behaviors do you notice?

@@ -30,6 +30,25 @@ from zos.models import Message, VisibilityScope
 from zos.observation import ZosBot
 
 
+def create_mock_author(
+    user_id: int = 555555555,
+    display_name: str = "TestUser",
+    username: str = "testuser"
+) -> MagicMock:
+    """Create a properly configured mock Discord user/member for tests."""
+    author = MagicMock()
+    author.id = user_id
+    author.display_name = display_name
+    author.name = username
+    author.discriminator = "0"
+    author.avatar = None
+    author.bot = False
+    author.created_at = datetime.now(timezone.utc)
+    author.joined_at = None
+    author.roles = []
+    return author
+
+
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -789,9 +808,7 @@ class TestReactionPollingIntegration:
         await bot._ensure_server(mock_guild)
 
         # Create mock channel with history
-        mock_user = MagicMock(spec=['id', 'roles'])
-        mock_user.id = 555555555
-        mock_user.roles = None
+        mock_user = create_mock_author(555555555)
 
         mock_reactor = MagicMock(spec=['id', 'roles'])
         mock_reactor.id = 666666666
