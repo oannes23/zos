@@ -1193,6 +1193,10 @@ class ZosBot(commands.Bot):
                         server_id=server_id,
                     )
 
+                    # Capture reactor's profile (same as message authors)
+                    # This ensures we have profile data for users who react but don't post
+                    await self._upsert_user_profile(user, server_id)
+
                     # Earn salience for new reactions
                     if is_new:
                         await self._earn_reaction_salience(
