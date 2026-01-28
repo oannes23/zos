@@ -1497,6 +1497,39 @@ class ZosBot(commands.Bot):
         )
         return "image/jpeg"
 
+    def _detect_media_type_from_bytes(self, data: bytes) -> str | None:
+        """Detect image media type from magic bytes (file signature).
+
+        This is more reliable than trusting metadata or file extensions,
+        which can be incorrect when files are renamed or mislabeled.
+
+        Args:
+            data: Raw image bytes.
+
+        Returns:
+            MIME type string if recognized, None if unrecognized format.
+        """
+        if len(data) < 12:
+            return None
+
+        # PNG: 89 50 4E 47 0D 0A 1A 0A
+        if data[:8] == b'\x89PNG\r\n\x1a\n':
+            return "image/png"
+
+        # JPEG: FF D8 FF
+        if data[:3] == b'\xff\xd8\xff':
+            return "image/jpeg"
+
+        # GIF: GIF87a or GIF89a
+        if data[:6] in (b'GIF87a', b'GIF89a'):
+            return "image/gif"
+
+        # WebP: RIFF....WEBP (bytes 0-3 = "RIFF", bytes 8-11 = "WEBP")
+        if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+            return "image/webp"
+
+        return None
+
     async def _queue_media_for_analysis(
         self,
         message: discord.Message,
@@ -1611,8 +1644,29 @@ class ZosBot(commands.Bot):
                 size_bytes=len(image_data),
             )
 
-            # Infer media type (handles missing content_type gracefully)
-            media_type_str = self._infer_media_type(attachment)
+            # Detect actual media type from bytes (most reliable)
+            detected_type = self._detect_media_type_from_bytes(image_data)
+            inferred_type = self._infer_media_type(attachment)
+
+            if detected_type:
+                if detected_type != inferred_type:
+                    log.warning(
+                        "media_type_mismatch",
+                        message_id=message_id,
+                        filename=attachment.filename,
+                        inferred=inferred_type,
+                        detected=detected_type,
+                    )
+                media_type_str = detected_type
+            else:
+                # Unrecognized format - skip analysis
+                log.warning(
+                    "media_type_unrecognized",
+                    message_id=message_id,
+                    filename=attachment.filename,
+                    first_bytes=image_data[:12].hex() if len(image_data) >= 12 else image_data.hex(),
+                )
+                return
 
             # Call vision model
             llm = self._get_llm_client()

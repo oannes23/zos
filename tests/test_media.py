@@ -204,6 +204,220 @@ class TestMediaTypeInference:
         assert bot._infer_media_type(attachment) == "image/jpeg"
 
 
+class TestMediaTypeFromBytes:
+    """Tests for detecting media type from magic bytes."""
+
+    def test_detect_png_from_bytes(self) -> None:
+        """Detects PNG from magic bytes."""
+        config = Config()
+        bot = ZosBot(config)
+
+        # PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
+        png_data = b'\x89PNG\r\n\x1a\n' + b'\x00' * 100
+
+        assert bot._detect_media_type_from_bytes(png_data) == "image/png"
+
+    def test_detect_jpeg_from_bytes(self) -> None:
+        """Detects JPEG from magic bytes."""
+        config = Config()
+        bot = ZosBot(config)
+
+        # JPEG magic bytes: FF D8 FF
+        jpeg_data = b'\xff\xd8\xff' + b'\x00' * 100
+
+        assert bot._detect_media_type_from_bytes(jpeg_data) == "image/jpeg"
+
+    def test_detect_gif87a_from_bytes(self) -> None:
+        """Detects GIF87a from magic bytes."""
+        config = Config()
+        bot = ZosBot(config)
+
+        gif_data = b'GIF87a' + b'\x00' * 100
+
+        assert bot._detect_media_type_from_bytes(gif_data) == "image/gif"
+
+    def test_detect_gif89a_from_bytes(self) -> None:
+        """Detects GIF89a from magic bytes."""
+        config = Config()
+        bot = ZosBot(config)
+
+        gif_data = b'GIF89a' + b'\x00' * 100
+
+        assert bot._detect_media_type_from_bytes(gif_data) == "image/gif"
+
+    def test_detect_webp_from_bytes(self) -> None:
+        """Detects WebP from magic bytes."""
+        config = Config()
+        bot = ZosBot(config)
+
+        # WebP: RIFF....WEBP (4 bytes size in between)
+        webp_data = b'RIFF\x00\x00\x00\x00WEBP' + b'\x00' * 100
+
+        assert bot._detect_media_type_from_bytes(webp_data) == "image/webp"
+
+    def test_returns_none_for_unrecognized_format(self) -> None:
+        """Returns None for unrecognized image format."""
+        config = Config()
+        bot = ZosBot(config)
+
+        unknown_data = b'UNKNOWN_FORMAT' + b'\x00' * 100
+
+        assert bot._detect_media_type_from_bytes(unknown_data) is None
+
+    def test_returns_none_for_too_short_data(self) -> None:
+        """Returns None when data is too short to identify."""
+        config = Config()
+        bot = ZosBot(config)
+
+        short_data = b'\x89PNG'  # Only 4 bytes, need at least 12
+
+        assert bot._detect_media_type_from_bytes(short_data) is None
+
+    def test_returns_none_for_empty_data(self) -> None:
+        """Returns None for empty data."""
+        config = Config()
+        bot = ZosBot(config)
+
+        assert bot._detect_media_type_from_bytes(b'') is None
+
+
+class TestMediaTypeMismatchHandling:
+    """Tests for handling mismatch between inferred and detected media types."""
+
+    @pytest.fixture
+    def db_engine(self, tmp_path: Path):
+        """Create a test database engine."""
+        config = Config()
+        config.data_dir = tmp_path
+        config.database.path = "test.db"
+
+        engine = get_engine(config)
+        create_tables(engine)
+
+        return engine
+
+    @pytest.mark.asyncio
+    async def test_uses_detected_type_over_inferred(
+        self, db_engine, tmp_path: Path
+    ) -> None:
+        """Uses detected media type from bytes instead of inferred type."""
+        config = Config()
+        config.data_dir = tmp_path
+        bot = ZosBot(config, engine=db_engine)
+
+        # Insert prerequisite data
+        from zos.database import channels, messages as messages_table, servers
+
+        with db_engine.connect() as conn:
+            conn.execute(
+                servers.insert().values(
+                    id="server1",
+                    name="Test Server",
+                    threads_as_topics=True,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+            conn.execute(
+                channels.insert().values(
+                    id="channel1",
+                    server_id="server1",
+                    name="general",
+                    type="text",
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+            conn.execute(
+                messages_table.insert().values(
+                    id="msg_mismatch",
+                    channel_id="channel1",
+                    server_id="server1",
+                    author_id="user1",
+                    content="Mislabeled image",
+                    created_at=datetime.now(timezone.utc),
+                    visibility_scope="public",
+                    has_media=True,
+                    has_links=False,
+                    ingested_at=datetime.now(timezone.utc),
+                )
+            )
+            conn.commit()
+
+        # Mock attachment: claims to be webp but is actually JPEG
+        attachment = MagicMock()
+        attachment.content_type = "image/webp"
+        attachment.url = "https://cdn.discord.com/attachments/fake.webp"
+        attachment.filename = "fake.webp"
+        attachment.width = 800
+        attachment.height = 600
+        # Return actual JPEG bytes
+        jpeg_bytes = b'\xff\xd8\xff' + b'\x00' * 100
+        attachment.read = AsyncMock(return_value=jpeg_bytes)
+
+        # Mock LLM client - should be called with image/jpeg, not image/webp
+        mock_result = MagicMock()
+        mock_result.text = "Test description"
+        mock_result.usage = MagicMock()
+        mock_result.usage.input_tokens = 100
+        mock_result.usage.output_tokens = 50
+        mock_result.model = "test-model"
+
+        with patch.object(bot, "_get_llm_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.analyze_image = AsyncMock(return_value=mock_result)
+            mock_get_client.return_value = mock_client
+
+            with patch("zos.observation.log") as mock_log:
+                await bot._analyze_image("msg_mismatch", attachment)
+
+                # Should log warning about mismatch
+                mock_log.warning.assert_any_call(
+                    "media_type_mismatch",
+                    message_id="msg_mismatch",
+                    filename="fake.webp",
+                    inferred="image/webp",
+                    detected="image/jpeg",
+                )
+
+            # Verify analyze_image was called with detected type (jpeg), not inferred (webp)
+            mock_client.analyze_image.assert_called_once()
+            call_kwargs = mock_client.analyze_image.call_args[1]
+            assert call_kwargs["media_type"] == "image/jpeg"
+
+    @pytest.mark.asyncio
+    async def test_skips_unrecognized_format(self, db_engine, tmp_path: Path) -> None:
+        """Skips analysis for unrecognized image formats."""
+        config = Config()
+        config.data_dir = tmp_path
+        bot = ZosBot(config, engine=db_engine)
+
+        # Mock attachment with unrecognized format
+        attachment = MagicMock()
+        attachment.content_type = "image/png"
+        attachment.url = "https://cdn.discord.com/attachments/weird.png"
+        attachment.filename = "weird.png"
+        # Return unrecognized bytes
+        unknown_bytes = b'UNKNOWNFORMAT' + b'\x00' * 100
+        attachment.read = AsyncMock(return_value=unknown_bytes)
+
+        with patch.object(bot, "_get_llm_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_get_client.return_value = mock_client
+
+            with patch("zos.observation.log") as mock_log:
+                await bot._analyze_image("msg_unknown", attachment)
+
+                # Should log warning about unrecognized format
+                mock_log.warning.assert_any_call(
+                    "media_type_unrecognized",
+                    message_id="msg_unknown",
+                    filename="weird.png",
+                    first_bytes=unknown_bytes[:12].hex(),
+                )
+
+            # analyze_image should NOT have been called
+            mock_client.analyze_image.assert_not_called()
+
+
 class TestVisionDisabled:
     """Tests for when vision is disabled in config."""
 
@@ -489,14 +703,16 @@ class TestAnalyzeImage:
             )
             conn.commit()
 
-        # Mock attachment
+        # Mock attachment with valid JPEG magic bytes
         attachment = MagicMock()
         attachment.content_type = "image/jpeg"
         attachment.url = "https://cdn.discord.com/attachments/test.jpg"
         attachment.filename = "test.jpg"
         attachment.width = 1920
         attachment.height = 1080
-        attachment.read = AsyncMock(return_value=b"fake image data")
+        # JPEG magic bytes: FF D8 FF
+        jpeg_bytes = b'\xff\xd8\xff' + b'\x00' * 100
+        attachment.read = AsyncMock(return_value=jpeg_bytes)
 
         # Mock LLM client response
         mock_result = CompletionResult(
