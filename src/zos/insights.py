@@ -460,6 +460,14 @@ class InsightRetriever:
             valence_curiosity=row.valence_curiosity,
             valence_warmth=row.valence_warmth,
             valence_tension=row.valence_tension,
+            # Expanded valence dimensions
+            valence_awe=row.valence_awe,
+            valence_grief=row.valence_grief,
+            valence_longing=row.valence_longing,
+            valence_peace=row.valence_peace,
+            valence_gratitude=row.valence_gratitude,
+            # Prospective curiosity
+            open_questions=row.open_questions,
             context_channel=row.context_channel,
             context_thread=row.context_thread,
             subject=row.subject,
@@ -609,6 +617,14 @@ def _insight_to_db_dict(insight: Insight) -> dict:
         "valence_curiosity": insight.valence_curiosity,
         "valence_warmth": insight.valence_warmth,
         "valence_tension": insight.valence_tension,
+        # Expanded valence dimensions
+        "valence_awe": insight.valence_awe,
+        "valence_grief": insight.valence_grief,
+        "valence_longing": insight.valence_longing,
+        "valence_peace": insight.valence_peace,
+        "valence_gratitude": insight.valence_gratitude,
+        # Prospective curiosity
+        "open_questions": insight.open_questions,
         "context_channel": insight.context_channel,
         "context_thread": insight.context_thread,
         "subject": insight.subject,
@@ -765,6 +781,14 @@ def _row_to_insight_static(row) -> Insight:
         valence_curiosity=row.valence_curiosity,
         valence_warmth=row.valence_warmth,
         valence_tension=row.valence_tension,
+        # Expanded valence dimensions
+        valence_awe=row.valence_awe,
+        valence_grief=row.valence_grief,
+        valence_longing=row.valence_longing,
+        valence_peace=row.valence_peace,
+        valence_gratitude=row.valence_gratitude,
+        # Prospective curiosity
+        open_questions=row.open_questions,
         context_channel=row.context_channel,
         context_thread=row.context_thread,
         subject=row.subject,

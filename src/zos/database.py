@@ -272,6 +272,14 @@ insights = Table(
     Column("valence_curiosity", Float, nullable=True),
     Column("valence_warmth", Float, nullable=True),
     Column("valence_tension", Float, nullable=True),
+    # Expanded valence dimensions (🟡 per spec/domains/insights.md)
+    Column("valence_awe", Float, nullable=True),  # Encountering the numinous
+    Column("valence_grief", Float, nullable=True),  # Loss, endings
+    Column("valence_longing", Float, nullable=True),  # Desire not yet achieved
+    Column("valence_peace", Float, nullable=True),  # Settledness, equanimity
+    Column("valence_gratitude", Float, nullable=True),  # Appreciation, value
+    # Prospective curiosity (🟡 per spec)
+    Column("open_questions", JSON, nullable=True),  # Forward-looking curiosity
     # Cross-links
     Column("context_channel", String, nullable=True),
     Column("context_thread", String, nullable=True),
@@ -291,7 +299,9 @@ insights = Table(
     CheckConstraint(
         "valence_joy IS NOT NULL OR valence_concern IS NOT NULL OR "
         "valence_curiosity IS NOT NULL OR valence_warmth IS NOT NULL OR "
-        "valence_tension IS NOT NULL",
+        "valence_tension IS NOT NULL OR valence_awe IS NOT NULL OR "
+        "valence_grief IS NOT NULL OR valence_longing IS NOT NULL OR "
+        "valence_peace IS NOT NULL OR valence_gratitude IS NOT NULL",
         name="ck_insights_valence_required",
     ),
 )

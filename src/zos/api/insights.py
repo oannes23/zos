@@ -49,6 +49,7 @@ class InsightResponse(BaseModel):
     importance: float
     novelty: float
     valence: dict[str, Optional[float]]
+    open_questions: Optional[list[str]] = None  # Forward-looking curiosity
 
 
 class InsightListResponse(BaseModel):
@@ -161,7 +162,14 @@ def _format_insight_response(insight, temporal_marker: str | None = None) -> Ins
             "curiosity": insight.valence_curiosity,
             "warmth": insight.valence_warmth,
             "tension": insight.valence_tension,
+            # Expanded valence dimensions
+            "awe": insight.valence_awe,
+            "grief": insight.valence_grief,
+            "longing": insight.valence_longing,
+            "peace": insight.valence_peace,
+            "gratitude": insight.valence_gratitude,
         },
+        open_questions=insight.open_questions,
     )
 
 

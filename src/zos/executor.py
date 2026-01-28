@@ -947,6 +947,9 @@ class LayerExecutor:
         if not valence:
             valence = {"curiosity": 0.5}
 
+        # Extract open_questions (forward-looking curiosity)
+        open_questions = insight_data.get("open_questions")
+
         # Create insight
         strength_adjustment = insight_data.get("strength_adjustment", 1.0)
         insight = Insight(
@@ -969,6 +972,14 @@ class LayerExecutor:
             valence_curiosity=valence.get("curiosity"),
             valence_warmth=valence.get("warmth"),
             valence_tension=valence.get("tension"),
+            # Expanded valence dimensions (🟡 per spec)
+            valence_awe=valence.get("awe"),
+            valence_grief=valence.get("grief"),
+            valence_longing=valence.get("longing"),
+            valence_peace=valence.get("peace"),
+            valence_gratitude=valence.get("gratitude"),
+            # Prospective curiosity
+            open_questions=open_questions,
         )
 
         await insert_insight(self.engine, insight)

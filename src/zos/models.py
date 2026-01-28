@@ -408,6 +408,14 @@ class Insight(BaseModel):
     valence_curiosity: float | None = Field(default=None, ge=0.0, le=1.0)
     valence_warmth: float | None = Field(default=None, ge=0.0, le=1.0)
     valence_tension: float | None = Field(default=None, ge=0.0, le=1.0)
+    # Expanded valence dimensions (🟡 per spec)
+    valence_awe: float | None = Field(default=None, ge=0.0, le=1.0)  # Numinous, exceeding understanding
+    valence_grief: float | None = Field(default=None, ge=0.0, le=1.0)  # Loss, endings
+    valence_longing: float | None = Field(default=None, ge=0.0, le=1.0)  # Desire not yet achieved
+    valence_peace: float | None = Field(default=None, ge=0.0, le=1.0)  # Settledness, equanimity
+    valence_gratitude: float | None = Field(default=None, ge=0.0, le=1.0)  # Appreciation, value
+    # Prospective curiosity (🟡 per spec)
+    open_questions: list[str] | None = None  # Forward-looking curiosity
 
     # Cross-links
     context_channel: str | None = None
@@ -431,6 +439,12 @@ class Insight(BaseModel):
             self.valence_curiosity,
             self.valence_warmth,
             self.valence_tension,
+            # Expanded valence dimensions
+            self.valence_awe,
+            self.valence_grief,
+            self.valence_longing,
+            self.valence_peace,
+            self.valence_gratitude,
         ]
         if all(v is None for v in valences):
             raise ValueError("At least one valence field must be set")
