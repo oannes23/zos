@@ -174,6 +174,27 @@ class UserServerTracking(BaseModel):
     first_seen_at: datetime = Field(default_factory=utcnow)
 
 
+class UserProfile(BaseModel):
+    """User profile snapshot for enriching reflections with identity context."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(default_factory=generate_id)
+    user_id: str
+    server_id: str | None  # None for global profiles
+    display_name: str
+    username: str
+    discriminator: str | None = None
+    avatar_url: str | None = None
+    is_bot: bool = False
+    joined_at: datetime | None = None
+    account_created_at: datetime | None = None
+    roles: list[str] | None = None
+    bio: str | None = None
+    pronouns: str | None = None
+    captured_at: datetime = Field(default_factory=utcnow)
+
+
 class Channel(BaseModel):
     """Discord channel entity."""
 

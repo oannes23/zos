@@ -57,6 +57,27 @@ users = Table(
     Column("first_dm_at", DateTime, nullable=True),
 )
 
+user_profiles = Table(
+    "user_profiles",
+    metadata,
+    Column("id", String, primary_key=True),  # ULID
+    Column("user_id", String, nullable=False),
+    Column("server_id", String, ForeignKey("servers.id"), nullable=True),  # NULL for global (DM) profiles
+    Column("display_name", String, nullable=False),
+    Column("username", String, nullable=False),
+    Column("discriminator", String, nullable=True),
+    Column("avatar_url", String, nullable=True),
+    Column("is_bot", Boolean, nullable=False, default=False),
+    Column("joined_at", DateTime, nullable=True),  # NULL for global profiles
+    Column("account_created_at", DateTime, nullable=True),
+    Column("roles", JSON, nullable=True),  # JSON array, NULL for global profiles
+    Column("bio", Text, nullable=True),  # From fetch_profile()
+    Column("pronouns", String, nullable=True),  # From fetch_profile()
+    Column("captured_at", DateTime, nullable=False, default=datetime.utcnow),
+    Index("ix_user_profiles_user_server", "user_id", "server_id", unique=True),
+    Index("ix_user_profiles_captured", "captured_at"),
+)
+
 user_server_tracking = Table(
     "user_server_tracking",
     metadata,

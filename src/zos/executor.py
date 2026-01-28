@@ -27,6 +27,7 @@ from zos.database import (
     layer_runs as layer_runs_table,
     messages as messages_table,
     topics as topics_table,
+    user_profiles as user_profiles_table,
 )
 from zos.insights import FormattedInsight, InsightRetriever, insert_insight
 from zos.layers import Layer, LayerLoader, Node, NodeType
@@ -40,7 +41,9 @@ from zos.models import (
     Message,
     Topic,
     TopicCategory,
+    UserProfile,
     VisibilityScope,
+    row_to_model,
     utcnow,
 )
 from zos.salience import SalienceLedger
@@ -500,6 +503,68 @@ class LayerExecutor:
             error_count=error_count,
         )
 
+    def _extract_user_from_topic(self, topic_key: str) -> tuple[str | None, str | None]:
+        """Extract user_id and server_id from a user topic key.
+
+        Args:
+            topic_key: Topic key (e.g., "user:<id>" or "server:<sid>:user:<id>").
+
+        Returns:
+            (user_id, server_id) tuple. server_id is None for global user topics.
+        """
+        # Global user topic: "user:<user_id>"
+        if topic_key.startswith("user:"):
+            user_id = topic_key.split(":", 1)[1]
+            return (user_id, None)
+
+        # Server-scoped user topic: "server:<server_id>:user:<user_id>"
+        if ":user:" in topic_key:
+            parts = topic_key.split(":")
+            # Find server_id (after "server:")
+            server_id = None
+            if parts[0] == "server" and len(parts) >= 2:
+                server_id = parts[1]
+            # Find user_id (after ":user:")
+            user_idx = parts.index("user") if "user" in parts else -1
+            if user_idx >= 0 and user_idx + 1 < len(parts):
+                user_id = parts[user_idx + 1]
+                return (user_id, server_id)
+
+        return (None, None)
+
+    async def _get_user_profile(
+        self,
+        user_id: str,
+        server_id: str | None,
+    ) -> UserProfile | None:
+        """Get most recent profile snapshot for user.
+
+        Args:
+            user_id: Discord user ID.
+            server_id: Server ID (None for global profile lookup).
+
+        Returns:
+            UserProfile if found, None otherwise.
+        """
+        with self.engine.connect() as conn:
+            query = select(user_profiles_table).where(
+                user_profiles_table.c.user_id == user_id
+            )
+
+            # Match server-specific or global profile
+            if server_id:
+                query = query.where(user_profiles_table.c.server_id == server_id)
+            else:
+                query = query.where(user_profiles_table.c.server_id.is_(None))
+
+            result = conn.execute(
+                query.order_by(user_profiles_table.c.captured_at.desc()).limit(1)
+            ).fetchone()
+
+            if result:
+                return row_to_model(result, UserProfile)
+            return None
+
     async def _handle_llm_call(self, node: Node, ctx: ExecutionContext) -> None:
         """Call the LLM with rendered prompt.
 
@@ -548,11 +613,21 @@ class LayerExecutor:
             for i in ctx.insights
         ]
 
+        # Fetch user profile for user reflections
+        user_profile = None
+        if ctx.topic.category == TopicCategory.USER:
+            # Extract user_id and server_id from topic key
+            # User topic keys: "user:<user_id>" (global) or "server:<server_id>:user:<user_id>"
+            user_id, server_id = self._extract_user_from_topic(ctx.topic.key)
+            if user_id:
+                user_profile = await self._get_user_profile(user_id, server_id)
+
         # Render template
         prompt = self.templates.render(
             template_path,
             {
                 "topic": ctx.topic,
+                "user_profile": user_profile,
                 "messages": format_messages_for_prompt(messages_data, {}),
                 "insights": format_insights_for_prompt(insights_data),
                 "layer_runs": ctx.layer_runs,

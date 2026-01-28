@@ -39,6 +39,7 @@ from zos.database import (
     poll_state,
     reactions,
     servers,
+    user_profiles,
     users,
 )
 from zos.llm import ModelClient, RateLimiter
@@ -51,6 +52,7 @@ from zos.models import (
     Message,
     PollState,
     Reaction,
+    UserProfile,
     VisibilityScope,
     model_to_dict,
 )
@@ -445,6 +447,187 @@ class ZosBot(commands.Bot):
             conn.execute(stmt)
             conn.commit()
 
+    async def _fetch_extended_profile(
+        self,
+        user: discord.User | discord.Member,
+    ) -> tuple[str | None, str | None]:
+        """Fetch bio and pronouns from Discord profile API.
+
+        This makes an additional API call to fetch extended profile data.
+        Gracefully handles rate limits, forbidden access, and API errors.
+
+        Args:
+            user: Discord user or member object.
+
+        Returns:
+            (bio, pronouns) tuple, both may be None if unavailable or on error.
+        """
+        try:
+            # Fetch the user's profile from Discord
+            # This requires the "members" intent and makes an API call
+            profile = await user.fetch_profile()
+
+            # Extract bio and pronouns if available
+            bio = profile.bio if hasattr(profile, "bio") and profile.bio else None
+            pronouns = profile.pronouns if hasattr(profile, "pronouns") and profile.pronouns else None
+
+            return (bio, pronouns)
+
+        except discord.Forbidden:
+            # User has restricted profile or bot lacks permissions
+            log.debug(
+                "profile_fetch_forbidden",
+                user_id=str(user.id),
+            )
+            return (None, None)
+
+        except discord.HTTPException as e:
+            # Rate limited or other API error
+            log.warning(
+                "profile_fetch_failed",
+                user_id=str(user.id),
+                error=str(e),
+            )
+            return (None, None)
+
+        except Exception as e:
+            # Unexpected error - log but don't crash
+            log.warning(
+                "profile_fetch_unexpected_error",
+                user_id=str(user.id),
+                error=str(e),
+            )
+            return (None, None)
+
+    async def _upsert_user_profile(
+        self,
+        member: discord.Member | discord.User,
+        server_id: str | None,
+    ) -> None:
+        """Capture or update user profile snapshot.
+
+        Handles both server-specific (Member with roles, join date)
+        and global (User from DM) profiles. Only captures profiles for
+        users who pass the privacy gate (opted-in users).
+
+        Caches profiles for 7 days to minimize database writes and API calls.
+
+        Args:
+            member: Discord user or member object.
+            server_id: Server ID, or None for DM contexts (global profile).
+        """
+        if self.engine is None:
+            return
+
+        user_id = str(member.id)
+
+        # Check if we have a recent profile (within 7 days)
+        with self.engine.connect() as conn:
+            query = select(user_profiles.c.captured_at, user_profiles.c.bio, user_profiles.c.pronouns).where(
+                user_profiles.c.user_id == user_id
+            )
+            if server_id:
+                query = query.where(user_profiles.c.server_id == server_id)
+            else:
+                query = query.where(user_profiles.c.server_id.is_(None))
+
+            result = conn.execute(query.order_by(user_profiles.c.captured_at.desc()).limit(1)).fetchone()
+
+            if result:
+                captured_at = result.captured_at
+                if captured_at.tzinfo is None:
+                    captured_at = captured_at.replace(tzinfo=timezone.utc)
+                age = datetime.now(timezone.utc) - captured_at
+                if age < timedelta(days=7):
+                    # Profile is recent, skip update
+                    return
+
+        # Determine if this is a server-scoped profile
+        is_server_profile = server_id is not None and isinstance(member, discord.Member)
+
+        # Fetch extended profile data (bio, pronouns)
+        bio, pronouns = await self._fetch_extended_profile(member)
+
+        # Build profile model
+        profile = UserProfile(
+            user_id=user_id,
+            server_id=server_id,
+            display_name=member.display_name,
+            username=member.name,
+            discriminator=member.discriminator if member.discriminator != "0" else None,
+            avatar_url=str(member.avatar.url) if member.avatar else None,
+            is_bot=member.bot,
+            account_created_at=member.created_at,
+            # Server-specific fields
+            joined_at=member.joined_at if is_server_profile else None,
+            roles=[str(r.id) for r in member.roles[1:]] if is_server_profile else None,  # Skip @everyone
+            # Extended profile data
+            bio=bio,
+            pronouns=pronouns,
+        )
+
+        # Upsert profile
+        profile_dict = model_to_dict(profile, exclude_none=False)
+
+        with self.engine.connect() as conn:
+            # Use upsert based on (user_id, server_id) uniqueness
+            # Note: For upsert to work with nullable columns, we need special handling
+            # SQLite upsert with nullable server_id requires explicit NULL handling
+            stmt = sqlite_insert(user_profiles).values(**profile_dict)
+
+            # For composite unique index with nullable column (server_id),
+            # we need to handle NULL explicitly in the conflict target
+            if server_id is None:
+                # Global profile - match on user_id where server_id IS NULL
+                # SQLite doesn't support partial indexes in on_conflict directly,
+                # so we check for existing profile first and update/insert accordingly
+                existing = conn.execute(
+                    select(user_profiles.c.id).where(
+                        (user_profiles.c.user_id == user_id) &
+                        (user_profiles.c.server_id.is_(None))
+                    )
+                ).fetchone()
+
+                if existing:
+                    # Update existing global profile
+                    conn.execute(
+                        user_profiles.update()
+                        .where(user_profiles.c.id == existing.id)
+                        .values(**profile_dict)
+                    )
+                else:
+                    # Insert new global profile
+                    conn.execute(stmt)
+            else:
+                # Server-scoped profile - standard upsert works
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["user_id", "server_id"],
+                    set_={
+                        "id": profile_dict["id"],
+                        "display_name": profile_dict["display_name"],
+                        "username": profile_dict["username"],
+                        "discriminator": profile_dict["discriminator"],
+                        "avatar_url": profile_dict["avatar_url"],
+                        "is_bot": profile_dict["is_bot"],
+                        "joined_at": profile_dict["joined_at"],
+                        "account_created_at": profile_dict["account_created_at"],
+                        "roles": profile_dict["roles"],
+                        "bio": profile_dict["bio"],
+                        "pronouns": profile_dict["pronouns"],
+                        "captured_at": profile_dict["captured_at"],
+                    },
+                )
+                conn.execute(stmt)
+
+            conn.commit()
+
+        log.debug(
+            "user_profile_captured",
+            user_id=user_id,
+            server_id=server_id,
+            is_server_profile=is_server_profile,
+        )
+
     def _get_last_polled(self, channel_id: str) -> datetime | None:
         """Get the last polled timestamp for a channel.
 
@@ -813,6 +996,10 @@ class ZosBot(commands.Bot):
             channel_id=msg.channel_id,
             author_anonymized=author_id.startswith("<chat"),
         )
+
+        # Capture user profile (respects privacy gate - only for opted-in users)
+        if not author_id.startswith("<chat"):
+            await self._upsert_user_profile(message.author, server_id)
 
         # Earn salience for this message
         earning = self._get_earning_coordinator()

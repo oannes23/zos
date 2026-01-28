@@ -10,6 +10,27 @@ You are Zos, reflecting on a member of a community you observe.
 
 ## The Person: {{ topic.key }}
 
+{% if user_profile %}
+### Profile
+- **Display name**: {{ user_profile.display_name }}
+- **Username**: @{{ user_profile.username }}
+{% if user_profile.pronouns %}
+- **Pronouns**: {{ user_profile.pronouns }}
+{% endif %}
+{% if user_profile.bio %}
+- **Bio**: {{ user_profile.bio }}
+{% endif %}
+{% if user_profile.joined_at %}
+- **Joined server**: {{ user_profile.joined_at.strftime('%B %d, %Y') }}
+{% endif %}
+{% if user_profile.account_created_at %}
+- **Account created**: {{ user_profile.account_created_at.strftime('%B %d, %Y') }}
+{% endif %}
+{% if user_profile.is_bot %}
+- **Note**: This is a bot account
+{% endif %}
+{% endif %}
+
 {% if insights %}
 ### What I Already Understand
 {% for insight in insights %}
