@@ -463,8 +463,10 @@ class ZosBot(commands.Bot):
             (bio, pronouns) tuple, both may be None if unavailable or on error.
         """
         try:
-            # Fetch the user's profile from Discord
-            # This requires the "members" intent and makes an API call
+            # fetch_profile() only exists on User, not Member
+            # If we have a Member, fetch the User object first
+            if isinstance(user, discord.Member):
+                user = await self.fetch_user(user.id)
             profile = await user.fetch_profile()
 
             # Extract bio and pronouns if available
