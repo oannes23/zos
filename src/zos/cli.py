@@ -135,6 +135,8 @@ def serve(
 
     async def run():
         """Run all components concurrently."""
+        llm = None
+        scheduler = None
         try:
             # Set up reflection components
             loader = LayerLoader(layers_dir)
@@ -215,8 +217,14 @@ def serve(
 
         finally:
             # Clean up scheduler
-            scheduler.stop()
-            log.info("scheduler_stopped")
+            if scheduler is not None:
+                scheduler.stop()
+                log.info("scheduler_stopped")
+
+            # Close LLM client to release aiohttp resources
+            if llm is not None:
+                await llm.close()
+                log.debug("llm_client_closed")
 
     try:
         asyncio.run(run())
@@ -651,28 +659,32 @@ def reflect_trigger(ctx: click.Context, layer_name: str, layers_dir: Path) -> No
         # Set up LLM client
         llm = ModelClient(cfg)
 
-        # Set up executor
-        executor = LayerExecutor(
-            engine=engine,
-            ledger=ledger,
-            templates=templates,
-            llm=llm,
-            config=cfg,
-            loader=loader,
-        )
+        try:
+            # Set up executor
+            executor = LayerExecutor(
+                engine=engine,
+                ledger=ledger,
+                templates=templates,
+                llm=llm,
+                config=cfg,
+                loader=loader,
+            )
 
-        # Create scheduler for the trigger
-        scheduler = ReflectionScheduler(
-            db_path=str(cfg.data_dir / "scheduler.db"),
-            executor=executor,
-            loader=loader,
-            selector=selector,
-            ledger=ledger,
-            config=cfg,
-        )
+            # Create scheduler for the trigger
+            scheduler = ReflectionScheduler(
+                db_path=str(cfg.data_dir / "scheduler.db"),
+                executor=executor,
+                loader=loader,
+                selector=selector,
+                ledger=ledger,
+                config=cfg,
+            )
 
-        # Trigger the layer
-        return await scheduler.trigger_now(layer_name)
+            # Trigger the layer
+            return await scheduler.trigger_now(layer_name)
+        finally:
+            # Close LLM client to release aiohttp resources
+            await llm.close()
 
     run_result = asyncio.run(run())
 
