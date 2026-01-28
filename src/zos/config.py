@@ -173,6 +173,7 @@ class ObservationConfig(BaseModel):
     allow_backfill_on_startup: bool = False
     reaction_user_rate_limit_per_minute: int = 20
     media_queue_max_size: int = 100
+    reaction_resync_hours: int = 24
 
 
 class SchedulerConfig(BaseModel):
@@ -199,7 +200,7 @@ class OperatorsConfig(BaseModel):
 class DiscordConfig(BaseModel):
     """Discord configuration."""
 
-    polling_interval_seconds: int = 60
+    polling_interval_seconds: int = 300
     operators: OperatorsConfig = Field(default_factory=OperatorsConfig)
 
 

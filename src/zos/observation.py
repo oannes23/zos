@@ -22,7 +22,7 @@ import hashlib
 import json
 import re
 import signal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import discord
@@ -592,7 +592,7 @@ class ZosBot(commands.Bot):
         messages_stored = 0
         last_message_at: datetime | None = None
 
-        # Fetch messages since last poll
+        # Phase 1: Fetch new messages since last poll
         async for message in channel.history(
             after=last_polled,
             limit=100,  # Default batch size
@@ -615,6 +615,38 @@ class ZosBot(commands.Bot):
                 channel_name=channel.name,
                 messages_stored=messages_stored,
             )
+
+        # Phase 2: Re-sync reactions on recent messages (last N hours)
+        # This catches reactions added to older messages after they were first polled
+        resync_hours = self.config.observation.reaction_resync_hours
+        resync_cutoff = datetime.now(timezone.utc) - timedelta(hours=resync_hours)
+
+        # Only re-sync if we have established polling history and it overlaps with resync window
+        if last_polled and last_polled > resync_cutoff:
+            log.debug(
+                "reaction_resync_started",
+                channel_id=channel_id,
+                channel_name=channel.name,
+                resync_cutoff=resync_cutoff.isoformat(),
+            )
+
+            reactions_resynced = 0
+            async for message in channel.history(
+                after=resync_cutoff,
+                limit=100,
+                oldest_first=False,
+            ):
+                if message.reactions:
+                    await self._sync_reactions(message, server_id)
+                    reactions_resynced += 1
+
+            if reactions_resynced > 0:
+                log.debug(
+                    "reaction_resync_completed",
+                    channel_id=channel_id,
+                    channel_name=channel.name,
+                    messages_checked=reactions_resynced,
+                )
 
         return messages_stored
 
