@@ -348,6 +348,11 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 | valence_curiosity | float | at least one | 0.0 - 1.0, interest/engagement |
 | valence_warmth | float | at least one | 0.0 - 1.0, connection/affection |
 | valence_tension | float | at least one | 0.0 - 1.0, conflict/discomfort |
+| valence_awe | float | at least one | 🟡 0.0 - 1.0, encountering the numinous |
+| valence_grief | float | at least one | 🟡 0.0 - 1.0, loss, endings |
+| valence_longing | float | at least one | 🟡 0.0 - 1.0, desire not yet achieved |
+| valence_peace | float | at least one | 🟡 0.0 - 1.0, settledness, equanimity |
+| valence_gratitude | float | at least one | 🟡 0.0 - 1.0, appreciation, value |
 
 ### Insight Cross-Topic Links (Optional)
 
@@ -357,6 +362,14 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 | context_thread | string | no | Thread topic key if applicable |
 | subject | string | no | Subject topic key if applicable |
 | participants | json | no | Array of topic keys for all entities involved |
+
+### Insight Prospective Curiosity (🟡 Open Issue)
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| open_questions | json | no | 🟡 Array of strings — what the model is curious to learn more about |
+
+**Note**: Open questions capture forward-looking curiosity, not predictions. See [insights.md](../domains/insights.md) for the "curiosity not prediction" framing.
 
 ### Insight Conflict Tracking
 
@@ -729,7 +742,12 @@ CHECK (
     valence_concern IS NOT NULL OR
     valence_curiosity IS NOT NULL OR
     valence_warmth IS NOT NULL OR
-    valence_tension IS NOT NULL
+    valence_tension IS NOT NULL OR
+    valence_awe IS NOT NULL OR        -- 🟡 Open Issue
+    valence_grief IS NOT NULL OR      -- 🟡 Open Issue
+    valence_longing IS NOT NULL OR    -- 🟡 Open Issue
+    valence_peace IS NOT NULL OR      -- 🟡 Open Issue
+    valence_gratitude IS NOT NULL     -- 🟡 Open Issue
 )
 ```
 
@@ -781,6 +799,7 @@ The `category` field on Insight indicates what type of understanding this repres
 - `subject_reflection` — semantic topic understanding
 - `self_reflection` — Zos's self-understanding
 - `synthesis` — consolidated understanding from multiple sources
+- `appreciation` — 🟡 what Zos values, finds meaningful, or is grateful for
 
 ### Social Texture Category (from observation analysis)
 - `social_texture` — expression patterns, emoji usage, reaction tendencies, communication style
@@ -789,4 +808,4 @@ Social texture insights track *how* people communicate, not just *what* they say
 
 ---
 
-_Last updated: 2026-01-23 — Added: deleted_at on Message (soft delete tombstone), original_topic_salience on Insight (for decay), LLMCallLog table (comprehensive audit)_
+_Last updated: 2026-01-28 — Added: expanded valence dimensions (awe, grief, longing, peace, gratitude), open_questions field, appreciation category (all 🟡 Open Issues)_

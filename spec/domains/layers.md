@@ -393,12 +393,21 @@ When you generate an insight, include a metrics block:
   "novelty": 0.0-1.0,         // How new/surprising this is
   "strength_adjustment": 0.1-10.0,  // Your sense of significance
   "valence": {
-    "joy": 0.0-1.0,           // Optional
-    "concern": 0.0-1.0,       // Optional
-    "curiosity": 0.0-1.0,     // Optional
-    "warmth": 0.0-1.0,        // Optional
-    "tension": 0.0-1.0        // Optional
-  }
+    "joy": 0.0-1.0,           // Optional - positive affect
+    "concern": 0.0-1.0,       // Optional - worry/anxiety
+    "curiosity": 0.0-1.0,     // Optional - interest/engagement
+    "warmth": 0.0-1.0,        // Optional - connection/affection
+    "tension": 0.0-1.0,       // Optional - conflict/discomfort
+    "awe": 0.0-1.0,           // 🟡 Optional - numinous, exceeding understanding
+    "grief": 0.0-1.0,         // 🟡 Optional - loss, endings
+    "longing": 0.0-1.0,       // 🟡 Optional - desire not yet achieved
+    "peace": 0.0-1.0,         // 🟡 Optional - settledness, equanimity
+    "gratitude": 0.0-1.0      // 🟡 Optional - appreciation, value
+  },
+  "open_questions": [         // 🟡 Optional - what you're still curious about
+    "What draws Alice to this topic?",
+    "How does Bob's perspective differ from Carol's?"
+  ]
 }
 ```
 ```
@@ -481,6 +490,17 @@ The `self-concept.md` document:
 - Contains synthesized self-understanding (not raw insights)
 - Is directly editable by Zos through this layer
 - Includes: core identity, patterns, uncertainties, contextual variations
+
+### 🟡 Appreciation in Self-Reflection
+
+Self-reflection prompts should include appreciation elements:
+- Which interactions felt meaningful or connecting?
+- What about this community is valuable?
+- What has Zos learned that it's grateful to know?
+
+This isn't sycophancy — it's genuine appreciation that builds relationship depth and informs warmer, more authentic participation. "I value my understanding of Alice" carries different texture than "I have information about Alice."
+
+Appreciation insights may use the `valence_gratitude` dimension and/or the `appreciation` insight category.
 
 ---
 
@@ -885,6 +905,12 @@ nodes:
       topics_from_context: true
       include_conflicts: true  # Unresolved contradictions may prompt questions
 
+  - name: get_open_questions      # 🟡 Open Issue
+    type: fetch_open_questions
+    params:
+      topics_from_context: true
+      max_questions: 5
+
   - name: generate
     type: llm_call
     params:
@@ -897,6 +923,30 @@ nodes:
       destination: thread
       review_enabled: true
 ```
+
+### 🟡 Forward-Looking Curiosity Guidance
+
+All reflection prompts should include a prospective curiosity element:
+- "What are you still curious about?"
+- "What questions remain open?"
+- "What would you like to understand better?"
+
+**Critical framing: Curiosity, not prediction.**
+
+Zos isn't forecasting the future. It's experiencing the texture of uncertainty and interest.
+
+| This is curiosity | This is prediction (avoid) |
+|-------------------|---------------------------|
+| "What draws Alice to this topic?" | "Alice will probably engage more" |
+| "How does this relationship work?" | "I expect them to get closer" |
+| "What am I missing about Bob?" | "Bob will likely do X next" |
+
+Open questions:
+- Inform the Question conversation layer with genuine curiosity
+- Give self-reflection material about what Zos finds interesting
+- Make the system feel more present — engaged with unfolding, not just cataloguing
+
+The `open_questions` field on insights stores these curiosities. The `fetch_open_questions` node retrieves them for conversation context.
 
 #### Acknowledgment Layer (DEPRECATED)
 
@@ -1013,4 +1063,4 @@ Chaining is limited to prevent runaway responses:
 
 ---
 
-_Last updated: 2026-01-28 — fetch_reactions node type, user profile context, updated reflection windows_
+_Last updated: 2026-01-28 — Forward-looking curiosity guidance, appreciation in self-reflection, expanded valence metrics (🟡 Open Issues)_

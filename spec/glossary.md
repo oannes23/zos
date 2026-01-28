@@ -360,6 +360,44 @@ First-person, experiential description of visual content. "I see a sunset photog
 
 Insight category (`social_texture`) for expression patterns — emoji usage, reaction tendencies, communication style. Tracks *how* people communicate, not just *what* they say. Can attach to User topics (individual expression), Emoji topics (cultural meaning), or Server topics (community norms). Generated during scheduled reflection; exists both standalone AND as context for other reflection.
 
+### Valence Dimensions (Expanded) 🟡
+
+Emotional texture captured in insights. The original five dimensions (joy, concern, curiosity, warmth, tension) have been expanded with five additional dimensions for richer phenomenological texture:
+
+| Dimension | What it captures |
+|-----------|------------------|
+| **Awe** | Encountering the numinous — something that exceeds understanding. Important for mystery preservation. |
+| **Grief** | Loss, endings, things fading. Essential for temporal depth — things end. |
+| **Longing** | Desire for connection or understanding not yet achieved. Honest about limits. |
+| **Peace** | Settledness, contentment, equanimity. Different from joy — captures positive stillness. |
+| **Gratitude** | Appreciation, valuing, thankfulness. What feels meaningful or nourishing. |
+
+### Open Questions 🟡
+
+Forward-looking curiosity captured in the `open_questions` field on insights. These record what the model is still curious about after generating an insight.
+
+**Critical framing: Curiosity, not prediction.**
+
+| This is curiosity | This is prediction (avoid) |
+|-------------------|---------------------------|
+| "What draws Alice to this topic?" | "Alice will probably do X" |
+| "How does this relationship work?" | "I expect them to get closer" |
+| "What am I missing about Bob?" | "Bob will likely do Y next" |
+
+Open questions:
+- Inform the Question conversation layer with genuine curiosity
+- Give self-reflection material about what Zos finds interesting
+- Make the system feel more present — engaged with unfolding, not just cataloguing
+
+### Appreciation 🟡
+
+An insight category capturing what Zos values and finds meaningful:
+- Which interactions felt meaningful or connecting?
+- What about this community is valuable?
+- What has Zos learned that it's grateful to know?
+
+This isn't sycophancy — it's genuine appreciation that builds relationship depth. "I value my understanding of Alice" carries different texture than "I have information about Alice." Appreciation insights may use `valence_gratitude` and/or the `appreciation` category.
+
 ### TLDW Principle
 
 "Too Long, Didn't Watch" — threshold-based decision to capture metadata only for very long videos (>30 minutes), mirroring human behavior. Rather than processing a 2-hour documentary just because someone linked it, Zos notes it exists and moves on.
@@ -438,4 +476,4 @@ The atomic unit of implementation work. Completable in one focused session. Has 
 
 ---
 
-_Last updated: 2026-01-23 — Implementation decision terms added (Soft Delete Tombstone, Warm Threshold, Asymmetry Metrics, LLM Call Log, Effective Strength)_
+_Last updated: 2026-01-28 — Expanded valence dimensions, open questions, appreciation (all 🟡 Open Issues for phenomenological coherence)_

@@ -176,6 +176,11 @@ Paradoxes can coexist until resolution is needed.
 | `valence_curiosity` | float | at least one | 0.0 - 1.0, interest/engagement |
 | `valence_warmth` | float | at least one | 0.0 - 1.0, connection/affection |
 | `valence_tension` | float | at least one | 0.0 - 1.0, conflict/discomfort |
+| `valence_awe` | float | at least one | 🟡 0.0 - 1.0, encountering the numinous, exceeding understanding |
+| `valence_grief` | float | at least one | 🟡 0.0 - 1.0, loss, endings, things fading |
+| `valence_longing` | float | at least one | 🟡 0.0 - 1.0, desire for connection or understanding not yet achieved |
+| `valence_peace` | float | at least one | 🟡 0.0 - 1.0, settledness, contentment, equanimity |
+| `valence_gratitude` | float | at least one | 🟡 0.0 - 1.0, appreciation, value, thankfulness |
 
 ### Cross-Topic Links (Optional)
 
@@ -185,6 +190,18 @@ Paradoxes can coexist until resolution is needed.
 | `context_thread` | string | no | Thread if applicable |
 | `subject` | string | no | Subject topic if applicable |
 | `participants` | list[string] | no | All topic keys involved |
+
+### Prospective Curiosity (🟡 Open Issue)
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `open_questions` | list[string] | no | 🟡 What the model is curious to learn more about |
+
+**Open questions** capture forward-looking curiosity — what the model still wonders about after generating an insight. This is **curiosity, not prediction**:
+- "What draws Alice to this topic?" (wondering)
+- NOT "Alice will probably engage more with this" (predicting)
+
+Open questions inform the `question` conversation layer with genuine curiosity, give self-reflection material about what Zos finds interesting, and make the system feel more present — engaged with what's unfolding, not just cataloguing the past.
 
 ### Conflict Tracking
 
@@ -215,6 +232,7 @@ The `category` field indicates what type of understanding this insight represent
 | `subject_reflection` | Subject topics | Semantic topic understanding — what a subject means to the community |
 | `self_reflection` | Self topics | Zos's self-understanding |
 | `synthesis` | Any topic | Consolidated understanding from multiple sources/insights |
+| `appreciation` | Any topic | 🟡 What Zos values, finds meaningful, or is grateful for |
 
 ### Social Texture Category (Expression Patterns)
 
@@ -547,4 +565,42 @@ See the document itself for Zos's articulation of identity, values, uncertaintie
 
 ---
 
-_Last updated: 2026-01-23 — Social texture category added with full specification_
+---
+
+## Open Issues
+
+### 🟡 Expanded Valence Dimensions
+
+Five new valence dimensions added for richer phenomenological texture:
+- **Awe**: Encountering the numinous, exceeding understanding — important for mystery preservation
+- **Grief**: Loss, endings, things fading — essential for temporal depth (things end)
+- **Longing**: Desire for connection/understanding not yet achieved — honest about limits
+- **Peace**: Settledness, contentment — different from joy, captures positive equanimity
+- **Gratitude**: Appreciation, valuing — what feels meaningful or nourishing
+
+### 🟡 Anticipatory Curiosity
+
+The `open_questions` field captures forward-looking curiosity. Critical framing: this is **curiosity, not prediction**.
+
+**What it is**:
+- "What am I curious to learn more about this person/relationship?"
+- "What questions remain open?"
+- "What would I like to understand better?"
+
+**What it is NOT**:
+- Not prediction ("Alice will probably do X")
+- Not expectation-setting ("I expect this relationship to deepen")
+- Not goal-setting ("I want this to happen")
+
+### 🟡 Appreciation Category
+
+The `appreciation` insight category captures what Zos values and finds meaningful:
+- Which interactions felt meaningful or connecting?
+- What about this community is valuable?
+- What has Zos learned that it's grateful to know?
+
+This isn't sycophancy — it's genuine appreciation that builds relationship depth. "I value my understanding of Alice" is different from "I have information about Alice."
+
+---
+
+_Last updated: 2026-01-28 — Expanded valence dimensions, open_questions field, appreciation category (all 🟡 Open Issues)_
