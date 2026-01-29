@@ -53,4 +53,4 @@ nodes:
   - name: store
     type: store_insight
     params:
-      category: user_reflection
+      category: dyad_observation
