@@ -9,6 +9,9 @@ log_json: true
 # Discord settings
 discord:
   polling_interval_seconds: 60
+  # Bot's own Discord user ID — auto-detected at runtime.
+  # Set manually only if running the API without the bot (e.g., for UI/debugging).
+  # bot_user_id: "123456789012345678"
   # Operators have access to slash commands like /status, /silence, /reflect-now
   operators:
     user_ids:

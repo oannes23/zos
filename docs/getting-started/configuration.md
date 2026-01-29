@@ -68,11 +68,14 @@ log_json: true            # true for JSON logs, false for console
 ```yaml
 discord:
   polling_interval_seconds: 60   # How often to check for new messages
+  # bot_user_id: null            # Auto-detected at runtime; set for API-only mode
   operators:
     user_ids:
       - "123456789012345678"     # Discord user IDs with operator access
     role_id: null                # Optional: role that grants operator access
 ```
+
+`bot_user_id` is auto-detected when the bot connects to Discord. You only need to set it manually if running the API without the bot (e.g., for UI debugging).
 
 ### Models
 

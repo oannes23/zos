@@ -27,6 +27,7 @@ Discord connection and access control.
 ```yaml
 discord:
   polling_interval_seconds: 60
+  bot_user_id: null  # Auto-detected at runtime; set manually for API-only mode
   operators:
     user_ids:
       - "123456789012345678"
@@ -42,6 +43,19 @@ How often to check Discord for new messages (in seconds).
 | int | 60 | Polling frequency |
 
 Lower values = more responsive but more API calls.
+
+### discord.bot_user_id
+
+The bot's own Discord user ID. Auto-detected at runtime when the bot connects, but can be set manually for contexts where the bot isn't running (e.g., API-only mode).
+
+| Value | Default | Description |
+|-------|---------|-------------|
+| string or null | null | Bot's Discord user ID |
+
+When set (either manually or auto-detected), the bot:
+- Skips earning community salience for itself when mentioned (earns to `self:zos` instead)
+- Registers its own user profile so it displays with a readable name in the UI
+- Redistributes any previously mis-accumulated bot user salience to self topics on startup
 
 ### discord.operators
 
