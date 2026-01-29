@@ -4,23 +4,25 @@
 {% block content %}
 <h1>Zos Dashboard</h1>
 
-<div class="dashboard-grid">
+<!-- Top Topics - Full Width -->
+<div class="card mb-2">
+    <div class="card-header">
+        <span class="card-title">Top Topics</span>
+        <a href="/ui/salience" class="text-muted">View all</a>
+    </div>
+    <div hx-get="/ui/salience/top?limit=10" hx-trigger="load" hx-swap="innerHTML">
+        Loading...
+    </div>
+</div>
+
+<!-- Bottom Row - Insights and Runs side by side -->
+<div class="dashboard-split">
     <div class="card">
         <div class="card-header">
             <span class="card-title">Recent Insights</span>
             <a href="/ui/insights" class="text-muted">View all</a>
         </div>
         <div hx-get="/ui/insights/recent" hx-trigger="load" hx-swap="innerHTML">
-            Loading...
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header">
-            <span class="card-title">Top Topics</span>
-            <a href="/ui/salience" class="text-muted">View all</a>
-        </div>
-        <div hx-get="/ui/salience/top" hx-trigger="load" hx-swap="innerHTML">
             Loading...
         </div>
     </div>

@@ -89,6 +89,19 @@ body {
     margin-top: 1.5rem;
 }
 
+/* Dashboard Split - Two columns side by side */
+.dashboard-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 800px) {
+    .dashboard-split {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Cards */
 .card {
     background: var(--bg-card);
@@ -559,19 +572,20 @@ a:hover {
 
 /* Modal Styles */
 .modal {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1000;
-    max-width: 600px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
+    display: none;
 }
 
-.modal:empty {
-    display: none;
+.modal:not(:empty) {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
 }
 
 .modal-content {
@@ -579,6 +593,10 @@ a:hover {
     border-radius: 8px;
     padding: 1.5rem;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
 }
 
 .modal-header {
@@ -895,26 +913,6 @@ a:hover {
     color: #fff;
 }
 
-/* Modal backdrop for salience (uses CSS :not(:empty) pattern) */
-.modal:not(:empty) {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.modal:not(:empty) .modal-content {
-    max-width: 600px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
-}
 
 /* =============================================================================
    Messages Browser Styles (Story 5.12)
