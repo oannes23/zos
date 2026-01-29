@@ -62,7 +62,7 @@ nodes:
     params:
       prompt_template: self/concept_update_check.jinja2
       model: complex
-      max_tokens: 500
+      max_tokens: 1000
 
   - name: maybe_update_concept
     type: update_self_concept

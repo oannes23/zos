@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from sqlalchemy import and_, select
 
 from zos.database import (
+    channels as channels_table,
     generate_id,
     insights as insights_table,
     layer_runs as layer_runs_table,
@@ -761,6 +762,57 @@ class LayerExecutor:
 
         return (None, None, None)
 
+    def _extract_channel_from_topic(
+        self, topic_key: str
+    ) -> tuple[str | None, str | None]:
+        """Extract channel_id and server_id from a channel topic key.
+
+        Args:
+            topic_key: Topic key (e.g., "server:<sid>:channel:<cid>").
+
+        Returns:
+            (channel_id, server_id) tuple.
+        """
+        # Server-scoped channel topic: "server:<server_id>:channel:<channel_id>"
+        if ":channel:" in topic_key:
+            parts = topic_key.split(":")
+            server_id = None
+            if parts[0] == "server" and len(parts) >= 2:
+                server_id = parts[1]
+            channel_idx = parts.index("channel") if "channel" in parts else -1
+            if channel_idx >= 0 and channel_idx + 1 < len(parts):
+                channel_id = parts[channel_idx + 1]
+                return (channel_id, server_id)
+
+        return (None, None)
+
+    async def _get_channel_info(
+        self,
+        channel_id: str,
+    ) -> dict[str, Any] | None:
+        """Get channel metadata.
+
+        Args:
+            channel_id: Discord channel ID.
+
+        Returns:
+            Dictionary with channel name, type, parent_id, or None if not found.
+        """
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                select(channels_table).where(channels_table.c.id == channel_id)
+            ).fetchone()
+
+            if result:
+                return {
+                    "id": result.id,
+                    "name": result.name,
+                    "type": result.type,
+                    "parent_id": result.parent_id,
+                    "server_id": result.server_id,
+                }
+            return None
+
     async def _get_user_profile(
         self,
         user_id: str,
@@ -942,6 +994,13 @@ class LayerExecutor:
                 if profile_1 and profile_2:
                     user_profiles = [profile_1, profile_2]
 
+        # Fetch channel info for channel reflections
+        channel_info = None
+        if ctx.topic.category == TopicCategory.CHANNEL:
+            channel_id, server_id = self._extract_channel_from_topic(ctx.topic.key)
+            if channel_id:
+                channel_info = await self._get_channel_info(channel_id)
+
         # Render template
         prompt = self.templates.render(
             template_path,
@@ -949,6 +1008,7 @@ class LayerExecutor:
                 "topic": ctx.topic,
                 "user_profile": user_profile,
                 "user_profiles": user_profiles,
+                "channel_info": channel_info,
                 "messages": format_messages_for_prompt(
                     messages_data, {}, mention_names=mention_names
                 ),

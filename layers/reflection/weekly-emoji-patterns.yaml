@@ -36,7 +36,7 @@ nodes:
     params:
       prompt_template: user/emoji_reflection.jinja2
       model: reflection
-      max_tokens: 500
+      max_tokens: 1000
       temperature: 0.7
 
   - name: store

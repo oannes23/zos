@@ -295,7 +295,7 @@ def test_nightly_user_layer_validates() -> None:
     assert layer.name == "nightly-user-reflection"
     assert layer.category == LayerCategory.USER
     assert layer.schedule == "0 3 * * *"
-    assert layer.target_filter == "salience > 30"
+    assert layer.target_filter == "salience >= 10"
     assert layer.max_targets == 15
 
 
@@ -347,7 +347,7 @@ def test_nightly_user_layer_node_params() -> None:
     llm_call = next((n for n in layer.nodes if n.type == NodeType.LLM_CALL), None)
     assert llm_call is not None
     assert llm_call.params.get("prompt_template") == "user/reflection.jinja2"
-    assert llm_call.params.get("max_tokens") == 600
+    assert llm_call.params.get("max_tokens") == 1000
 
 
 # =============================================================================
@@ -1019,7 +1019,7 @@ def test_real_layer_yaml_complete() -> None:
     assert data["name"] == "nightly-user-reflection"
     assert data["category"] == "user"
     assert data["schedule"] == "0 3 * * *"
-    assert data["target_filter"] == "salience > 30"
+    assert data["target_filter"] == "salience >= 10"
     assert data["max_targets"] == 15
 
     # Check nodes
