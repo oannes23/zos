@@ -710,11 +710,11 @@ a:hover {
 /* Budget Groups Grid - 2 columns, 3 rows */
 .groups-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 900px) {
     .groups-grid {
         grid-template-columns: 1fr;
     }
