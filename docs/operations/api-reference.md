@@ -608,15 +608,22 @@ The media dashboard (`/ui/media`) provides visibility into link and image analys
 - Top domains table showing most frequently fetched domains
 - Paginated link analysis table with domain, title, summary, content type, and fetch status
 - Filterable by domain and YouTube-only links
-- Paginated image analysis card grid with media type, filename, description, and dimensions
+- Thumbnail grid of analyzed images — each card shows a locally-served thumbnail (CSS `object-fit: cover`), media type badge, truncated filename, and truncated description
+- Click any thumbnail to open a modal showing the full-size image, complete description, dimensions, analysis model, and a link to the source message
+- Images without a local file (older analyses) show a placeholder
 - Failed fetches highlighted with error status badges
+
+**Image Storage:**
+
+When the observation bot analyzes an image, it saves the original file to `data/media/{analysis_id}.{ext}`. These files are served by the API at `/media/files/`. This means image thumbnails and full-size views work without relying on ephemeral Discord CDN URLs. The `local_path` field on each media analysis record stores the relative filename.
 
 **htmx Partials:**
 | Path | Description |
 |------|-------------|
 | `/ui/media/stats` | Summary cards and top domains |
 | `/ui/media/links` | Paginated link analysis table |
-| `/ui/media/images` | Paginated image analysis grid |
+| `/ui/media/images` | Thumbnail grid of analyzed images |
+| `/ui/media/images/{id}` | Image detail modal (full image + description) |
 
 Link and image analyses are produced by the observation pipeline's background queues. Analyzed content is also included in reflection prompts — reflections see link summaries and image descriptions alongside the messages that contained them.
 

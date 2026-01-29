@@ -279,6 +279,7 @@ class MediaAnalysis(BaseModel):
     height: int | None = None
     duration_seconds: int | None = None
     description: str  # Phenomenological description
+    local_path: str | None = None  # Relative path to saved image file
     analyzed_at: datetime = Field(default_factory=utcnow)
     analysis_model: str | None = None
 

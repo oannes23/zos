@@ -79,7 +79,7 @@ Connects to Discord, polls channels, stores messages.
 
 - Runs continuously (`zos observe`)
 - Polls at configured interval (default: 60s)
-- Handles media analysis asynchronously
+- Handles media analysis asynchronously (saves images to `data/media/`)
 - Accumulates salience for topics
 
 ### Salience Ledger
@@ -227,6 +227,7 @@ zos/
 │   └── self/
 ├── data/                   # Runtime data
 │   ├── zos.db             # SQLite database
+│   ├── media/             # Saved media files (images from Discord)
 │   └── self-concept.md    # Self-concept document
 └── config.yaml            # Configuration
 ```

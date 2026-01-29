@@ -1785,9 +1785,31 @@ class ZosBot(commands.Bot):
             else:
                 media_type = MediaType.IMAGE
 
+            # Generate ID early so we can use it for the filename
+            analysis_id = generate_id()
+
+            # Save image to data/media/ directory
+            local_filename = None
+            try:
+                media_dir = self.config.data_dir / "media"
+                media_dir.mkdir(parents=True, exist_ok=True)
+                ext = media_type_str.split("/")[-1]
+                if ext == "jpeg":
+                    ext = "jpg"
+                local_filename = f"{analysis_id}.{ext}"
+                local_path = media_dir / local_filename
+                local_path.write_bytes(image_data)
+            except Exception as e:
+                log.warning(
+                    "media_save_failed",
+                    message_id=message_id,
+                    error=str(e),
+                )
+                local_filename = None
+
             # Store analysis
             analysis = MediaAnalysis(
-                id=generate_id(),
+                id=analysis_id,
                 message_id=message_id,
                 media_type=media_type,
                 url=attachment.url,
@@ -1795,6 +1817,7 @@ class ZosBot(commands.Bot):
                 width=attachment.width,
                 height=attachment.height,
                 description=result.text,
+                local_path=local_filename,
                 analyzed_at=datetime.now(timezone.utc),
                 analysis_model=result.model,
             )
@@ -1868,6 +1891,7 @@ class ZosBot(commands.Bot):
                     height=row.height,
                     duration_seconds=row.duration_seconds,
                     description=row.description,
+                    local_path=row.local_path,
                     analyzed_at=row.analyzed_at,
                     analysis_model=row.analysis_model,
                 )

@@ -158,6 +158,7 @@ media_analysis = Table(
     Column("height", Integer, nullable=True),
     Column("duration_seconds", Integer, nullable=True),
     Column("description", Text, nullable=False),  # Phenomenological description
+    Column("local_path", String, nullable=True),  # Relative path under data/media/
     Column("analyzed_at", DateTime, nullable=False, default=datetime.utcnow),
     Column("analysis_model", String, nullable=True),
     Index("ix_media_analysis_message", "message_id"),

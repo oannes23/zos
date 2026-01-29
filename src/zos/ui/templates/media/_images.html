@@ -1,28 +1,26 @@
 {% if images %}
-<div class="budget-grid">
+<div class="media-grid">
 {% for img in images %}
-    <div class="card">
-        <div class="card-header">
+    <div class="media-card clickable"
+         hx-get="/ui/media/images/{{ img.id }}"
+         hx-target="#image-detail-modal"
+         hx-swap="innerHTML">
+        {% if img.local_path %}
+        <div class="media-thumb">
+            <img src="/media/files/{{ img.local_path }}" alt="{{ img.filename or 'image' }}" loading="lazy">
+        </div>
+        {% else %}
+        <div class="media-thumb media-thumb-placeholder">No image</div>
+        {% endif %}
+        <div class="media-card-info">
             <span class="badge badge-info">{{ img.media_type }}</span>
-            {% if img.filename %}
-            <span class="text-muted ml-1">{{ img.filename | truncate(30) }}</span>
-            {% endif %}
-        </div>
-        <div class="card-body">
-            <p>{{ img.description | truncate(200) if img.description else "No description" }}</p>
-            {% if img.width and img.height %}
-            <p class="text-muted">{{ img.width }}x{{ img.height }}</p>
-            {% endif %}
-        </div>
-        <div class="card-footer text-muted">
-            {{ img.analyzed_at | relative_time if img.analyzed_at else "—" }}
-            {% if img.message_id %}
-            · <a href="/ui/messages/{{ img.message_id }}">View message</a>
-            {% endif %}
+            {% if img.filename %}<span class="text-muted ml-1">{{ img.filename | truncate(20) }}</span>{% endif %}
+            <p class="media-desc">{{ img.description | truncate(100) if img.description else "No description" }}</p>
         </div>
     </div>
 {% endfor %}
 </div>
+<div id="image-detail-modal" class="modal"></div>
 
 {% if total > offset + limit %}
 <div class="pagination mt-1">

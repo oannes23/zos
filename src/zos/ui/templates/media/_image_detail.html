@@ -1,0 +1,59 @@
+{% if image %}
+<div class="modal-content modal-content-wide">
+    <div class="modal-header">
+        <h3>{{ image.filename or "Image" }}</h3>
+        <button class="modal-close" onclick="this.closest('.modal').innerHTML=''">&times;</button>
+    </div>
+
+    <div class="modal-body">
+        {% if image.local_path %}
+        <img src="/media/files/{{ image.local_path }}" class="media-full" alt="{{ image.filename or 'image' }}">
+        {% endif %}
+
+        <div class="media-description mt-1">
+            <p>{{ image.description }}</p>
+        </div>
+
+        <div class="call-meta mt-2">
+            <div class="meta-row">
+                <span class="meta-label">Type</span>
+                <span class="badge badge-info">{{ image.media_type }}</span>
+            </div>
+            {% if image.width and image.height %}
+            <div class="meta-row">
+                <span class="meta-label">Size</span>
+                <span>{{ image.width }}x{{ image.height }}</span>
+            </div>
+            {% endif %}
+            {% if image.analyzed_at %}
+            <div class="meta-row">
+                <span class="meta-label">Analyzed</span>
+                <span>{{ image.analyzed_at | relative_time }}</span>
+            </div>
+            {% endif %}
+            {% if image.analysis_model %}
+            <div class="meta-row">
+                <span class="meta-label">Model</span>
+                <span>{{ image.analysis_model }}</span>
+            </div>
+            {% endif %}
+            {% if image.message_id %}
+            <div class="meta-row">
+                <span class="meta-label">Message</span>
+                <span><a href="/ui/messages/{{ image.message_id }}">View message</a></span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="modal-content">
+    <div class="modal-header">
+        <h3>Error</h3>
+        <button class="modal-close" onclick="this.closest('.modal').innerHTML=''">&times;</button>
+    </div>
+    <div class="modal-body">
+        <p class="text-error">Image not found</p>
+    </div>
+</div>
+{% endif %}

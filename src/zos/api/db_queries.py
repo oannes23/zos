@@ -1791,6 +1791,7 @@ async def list_media_analysis(
                 "width": row.width,
                 "height": row.height,
                 "description": row.description,
+                "local_path": row.local_path,
                 "analyzed_at": row.analyzed_at,
                 "analysis_model": row.analysis_model,
                 "channel_id": row.channel_id,
@@ -1798,6 +1799,58 @@ async def list_media_analysis(
             })
 
         return results, total
+
+
+async def get_media_analysis_by_id(
+    engine: "Engine",
+    image_id: str,
+) -> dict | None:
+    """Get a single media analysis by ID.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        image_id: The media analysis ID.
+
+    Returns:
+        Dict with media analysis details, or None if not found.
+    """
+    from zos.database import media_analysis, messages as messages_table
+
+    with engine.connect() as conn:
+        stmt = (
+            select(
+                media_analysis,
+                messages_table.c.channel_id,
+                messages_table.c.author_id,
+            )
+            .select_from(
+                media_analysis.outerjoin(
+                    messages_table,
+                    media_analysis.c.message_id == messages_table.c.id,
+                )
+            )
+            .where(media_analysis.c.id == image_id)
+        )
+
+        row = conn.execute(stmt).fetchone()
+        if row is None:
+            return None
+
+        return {
+            "id": row.id,
+            "message_id": row.message_id,
+            "media_type": row.media_type,
+            "url": row.url,
+            "filename": row.filename,
+            "width": row.width,
+            "height": row.height,
+            "description": row.description,
+            "local_path": row.local_path,
+            "analyzed_at": row.analyzed_at,
+            "analysis_model": row.analysis_model,
+            "channel_id": row.channel_id,
+            "author_id": row.author_id,
+        }
 
 
 async def list_link_analysis(

@@ -1837,6 +1837,29 @@ async def media_images_partial(
     )
 
 
+@router.get("/media/images/{image_id}", response_class=HTMLResponse)
+async def media_image_detail(
+    request: Request,
+    image_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Image detail partial (htmx modal).
+
+    Returns full image view with description and metadata.
+    """
+    from zos.api.db_queries import get_media_analysis_by_id
+
+    image = await get_media_analysis_by_id(db, image_id)
+    if image is None:
+        return HTMLResponse("<p>Image not found</p>", status_code=404)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="media/_image_detail.html",
+        context={"image": image},
+    )
+
+
 @router.get("/media/links", response_class=HTMLResponse)
 async def media_links_partial(
     request: Request,

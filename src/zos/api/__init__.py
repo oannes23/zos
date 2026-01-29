@@ -98,6 +98,11 @@ Currently no authentication (local development only).
         )
         return response
 
+    # Mount media files directory for serving saved images
+    media_dir = config.data_dir / "media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/media/files", StaticFiles(directory=str(media_dir)), name="media_files")
+
     # Mount static files for UI
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
