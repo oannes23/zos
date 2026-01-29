@@ -268,6 +268,7 @@ async def list_messages(
 
     Returns messages ordered by creation time (newest first).
     Deleted messages (deleted_at not null) are excluded.
+    Anonymous users (author_id starting with <chat) are excluded.
 
     Args:
         engine: SQLAlchemy database engine.
@@ -286,8 +287,11 @@ async def list_messages(
     from zos.models import Message
 
     with engine.connect() as conn:
-        # Build base conditions - exclude deleted messages
-        base_conditions = [messages_table.c.deleted_at.is_(None)]
+        # Build base conditions - exclude deleted messages and anonymous users
+        base_conditions = [
+            messages_table.c.deleted_at.is_(None),
+            ~messages_table.c.author_id.like("<chat%"),  # Exclude anonymous users
+        ]
 
         if channel_id:
             base_conditions.append(messages_table.c.channel_id == channel_id)
@@ -335,7 +339,7 @@ async def search_messages(
     """Search messages by content.
 
     Performs case-insensitive LIKE search on message content.
-    Deleted messages are excluded.
+    Deleted messages and anonymous users are excluded.
 
     Args:
         engine: SQLAlchemy database engine.
@@ -358,6 +362,7 @@ async def search_messages(
         base_conditions = [
             messages_table.c.deleted_at.is_(None),
             messages_table.c.content.like(search_pattern),
+            ~messages_table.c.author_id.like("<chat%"),  # Exclude anonymous users
         ]
 
         if channel_id:
@@ -540,6 +545,8 @@ async def get_authors_for_filter(
 ) -> list[dict]:
     """Get authors with message counts for filter dropdown.
 
+    Excludes anonymous users (author_id starting with <chat).
+
     Args:
         engine: SQLAlchemy database engine.
         server_id: Optional server filter.
@@ -550,7 +557,10 @@ async def get_authors_for_filter(
     from zos.database import messages as messages_table, user_profiles
 
     with engine.connect() as conn:
-        base_conditions = [messages_table.c.deleted_at.is_(None)]
+        base_conditions = [
+            messages_table.c.deleted_at.is_(None),
+            ~messages_table.c.author_id.like("<chat%"),  # Exclude anonymous users
+        ]
         if server_id:
             base_conditions.append(messages_table.c.server_id == server_id)
 
