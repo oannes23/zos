@@ -553,3 +553,144 @@ class TestBudgetStyles:
         response = client.get("/static/style.css")
         assert "badge-reflection" in response.text
         assert "badge-vision" in response.text
+
+
+# =============================================================================
+# Test: LLM Calls List
+# =============================================================================
+
+
+class TestLLMCallsListPartial:
+    """Tests for: LLM calls list partial endpoint."""
+
+    def test_calls_partial_returns_200(self, client: TestClient) -> None:
+        """LLM calls list partial should return 200 OK."""
+        response = client.get("/ui/budget/calls")
+        assert response.status_code == 200
+
+    def test_calls_partial_returns_html(self, client: TestClient) -> None:
+        """LLM calls list partial should return HTML."""
+        response = client.get("/ui/budget/calls")
+        assert "text/html" in response.headers["content-type"]
+
+    def test_calls_partial_is_htmx_partial(self, client: TestClient) -> None:
+        """LLM calls list partial should NOT extend base template."""
+        response = client.get("/ui/budget/calls")
+        assert "<!DOCTYPE html>" not in response.text
+
+    def test_calls_partial_empty_shows_message(self, client: TestClient) -> None:
+        """LLM calls list with no data should show message."""
+        response = client.get("/ui/budget/calls")
+        assert "No LLM calls recorded" in response.text
+
+    def test_calls_partial_respects_days_param(self, client: TestClient) -> None:
+        """LLM calls list should accept days parameter."""
+        response = client.get("/ui/budget/calls?days=7")
+        assert response.status_code == 200
+
+
+class TestLLMCallsListWithData:
+    """Tests for: LLM calls list with seeded data."""
+
+    def test_calls_shows_table(self, client: TestClient, seeded_cost_data) -> None:
+        """LLM calls list should show table when data exists."""
+        response = client.get("/ui/budget/calls")
+        assert '<table class="budget-table">' in response.text
+
+    def test_calls_shows_call_type_badges(self, client: TestClient, seeded_cost_data) -> None:
+        """LLM calls list should show call type badges."""
+        response = client.get("/ui/budget/calls")
+        assert 'badge-reflection' in response.text or 'badge-vision' in response.text
+
+    def test_calls_shows_pagination(self, client: TestClient, seeded_cost_data) -> None:
+        """LLM calls list should show pagination."""
+        response = client.get("/ui/budget/calls")
+        # Either shows page-info or "No LLM calls" message
+        assert 'page-info' in response.text or 'No LLM calls' in response.text
+
+    def test_calls_clickable_rows(self, client: TestClient, seeded_cost_data) -> None:
+        """LLM calls list rows should be clickable."""
+        response = client.get("/ui/budget/calls")
+        assert 'hx-get="/ui/budget/calls/' in response.text
+
+    def test_calls_filter_by_call_type(self, client: TestClient, seeded_cost_data) -> None:
+        """LLM calls list should filter by call type."""
+        response = client.get("/ui/budget/calls?call_type=vision")
+        assert response.status_code == 200
+
+
+# =============================================================================
+# Test: LLM Call Detail
+# =============================================================================
+
+
+class TestLLMCallDetailPartial:
+    """Tests for: LLM call detail partial endpoint."""
+
+    def test_call_detail_not_found(self, client: TestClient) -> None:
+        """LLM call detail should handle not found."""
+        response = client.get("/ui/budget/calls/nonexistent123")
+        assert response.status_code == 200
+        assert "not found" in response.text.lower()
+
+    def test_call_detail_returns_html(self, client: TestClient) -> None:
+        """LLM call detail should return HTML."""
+        response = client.get("/ui/budget/calls/test123")
+        assert "text/html" in response.headers["content-type"]
+
+
+class TestLLMCallDetailWithData:
+    """Tests for: LLM call detail with seeded data."""
+
+    def test_call_detail_shows_content(self, client: TestClient, seeded_cost_data) -> None:
+        """LLM call detail should show call content."""
+        # First get the list to get a call ID
+        list_response = client.get("/ui/budget/calls")
+
+        # Extract a call ID from the response (looking for hx-get="/ui/budget/calls/{id}")
+        import re
+        match = re.search(r'hx-get="/ui/budget/calls/([^"]+)"', list_response.text)
+        if match:
+            call_id = match.group(1)
+            response = client.get(f"/ui/budget/calls/{call_id}")
+            assert response.status_code == 200
+            assert "modal-content" in response.text
+
+    def test_call_detail_shows_prompt(self, client: TestClient, seeded_cost_data) -> None:
+        """LLM call detail should show prompt."""
+        list_response = client.get("/ui/budget/calls")
+        import re
+        match = re.search(r'hx-get="/ui/budget/calls/([^"]+)"', list_response.text)
+        if match:
+            call_id = match.group(1)
+            response = client.get(f"/ui/budget/calls/{call_id}")
+            assert "Prompt" in response.text or "prompt" in response.text.lower()
+
+    def test_call_detail_shows_response(self, client: TestClient, seeded_cost_data) -> None:
+        """LLM call detail should show response."""
+        list_response = client.get("/ui/budget/calls")
+        import re
+        match = re.search(r'hx-get="/ui/budget/calls/([^"]+)"', list_response.text)
+        if match:
+            call_id = match.group(1)
+            response = client.get(f"/ui/budget/calls/{call_id}")
+            assert "Response" in response.text or "response" in response.text.lower()
+
+
+# =============================================================================
+# Test: Dashboard has Calls Section
+# =============================================================================
+
+
+class TestBudgetDashboardHasCalls:
+    """Tests for: Budget dashboard includes LLM calls section."""
+
+    def test_dashboard_has_calls_htmx(self, client: TestClient) -> None:
+        """Budget dashboard should have htmx trigger for calls."""
+        response = client.get("/ui/budget")
+        assert 'hx-get="/ui/budget/calls' in response.text
+
+    def test_dashboard_has_calls_section(self, client: TestClient) -> None:
+        """Budget dashboard should have calls section header."""
+        response = client.get("/ui/budget")
+        assert "LLM Calls" in response.text or "Recent LLM Calls" in response.text

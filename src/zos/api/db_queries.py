@@ -1454,3 +1454,133 @@ async def get_cost_by_call_type(
             })
 
         return results
+
+
+async def list_llm_calls(
+    engine: "Engine",
+    days: int = 30,
+    call_type: str | None = None,
+    model_profile: str | None = None,
+    offset: int = 0,
+    limit: int = 20,
+) -> tuple[list[dict], int]:
+    """List LLM calls with pagination and filtering.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        days: Number of days to look back (default 30).
+        call_type: Optional filter by call type.
+        model_profile: Optional filter by model profile.
+        offset: Pagination offset.
+        limit: Number of results to return.
+
+    Returns:
+        Tuple of (list of call dicts, total count).
+    """
+    from datetime import timedelta
+
+    from zos.database import llm_calls
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    with engine.connect() as conn:
+        # Build base query conditions
+        conditions = [llm_calls.c.created_at >= since]
+        if call_type:
+            conditions.append(llm_calls.c.call_type == call_type)
+        if model_profile:
+            conditions.append(llm_calls.c.model_profile == model_profile)
+
+        # Get total count
+        count_stmt = select(func.count()).select_from(llm_calls).where(*conditions)
+        total = conn.execute(count_stmt).scalar() or 0
+
+        # Get paginated results
+        stmt = (
+            select(
+                llm_calls.c.id,
+                llm_calls.c.layer_run_id,
+                llm_calls.c.topic_key,
+                llm_calls.c.call_type,
+                llm_calls.c.model_profile,
+                llm_calls.c.model_provider,
+                llm_calls.c.model_name,
+                llm_calls.c.tokens_input,
+                llm_calls.c.tokens_output,
+                llm_calls.c.tokens_total,
+                llm_calls.c.estimated_cost_usd,
+                llm_calls.c.latency_ms,
+                llm_calls.c.success,
+                llm_calls.c.error_message,
+                llm_calls.c.created_at,
+            )
+            .where(*conditions)
+            .order_by(llm_calls.c.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "id": row.id,
+                "layer_run_id": row.layer_run_id,
+                "topic_key": row.topic_key,
+                "call_type": row.call_type,
+                "model_profile": row.model_profile,
+                "model_provider": row.model_provider,
+                "model_name": row.model_name,
+                "tokens_input": row.tokens_input,
+                "tokens_output": row.tokens_output,
+                "tokens_total": row.tokens_total,
+                "estimated_cost_usd": float(row.estimated_cost_usd or 0),
+                "latency_ms": row.latency_ms,
+                "success": row.success,
+                "error_message": row.error_message,
+                "created_at": row.created_at,
+            })
+
+        return results, total
+
+
+async def get_llm_call(
+    engine: "Engine",
+    call_id: str,
+) -> dict | None:
+    """Get a single LLM call by ID with full details.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        call_id: The LLM call ID.
+
+    Returns:
+        Dict with full call details including prompt/response, or None if not found.
+    """
+    from zos.database import llm_calls
+
+    with engine.connect() as conn:
+        stmt = select(llm_calls).where(llm_calls.c.id == call_id)
+        row = conn.execute(stmt).fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "id": row.id,
+            "layer_run_id": row.layer_run_id,
+            "topic_key": row.topic_key,
+            "call_type": row.call_type,
+            "model_profile": row.model_profile,
+            "model_provider": row.model_provider,
+            "model_name": row.model_name,
+            "prompt": row.prompt,
+            "response": row.response,
+            "tokens_input": row.tokens_input,
+            "tokens_output": row.tokens_output,
+            "tokens_total": row.tokens_total,
+            "estimated_cost_usd": float(row.estimated_cost_usd or 0),
+            "latency_ms": row.latency_ms,
+            "success": row.success,
+            "error_message": row.error_message,
+            "created_at": row.created_at,
+        }

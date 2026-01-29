@@ -1618,6 +1618,74 @@ async def budget_by_call_type_partial(
     )
 
 
+@router.get("/budget/calls", response_class=HTMLResponse)
+async def budget_calls_partial(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    call_type: Optional[str] = Query(None),
+    model_profile: Optional[str] = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """LLM calls list partial (htmx).
+
+    Returns paginated list of individual LLM calls with filtering.
+    """
+    from zos.api.db_queries import list_llm_calls
+
+    calls, total = await list_llm_calls(
+        db,
+        days=days,
+        call_type=call_type,
+        model_profile=model_profile,
+        offset=offset,
+        limit=limit,
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="budget/_calls.html",
+        context={
+            "calls": calls,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "days": days,
+            "call_type": call_type,
+            "model_profile": model_profile,
+        },
+    )
+
+
+@router.get("/budget/calls/{call_id}", response_class=HTMLResponse)
+async def budget_call_detail(
+    request: Request,
+    call_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """LLM call detail view (htmx modal).
+
+    Returns full details of a single LLM call including prompt and response.
+    """
+    from zos.api.db_queries import get_llm_call
+
+    call = await get_llm_call(db, call_id)
+
+    if call is None:
+        return templates.TemplateResponse(
+            request=request,
+            name="budget/_call_detail.html",
+            context={"call": None, "error": "Call not found"},
+        )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="budget/_call_detail.html",
+        context={"call": call},
+    )
+
+
 # =============================================================================
 # Helper Functions
 # =============================================================================

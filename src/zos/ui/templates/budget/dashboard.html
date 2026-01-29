@@ -42,4 +42,13 @@
         </div>
     </div>
 </div>
+
+<div class="mt-2">
+    <div class="card">
+        <h3>Recent LLM Calls</h3>
+        <div id="calls-list" hx-get="/ui/budget/calls?days=30" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
+</div>
 {% endblock %}

@@ -1,0 +1,95 @@
+{% if call %}
+<div class="modal-content">
+    <div class="modal-header">
+        <h3>LLM Call Detail</h3>
+        <button class="modal-close" onclick="this.closest('.modal').innerHTML=''">&times;</button>
+    </div>
+
+    <div class="modal-body">
+        <div class="call-meta">
+            <div class="meta-row">
+                <span class="meta-label">Time</span>
+                <span>{{ call.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+            </div>
+            <div class="meta-row">
+                <span class="meta-label">Call Type</span>
+                <span class="badge badge-{{ call.call_type }}">{{ call.call_type }}</span>
+            </div>
+            <div class="meta-row">
+                <span class="meta-label">Model</span>
+                <span>
+                    <span class="badge badge-profile-{{ call.model_profile }}">{{ call.model_profile }}</span>
+                    {{ call.model_provider }} / {{ call.model_name }}
+                </span>
+            </div>
+            <div class="meta-row">
+                <span class="meta-label">Status</span>
+                {% if call.success %}
+                <span class="badge badge-success">Success</span>
+                {% else %}
+                <span class="badge badge-error">Error: {{ call.error_message }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="call-stats mt-2">
+            <div class="metrics-grid">
+                <div class="metric">
+                    <span class="metric-value">{{ call.tokens_input | format_number }}</span>
+                    <span class="metric-label">Input Tokens</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">{{ call.tokens_output | format_number }}</span>
+                    <span class="metric-label">Output Tokens</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">{{ call.tokens_total | format_number }}</span>
+                    <span class="metric-label">Total Tokens</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">{{ call.estimated_cost_usd | format_cost }}</span>
+                    <span class="metric-label">Est. Cost</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">{% if call.latency_ms %}{{ call.latency_ms }}ms{% else %}—{% endif %}</span>
+                    <span class="metric-label">Latency</span>
+                </div>
+            </div>
+        </div>
+
+        {% if call.topic_key %}
+        <div class="meta-row mt-2">
+            <span class="meta-label">Topic</span>
+            <span><a href="/ui/salience/topic/{{ call.topic_key }}">{{ call.topic_key }}</a></span>
+        </div>
+        {% endif %}
+
+        {% if call.layer_run_id %}
+        <div class="meta-row">
+            <span class="meta-label">Layer Run</span>
+            <span><a href="/ui/runs?id={{ call.layer_run_id }}">{{ call.layer_run_id[:12] }}...</a></span>
+        </div>
+        {% endif %}
+
+        <h4 class="mt-2">Prompt</h4>
+        <div class="code-block prompt-block">
+            <pre>{{ call.prompt }}</pre>
+        </div>
+
+        <h4 class="mt-2">Response</h4>
+        <div class="code-block response-block">
+            <pre>{{ call.response }}</pre>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="modal-content">
+    <div class="modal-header">
+        <h3>Error</h3>
+        <button class="modal-close" onclick="this.closest('.modal').innerHTML=''">&times;</button>
+    </div>
+    <div class="modal-body">
+        <p class="text-error">{{ error or "LLM call not found" }}</p>
+    </div>
+</div>
+{% endif %}
