@@ -707,11 +707,17 @@ a:hover {
    Salience Dashboard Styles (Story 5.7)
    ============================================================================= */
 
-/* Budget Groups Grid */
+/* Budget Groups Grid - 2 columns, 3 rows */
 .groups-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
+}
+
+@media (max-width: 800px) {
+    .groups-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .group-card {
@@ -771,7 +777,7 @@ a:hover {
     font-family: monospace;
     font-size: 0.875rem;
     color: var(--text-primary);
-    max-width: 250px;
+    max-width: 400px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -809,12 +815,12 @@ a:hover {
     letter-spacing: 0.05em;
 }
 
-.topics-table th:nth-child(1) { width: 35%; } /* Topic */
-.topics-table th:nth-child(2) { width: 12%; } /* Group */
+.topics-table th:nth-child(1) { width: 40%; } /* Topic */
+.topics-table th:nth-child(2) { width: 10%; } /* Group */
 .topics-table th:nth-child(3) { width: 10%; } /* Balance */
 .topics-table th:nth-child(4) { width: 8%; }  /* Cap */
-.topics-table th:nth-child(5) { width: 15%; } /* Utilization */
-.topics-table th:nth-child(6) { width: 20%; } /* Last Activity */
+.topics-table th:nth-child(5) { width: 14%; } /* Utilization */
+.topics-table th:nth-child(6) { width: 18%; } /* Last Activity */
 
 .topics-table td {
     overflow: hidden;
