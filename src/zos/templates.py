@@ -10,6 +10,7 @@ system provides:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,15 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
 from zos.logging import get_logger
+
+
+# =============================================================================
+# Discord Mention Patterns
+# =============================================================================
+
+
+# Discord user mention format: <@123456789> or <@!123456789> (with nickname)
+DISCORD_MENTION_PATTERN = re.compile(r"<@!?(\d+)>")
 
 log = get_logger("templates")
 
@@ -295,6 +305,49 @@ class TemplateEngine:
 
 
 # =============================================================================
+# Discord Mention Utilities
+# =============================================================================
+
+
+def extract_mention_ids(content: str) -> list[str]:
+    """Extract Discord user IDs from mentions in content.
+
+    Discord mention format: <@123456789> or <@!123456789> (with nickname flag)
+
+    Args:
+        content: Message content to parse.
+
+    Returns:
+        List of user IDs mentioned in the content.
+    """
+    return DISCORD_MENTION_PATTERN.findall(content)
+
+
+def replace_mentions(
+    content: str,
+    user_id_to_name: dict[str, str],
+) -> str:
+    """Replace Discord mention IDs with display names.
+
+    Args:
+        content: Message content with raw mentions like <@123456789>.
+        user_id_to_name: Mapping of user_id -> display name.
+
+    Returns:
+        Content with mentions replaced by @DisplayName format.
+        Unknown users keep original <@USER_ID> format.
+    """
+    def replacer(match: re.Match[str]) -> str:
+        user_id = match.group(1)
+        if user_id in user_id_to_name:
+            return f"@{user_id_to_name[user_id]}"
+        # Unknown user - keep original format
+        return match.group(0)
+
+    return DISCORD_MENTION_PATTERN.sub(replacer, content)
+
+
+# =============================================================================
 # Context Formatting Helpers
 # =============================================================================
 
@@ -302,12 +355,15 @@ class TemplateEngine:
 def format_messages_for_prompt(
     messages: list[dict[str, Any]],
     anonymize: dict[str, str] | None = None,
+    mention_names: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Format messages for template context.
 
     Args:
         messages: List of message dicts with author_id, content, created_at, etc.
         anonymize: Optional mapping of user_id -> display name for anonymization.
+        mention_names: Optional mapping of user_id -> display name for mention resolution.
+            When provided, Discord mentions like <@123456789> are replaced with @DisplayName.
 
     Returns:
         List of formatted message dicts ready for template rendering.
@@ -320,11 +376,16 @@ def format_messages_for_prompt(
         author_id = msg.get("author_id", "unknown")
         display = anonymize.get(author_id, author_id)
 
+        # Get the content and resolve mentions if mapping provided
+        content = msg.get("content", "")
+        if mention_names:
+            content = replace_mentions(content, mention_names)
+
         formatted.append(
             {
                 "created_at": msg.get("created_at"),
                 "author_display": display,
-                "content": msg.get("content", ""),
+                "content": content,
                 "has_media": msg.get("has_media", False),
                 "has_links": msg.get("has_links", False),
             }

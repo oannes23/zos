@@ -142,7 +142,7 @@ salience:
     emoji_use: 0.5
     media_boost_factor: 1.2
 
-  # Propagation
+  # Propagation and thresholds
   propagation_factor: 0.3
   global_propagation_factor: 0.3
   spillover_factor: 0.5
@@ -151,6 +151,7 @@ salience:
   decay_threshold_days: 7
   decay_rate_per_day: 0.01
   warm_threshold: 1.0
+  min_reflection_salience: 10.0  # Minimum salience for reflection eligibility
 
   # Budget allocation
   budget:
@@ -185,6 +186,7 @@ How reflection budget is allocated across topic groups. Should sum to ~1.0.
 | `decay_threshold_days` | 7 | Days of inactivity before decay starts |
 | `decay_rate_per_day` | 0.01 | Daily decay rate after threshold |
 | `warm_threshold` | 1.0 | Minimum salience to receive propagation |
+| `min_reflection_salience` | 10.0 | Minimum salience for topic to be eligible for reflection |
 | `self_budget` | 20 | Budget for self-reflection topics |
 | `global_reflection_budget` | 15.0 | Budget for global topics (cross-server users/DMs) |
 

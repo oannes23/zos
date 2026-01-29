@@ -15,7 +15,7 @@ description: |
 
 schedule: "0 3 * * *"
 target_category: dyad
-target_filter: "salience > 30"
+target_filter: "salience >= 10"  # Matches config salience.min_reflection_salience
 max_targets: 10
 
 nodes:

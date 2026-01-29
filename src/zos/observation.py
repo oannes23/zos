@@ -216,7 +216,11 @@ class ZosBot(commands.Bot):
             from zos.salience import EarningCoordinator, SalienceLedger
 
             ledger = SalienceLedger(self.engine, self.config)
-            self._earning_coordinator = EarningCoordinator(ledger, self.config)
+            # Pass bot user ID for self-mention detection
+            bot_user_id = str(self.user.id) if self.user else None
+            self._earning_coordinator = EarningCoordinator(
+                ledger, self.config, bot_user_id=bot_user_id
+            )
         return self._earning_coordinator
 
     async def on_ready(self) -> None:

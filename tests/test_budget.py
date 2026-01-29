@@ -602,3 +602,83 @@ async def test_full_selection_flow(
     # Higher salience topics should be prioritized within each group
     if len(result[BudgetGroup.SOCIAL]) >= 1:
         assert "server:123:user:1" in result[BudgetGroup.SOCIAL]
+
+
+# =============================================================================
+# Test: Min Reflection Salience Threshold
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_min_reflection_salience_excludes_low_topics(
+    ledger: SalienceLedger, test_config: Config
+) -> None:
+    """Test that topics below min_reflection_salience are not selected."""
+    # Default min_reflection_salience is 10.0
+    # Create topic with salience below threshold
+    await ledger.earn("server:123:user:below", 5.0)  # Below 10
+    # Create topic with salience at threshold
+    await ledger.earn("server:123:user:at", 10.0)  # At threshold
+    # Create topic with salience above threshold
+    await ledger.earn("server:123:user:above", 50.0)  # Above threshold
+
+    selector = ReflectionSelector(ledger, test_config)
+    result = await selector.select_for_reflection(total_budget=100.0, server_id="123")
+
+    # Below threshold should not be selected
+    assert "server:123:user:below" not in result[BudgetGroup.SOCIAL]
+    # At threshold should be selected (>= comparison)
+    assert "server:123:user:at" in result[BudgetGroup.SOCIAL]
+    # Above threshold should be selected
+    assert "server:123:user:above" in result[BudgetGroup.SOCIAL]
+
+
+@pytest.mark.asyncio
+async def test_min_reflection_salience_configurable(tmp_path: Path) -> None:
+    """Test that min_reflection_salience can be configured."""
+    # Create config with higher threshold
+    config = Config(
+        data_dir=tmp_path,
+        log_level="DEBUG",
+    )
+    # Override the min_reflection_salience
+    config.salience.min_reflection_salience = 25.0
+
+    engine = get_engine(config)
+    create_tables(engine)
+    ledger = SalienceLedger(engine, config)
+
+    # Create topics around the new threshold
+    await ledger.earn("server:123:user:below", 20.0)  # Below 25
+    await ledger.earn("server:123:user:at", 25.0)  # At threshold
+    await ledger.earn("server:123:user:above", 50.0)  # Above threshold
+
+    selector = ReflectionSelector(ledger, config)
+    result = await selector.select_for_reflection(total_budget=100.0, server_id="123")
+
+    # Below threshold should not be selected
+    assert "server:123:user:below" not in result[BudgetGroup.SOCIAL]
+    # At threshold should be selected
+    assert "server:123:user:at" in result[BudgetGroup.SOCIAL]
+    # Above threshold should be selected
+    assert "server:123:user:above" in result[BudgetGroup.SOCIAL]
+
+
+@pytest.mark.asyncio
+async def test_min_reflection_salience_applies_to_self_topics(
+    ledger: SalienceLedger, test_config: Config
+) -> None:
+    """Test that min_reflection_salience also applies to self topics."""
+    # Default min_reflection_salience is 10.0
+    # Create self topic below threshold
+    await ledger.earn("self:zos", 5.0)  # Below 10
+    # Create self topic above threshold
+    await ledger.earn("server:123:self:zos", 50.0)  # Above threshold
+
+    selector = ReflectionSelector(ledger, test_config)
+    result = await selector.select_for_reflection(total_budget=100.0)
+
+    # Below threshold self topic should not be selected
+    assert "self:zos" not in result[BudgetGroup.SELF]
+    # Above threshold self topic should be selected
+    assert "server:123:self:zos" in result[BudgetGroup.SELF]

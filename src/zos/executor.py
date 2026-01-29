@@ -50,6 +50,7 @@ from zos.models import (
 from zos.salience import SalienceLedger
 from zos.templates import (
     TemplateEngine,
+    extract_mention_ids,
     format_insights_for_prompt,
     format_messages_for_prompt,
 )
@@ -793,6 +794,83 @@ class LayerExecutor:
                 return row_to_model(result, UserProfile)
             return None
 
+    async def _resolve_mention_names(
+        self,
+        messages: list[Message],
+    ) -> dict[str, str]:
+        """Resolve Discord user IDs from mentions to display names.
+
+        Extracts all mentioned user IDs from message content and batch queries
+        the user_profiles table to get display names.
+
+        Args:
+            messages: List of Message models to extract mentions from.
+
+        Returns:
+            Dictionary mapping user_id -> display_name.
+            Name resolution priority: display_name > username#discriminator > username.
+            Users not found in profiles are omitted from the result.
+        """
+        # Extract all unique mentioned user IDs
+        mentioned_ids: set[str] = set()
+        for msg in messages:
+            if msg.content:
+                mentioned_ids.update(extract_mention_ids(msg.content))
+
+        if not mentioned_ids:
+            return {}
+
+        # Batch query user_profiles for most recent profile per user
+        # Use a subquery to get the most recent profile for each user
+        with self.engine.connect() as conn:
+            # Query all profiles for the mentioned users, ordered by captured_at desc
+            # We'll group by user_id in Python to get the most recent
+            query = (
+                select(
+                    user_profiles_table.c.user_id,
+                    user_profiles_table.c.display_name,
+                    user_profiles_table.c.username,
+                    user_profiles_table.c.discriminator,
+                    user_profiles_table.c.captured_at,
+                )
+                .where(user_profiles_table.c.user_id.in_(mentioned_ids))
+                .order_by(
+                    user_profiles_table.c.user_id,
+                    user_profiles_table.c.captured_at.desc(),
+                )
+            )
+
+            rows = conn.execute(query).fetchall()
+
+        # Build mapping, taking the most recent profile for each user
+        user_id_to_name: dict[str, str] = {}
+        seen_users: set[str] = set()
+
+        for row in rows:
+            user_id = row.user_id
+            if user_id in seen_users:
+                # Already have most recent profile for this user
+                continue
+            seen_users.add(user_id)
+
+            # Name resolution priority
+            if row.display_name:
+                user_id_to_name[user_id] = row.display_name
+            elif row.discriminator and row.discriminator != "0":
+                # Old Discord format: username#discriminator
+                user_id_to_name[user_id] = f"{row.username}#{row.discriminator}"
+            elif row.username:
+                user_id_to_name[user_id] = row.username
+            # If no name found, don't include in mapping (mention will be kept as-is)
+
+        log.debug(
+            "mention_names_resolved",
+            mentioned_count=len(mentioned_ids),
+            resolved_count=len(user_id_to_name),
+        )
+
+        return user_id_to_name
+
     async def _handle_llm_call(self, node: Node, ctx: ExecutionContext) -> None:
         """Call the LLM with rendered prompt.
 
@@ -828,6 +906,9 @@ class LayerExecutor:
             }
             for m in ctx.messages
         ]
+
+        # Resolve Discord mention IDs to display names
+        mention_names = await self._resolve_mention_names(ctx.messages)
 
         # Prepare insights data for template
         insights_data = [
@@ -868,7 +949,9 @@ class LayerExecutor:
                 "topic": ctx.topic,
                 "user_profile": user_profile,
                 "user_profiles": user_profiles,
-                "messages": format_messages_for_prompt(messages_data, {}),
+                "messages": format_messages_for_prompt(
+                    messages_data, {}, mention_names=mention_names
+                ),
                 "insights": format_insights_for_prompt(insights_data),
                 "individual_insights": ctx.individual_insights,
                 "reactions": ctx.reactions,

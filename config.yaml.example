@@ -74,6 +74,7 @@ salience:
     reply: 1.5
     media: 1.2  # Multiplier for messages with media
     link: 1.2   # Multiplier for messages with links
+    self_mention: 5.0  # Extra salience when Zos is directly mentioned
 
   # Propagation and decay
   propagation_factor: 0.3
@@ -83,6 +84,7 @@ salience:
   decay_threshold_days: 7
   decay_rate_per_day: 0.01
   warm_threshold: 1.0
+  min_reflection_salience: 10.0  # Minimum salience for topic to be eligible for reflection
 
   # Budget allocation per group (must sum to ~1.0)
   budget:

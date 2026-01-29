@@ -720,3 +720,149 @@ async def test_warm_respects_cap(ledger: SalienceLedger) -> None:
 
     # Should be capped
     assert warmed == 100.0  # Cap for global user
+
+
+# =============================================================================
+# Test: EarningCoordinator Self-Mention
+# =============================================================================
+
+
+@pytest.fixture
+def earning_coordinator(ledger: SalienceLedger, test_config: "Config"):
+    """Create an EarningCoordinator with a bot user ID."""
+    from zos.salience import EarningCoordinator
+
+    return EarningCoordinator(ledger, test_config, bot_user_id="999888777")
+
+
+@pytest.mark.asyncio
+async def test_self_mention_earns_to_server_self_topic(
+    earning_coordinator, ledger: SalienceLedger
+) -> None:
+    """Test that self-mention earns salience to server-scoped self topic."""
+    from zos.models import Message, VisibilityScope, utcnow
+
+    # Create a message that mentions the bot (user ID 999888777)
+    message = Message(
+        id="msg123",
+        channel_id="channel456",
+        server_id="server789",
+        author_id="user111",
+        content="Hey <@999888777> can you help me?",
+        created_at=utcnow(),
+        visibility_scope=VisibilityScope.PUBLIC,
+    )
+
+    topics = await earning_coordinator.process_message(message)
+
+    # Should include the server-scoped self topic
+    assert "server:server789:self:zos" in topics
+
+    # Verify salience was actually earned
+    balance = await ledger.get_balance("server:server789:self:zos")
+    assert balance > 0  # Should have earned self_mention weight (default 5.0)
+
+
+@pytest.mark.asyncio
+async def test_self_mention_in_dm_earns_to_global_self_topic(
+    earning_coordinator, ledger: SalienceLedger
+) -> None:
+    """Test that self-mention in DM earns salience to global self topic."""
+    from zos.models import Message, VisibilityScope, utcnow
+
+    # Create a DM message that mentions the bot
+    message = Message(
+        id="msg123",
+        channel_id="dm_channel",
+        server_id=None,  # DMs have no server
+        author_id="user111",
+        content="<@999888777> hello!",
+        created_at=utcnow(),
+        visibility_scope=VisibilityScope.DM,
+    )
+
+    topics = await earning_coordinator.process_message(message)
+
+    # Should include the global self topic
+    assert "self:zos" in topics
+
+    # Verify salience was earned
+    balance = await ledger.get_balance("self:zos")
+    assert balance > 0
+
+
+@pytest.mark.asyncio
+async def test_no_self_mention_when_bot_not_tagged(
+    earning_coordinator, ledger: SalienceLedger
+) -> None:
+    """Test that self topic doesn't earn when bot is not mentioned."""
+    from zos.models import Message, VisibilityScope, utcnow
+
+    # Create a message that doesn't mention the bot
+    message = Message(
+        id="msg123",
+        channel_id="channel456",
+        server_id="server789",
+        author_id="user111",
+        content="Hey <@222333444> check this out!",
+        created_at=utcnow(),
+        visibility_scope=VisibilityScope.PUBLIC,
+    )
+
+    topics = await earning_coordinator.process_message(message)
+
+    # Should NOT include any self topic
+    assert "server:server789:self:zos" not in topics
+    assert "self:zos" not in topics
+
+
+@pytest.mark.asyncio
+async def test_self_mention_with_nickname_format(
+    earning_coordinator, ledger: SalienceLedger
+) -> None:
+    """Test self-mention detection with nickname format (<@!ID>)."""
+    from zos.models import Message, VisibilityScope, utcnow
+
+    # Create a message using the nickname format
+    message = Message(
+        id="msg123",
+        channel_id="channel456",
+        server_id="server789",
+        author_id="user111",
+        content="Hello <@!999888777>!",  # Nickname format with !
+        created_at=utcnow(),
+        visibility_scope=VisibilityScope.PUBLIC,
+    )
+
+    topics = await earning_coordinator.process_message(message)
+
+    # Should still detect and earn for self topic
+    assert "server:server789:self:zos" in topics
+
+
+@pytest.mark.asyncio
+async def test_earning_coordinator_without_bot_id_skips_self_mention(
+    ledger: SalienceLedger, test_config
+) -> None:
+    """Test that EarningCoordinator without bot_user_id doesn't earn self-mentions."""
+    from zos.models import Message, VisibilityScope, utcnow
+    from zos.salience import EarningCoordinator
+
+    # Create coordinator without bot_user_id
+    coordinator = EarningCoordinator(ledger, test_config, bot_user_id=None)
+
+    message = Message(
+        id="msg123",
+        channel_id="channel456",
+        server_id="server789",
+        author_id="user111",
+        content="<@999888777> hello!",
+        created_at=utcnow(),
+        visibility_scope=VisibilityScope.PUBLIC,
+    )
+
+    topics = await coordinator.process_message(message)
+
+    # Should not include self topic when bot_user_id is None
+    assert "server:server789:self:zos" not in topics
+    assert "self:zos" not in topics

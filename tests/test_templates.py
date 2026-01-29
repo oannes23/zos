@@ -749,3 +749,166 @@ def test_multiline_content(template_engine: TemplateEngine, templates_dir: Path)
     )
 
     assert "Line 1\nLine 2\nLine 3" in result
+
+
+# =============================================================================
+# Discord Mention Utilities Tests
+# =============================================================================
+
+
+def test_extract_mention_ids_basic() -> None:
+    """Test extracting mention IDs from content."""
+    from zos.templates import extract_mention_ids
+
+    content = "Hey <@123456789> check this out!"
+    ids = extract_mention_ids(content)
+
+    assert ids == ["123456789"]
+
+
+def test_extract_mention_ids_with_nickname() -> None:
+    """Test extracting mention IDs with nickname format."""
+    from zos.templates import extract_mention_ids
+
+    # Discord uses <@!ID> when the user has a server nickname
+    content = "Hello <@!987654321>!"
+    ids = extract_mention_ids(content)
+
+    assert ids == ["987654321"]
+
+
+def test_extract_mention_ids_multiple() -> None:
+    """Test extracting multiple mention IDs."""
+    from zos.templates import extract_mention_ids
+
+    content = "<@111> and <@!222> and <@333> walked into a bar"
+    ids = extract_mention_ids(content)
+
+    assert ids == ["111", "222", "333"]
+
+
+def test_extract_mention_ids_none() -> None:
+    """Test content with no mentions."""
+    from zos.templates import extract_mention_ids
+
+    content = "Just a normal message with no mentions"
+    ids = extract_mention_ids(content)
+
+    assert ids == []
+
+
+def test_extract_mention_ids_empty() -> None:
+    """Test empty content."""
+    from zos.templates import extract_mention_ids
+
+    ids = extract_mention_ids("")
+
+    assert ids == []
+
+
+def test_replace_mentions_basic() -> None:
+    """Test replacing mentions with display names."""
+    from zos.templates import replace_mentions
+
+    content = "Hey <@123456789> how are you?"
+    mapping = {"123456789": "Alice"}
+
+    result = replace_mentions(content, mapping)
+
+    assert result == "Hey @Alice how are you?"
+
+
+def test_replace_mentions_with_nickname_format() -> None:
+    """Test replacing mentions with nickname format."""
+    from zos.templates import replace_mentions
+
+    content = "Paging <@!987654321>"
+    mapping = {"987654321": "Bob"}
+
+    result = replace_mentions(content, mapping)
+
+    assert result == "Paging @Bob"
+
+
+def test_replace_mentions_multiple() -> None:
+    """Test replacing multiple mentions."""
+    from zos.templates import replace_mentions
+
+    content = "<@111> told <@222> about <@333>"
+    mapping = {"111": "Alice", "222": "Bob", "333": "Charlie"}
+
+    result = replace_mentions(content, mapping)
+
+    assert result == "@Alice told @Bob about @Charlie"
+
+
+def test_replace_mentions_unknown_user() -> None:
+    """Test that unknown users keep original mention format."""
+    from zos.templates import replace_mentions
+
+    content = "<@123> and <@456>"
+    mapping = {"123": "Known"}  # 456 not in mapping
+
+    result = replace_mentions(content, mapping)
+
+    assert result == "@Known and <@456>"
+
+
+def test_replace_mentions_empty_mapping() -> None:
+    """Test with empty mapping - all mentions should remain unchanged."""
+    from zos.templates import replace_mentions
+
+    content = "Hello <@123> and <@!456>"
+    result = replace_mentions(content, {})
+
+    assert result == content
+
+
+def test_replace_mentions_no_mentions() -> None:
+    """Test content with no mentions."""
+    from zos.templates import replace_mentions
+
+    content = "Just a normal message"
+    mapping = {"123": "Alice"}
+
+    result = replace_mentions(content, mapping)
+
+    assert result == content
+
+
+def test_format_messages_with_mention_names() -> None:
+    """Test message formatting with mention name resolution."""
+    messages = [
+        {"author_id": "123", "content": "Hey <@456> check this out!"},
+        {"author_id": "456", "content": "Thanks <@123>!"},
+    ]
+    mention_names = {"123": "Alice", "456": "Bob"}
+
+    formatted = format_messages_for_prompt(messages, mention_names=mention_names)
+
+    assert formatted[0]["content"] == "Hey @Bob check this out!"
+    assert formatted[1]["content"] == "Thanks @Alice!"
+
+
+def test_format_messages_partial_mention_names() -> None:
+    """Test message formatting with partial mention name resolution."""
+    messages = [
+        {"author_id": "123", "content": "<@456> and <@789> said hi"},
+    ]
+    mention_names = {"456": "Bob"}  # 789 not in mapping
+
+    formatted = format_messages_for_prompt(messages, mention_names=mention_names)
+
+    assert formatted[0]["content"] == "@Bob and <@789> said hi"
+
+
+def test_format_messages_no_mention_names() -> None:
+    """Test message formatting without mention_names preserves original."""
+    messages = [
+        {"author_id": "123", "content": "Hey <@456> check this out!"},
+    ]
+
+    # No mention_names provided - should preserve original
+    formatted = format_messages_for_prompt(messages)
+
+    assert formatted[0]["content"] == "Hey <@456> check this out!"

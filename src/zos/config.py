@@ -100,6 +100,7 @@ class SalienceWeightsConfig(BaseModel):
     dm_message: float = 1.5
     emoji_use: float = 0.5
     media_boost_factor: float = 1.2
+    self_mention: float = 5.0  # Extra salience when Zos is directly mentioned
 
 
 class SalienceBudgetConfig(BaseModel):
@@ -134,6 +135,7 @@ class SalienceConfig(BaseModel):
     decay_threshold_days: int = 7
     decay_rate_per_day: float = 0.01
     warm_threshold: float = 1.0
+    min_reflection_salience: float = 10.0  # Minimum salience for topic to be eligible for reflection
     cost_per_token: float = 0.001  # Salience cost per LLM token for reflection spending
     budget: SalienceBudgetConfig = Field(default_factory=SalienceBudgetConfig)
     self_budget: float = 20

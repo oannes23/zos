@@ -1512,21 +1512,29 @@ class EarningCoordinator:
     - Media/links apply a boost multiplier
     - DMs earn for global user topic
     - Anonymous users (<chat*) don't earn individual salience
+    - Self mentions (Zos tagged) earn extra salience to self:zos topic
     """
 
     # Discord mention pattern: <@123456789> or <@!123456789>
     MENTION_PATTERN = r"<@!?(\d+)>"
 
-    def __init__(self, ledger: SalienceLedger, config: "Config") -> None:
+    def __init__(
+        self,
+        ledger: SalienceLedger,
+        config: "Config",
+        bot_user_id: str | None = None,
+    ) -> None:
         """Initialize the earning coordinator.
 
         Args:
             ledger: The salience ledger for recording earnings.
             config: Application configuration with weights.
+            bot_user_id: Discord user ID of the bot (Zos), for self-mention detection.
         """
         self.ledger = ledger
         self.config = config
         self.weights = config.salience.weights
+        self.bot_user_id = bot_user_id
 
     async def process_message(
         self,
@@ -1624,6 +1632,14 @@ class EarningCoordinator:
             )
             if mention_topic:
                 topics_earned.append(mention_topic)
+
+        # 5. Self-mention (Zos tagged)
+        if self.bot_user_id and self.bot_user_id in mentions:
+            self_topic = await self._earn_self_mention(
+                server_id, message.id, propagate=propagate
+            )
+            if self_topic:
+                topics_earned.append(self_topic)
 
         return topics_earned
 
@@ -1860,6 +1876,47 @@ class EarningCoordinator:
         import re
 
         return re.findall(self.MENTION_PATTERN, content)
+
+    async def _earn_self_mention(
+        self,
+        server_id: str | None,
+        message_id: str,
+        propagate: bool = True,
+    ) -> str | None:
+        """Earn extra salience for Zos being directly mentioned.
+
+        When users tag Zos, it signals direct attention and should earn
+        extra salience to the self topic to increase reflection priority.
+
+        Args:
+            server_id: Server ID, or None for DMs.
+            message_id: ID of the message containing the mention.
+            propagate: Whether to propagate to related topics.
+
+        Returns:
+            The self topic key if earned.
+        """
+        # Earn to server-scoped self topic if in a server, otherwise global
+        if server_id:
+            self_topic = f"server:{server_id}:self:zos"
+        else:
+            self_topic = "self:zos"
+
+        await self.ledger.earn_with_propagation(
+            self_topic,
+            self.weights.self_mention,
+            reason=f"self_mention:{message_id}",
+            propagate=propagate,
+        )
+
+        log.debug(
+            "self_mention_earned",
+            topic=self_topic,
+            amount=self.weights.self_mention,
+            message_id=message_id,
+        )
+
+        return self_topic
 
     async def process_thread_creation(
         self,
@@ -2185,9 +2242,10 @@ class ReflectionSelector:
         balances = await self.ledger.get_balances(topic_keys)
 
         # Sort by balance descending (highest salience first)
-        # Only include topics with positive balance
+        # Only include topics with balance >= min_reflection_salience
+        min_salience = self.config.salience.min_reflection_salience
         sorted_topics = sorted(
-            [(t, balances.get(t.key, 0.0)) for t in topics_list if balances.get(t.key, 0.0) > 0],
+            [(t, balances.get(t.key, 0.0)) for t in topics_list if balances.get(t.key, 0.0) >= min_salience],
             key=lambda x: x[1],
             reverse=True,
         )
@@ -2245,9 +2303,10 @@ class ReflectionSelector:
         topic_keys = [t.key for t in topics_list]
         balances = await self.ledger.get_balances(topic_keys)
 
-        # Sort by balance descending, filter positive balance
+        # Sort by balance descending, filter by min_reflection_salience
+        min_salience = self.config.salience.min_reflection_salience
         sorted_topics = sorted(
-            [(t, balances.get(t.key, 0.0)) for t in topics_list if balances.get(t.key, 0.0) > 0],
+            [(t, balances.get(t.key, 0.0)) for t in topics_list if balances.get(t.key, 0.0) >= min_salience],
             key=lambda x: x[1],
             reverse=True,
         )
@@ -2306,9 +2365,10 @@ class ReflectionSelector:
         topic_keys = [t.key for t in self_topics]
         balances = await self.ledger.get_balances(topic_keys)
 
-        # Sort by balance descending, filter positive balance
+        # Sort by balance descending, filter by min_reflection_salience
+        min_salience = self.config.salience.min_reflection_salience
         sorted_topics = sorted(
-            [(t, balances.get(t.key, 0.0)) for t in self_topics if balances.get(t.key, 0.0) > 0],
+            [(t, balances.get(t.key, 0.0)) for t in self_topics if balances.get(t.key, 0.0) >= min_salience],
             key=lambda x: x[1],
             reverse=True,
         )
