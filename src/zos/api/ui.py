@@ -154,19 +154,89 @@ def _get_dev_mode(request: Request) -> bool:
         return False
 
 
+def _format_topic_display(resolved_key: str) -> str:
+    """Format a resolved topic key for human-friendly display.
+
+    Transforms structured topic keys into readable format:
+    - server:ServerName:user:Username → ServerName - Username
+    - server:ServerName:dyad:User1:User2 → ServerName - User1 & User2
+    - server:ServerName:channel:ChannelName → ServerName - #ChannelName
+    - user:Username → Username
+    - dyad:User1:User2 → User1 & User2
+    - self:zos → Zos
+
+    Args:
+        resolved_key: The resolved topic key with human-readable names.
+
+    Returns:
+        Formatted display string.
+    """
+    parts = resolved_key.split(":")
+
+    if not parts:
+        return resolved_key
+
+    # Handle server-scoped topics
+    if parts[0] == "server" and len(parts) >= 2:
+        server_name = parts[1]
+
+        if len(parts) >= 4:
+            entity_type = parts[2]
+
+            if entity_type == "user":
+                user_name = parts[3]
+                return f"{server_name} - {user_name}"
+
+            elif entity_type == "dyad" and len(parts) >= 5:
+                user1 = parts[3]
+                user2 = parts[4]
+                return f"{server_name} - {user1} & {user2}"
+
+            elif entity_type == "channel":
+                channel_name = parts[3]
+                # Remove # prefix if already there
+                if channel_name.startswith("#"):
+                    return f"{server_name} - {channel_name}"
+                return f"{server_name} - #{channel_name}"
+
+            elif entity_type == "thread":
+                thread_name = parts[3]
+                return f"{server_name} - {thread_name}"
+
+            elif entity_type == "emoji":
+                emoji = parts[3]
+                return f"{server_name} - {emoji}"
+
+        # Just server
+        return server_name
+
+    # Handle global topics
+    elif parts[0] == "user" and len(parts) >= 2:
+        return parts[1]
+
+    elif parts[0] == "dyad" and len(parts) >= 3:
+        return f"{parts[1]} & {parts[2]}"
+
+    elif parts[0] == "self":
+        return "Zos"
+
+    # Fallback
+    return resolved_key
+
+
 async def _resolve_topic_keys_for_ui(
     db: "Engine", topic_keys: list[str]
 ) -> dict[str, str]:
-    """Resolve multiple topic keys to human-readable names.
+    """Resolve multiple topic keys to human-readable display names.
 
-    Uses batch resolution for efficiency.
+    Uses batch resolution for efficiency, then formats for display.
 
     Args:
         db: Database engine.
         topic_keys: List of topic keys to resolve.
 
     Returns:
-        Dict mapping original topic key to human-readable name.
+        Dict mapping original topic key to formatted display name.
     """
     from zos.api.readable import NameResolver
 
@@ -176,19 +246,19 @@ async def _resolve_topic_keys_for_ui(
     resolver = NameResolver(db)
     resolved = await resolver.resolve_batch(topic_keys)
 
-    # Build map: original -> readable
-    return {original: readable for readable, original in resolved}
+    # Build map: original -> formatted display name
+    return {original: _format_topic_display(readable) for readable, original in resolved}
 
 
 async def _resolve_topic_key_for_ui(db: "Engine", topic_key: str) -> str:
-    """Resolve a single topic key to human-readable name.
+    """Resolve a single topic key to human-readable display name.
 
     Args:
         db: Database engine.
         topic_key: Topic key to resolve.
 
     Returns:
-        Human-readable topic name.
+        Human-readable formatted display name.
     """
     resolved_map = await _resolve_topic_keys_for_ui(db, [topic_key])
     return resolved_map.get(topic_key, topic_key)
