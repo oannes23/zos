@@ -197,10 +197,10 @@ class ZosBot(commands.Bot):
         """Get or create the LLM client for vision analysis.
 
         Returns:
-            ModelClient instance.
+            ModelClient instance with database engine for call auditing.
         """
         if self._llm_client is None:
-            self._llm_client = ModelClient(self.config)
+            self._llm_client = ModelClient(self.config, engine=self.engine)
         return self._llm_client
 
     def _get_earning_coordinator(self) -> "EarningCoordinator | None":

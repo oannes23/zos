@@ -145,8 +145,8 @@ class ModelClient:
     The client uses lazy initialization - provider clients are only
     created when first needed.
 
-    When an engine is provided, LLM calls can be audited to the database
-    by passing layer_run_id to complete() or analyze_image().
+    When an engine is provided, ALL LLM calls are automatically audited
+    to the database with full prompt/response, token counts, and cost estimates.
     """
 
     def __init__(self, config: Config, engine: Engine | None = None) -> None:
@@ -228,8 +228,8 @@ class ModelClient:
             model_profile: Name of the model profile to use.
             max_tokens: Maximum tokens in the response.
             temperature: Sampling temperature (0-1).
-            layer_run_id: Optional layer run ID for auditing (enables DB recording).
-            topic_key: Optional topic key for auditing context.
+            layer_run_id: Optional layer run ID for context (links call to a layer run).
+            topic_key: Optional topic key for context (links call to a topic).
             call_type: Type of LLM call for categorization.
 
         Returns:
@@ -237,6 +237,11 @@ class ModelClient:
 
         Raises:
             ValueError: If model profile not found or provider unsupported.
+
+        Note:
+            All calls are automatically recorded to the database when
+            the client has an engine. layer_run_id and topic_key are optional
+            context that helps link the call to other entities.
         """
         # Resolve profile to provider/model
         if self.config.models is None:
@@ -263,8 +268,8 @@ class ModelClient:
         # Calculate latency
         latency_ms = int((time.monotonic() - start_time) * 1000)
 
-        # Record LLM call if auditing is enabled
-        if layer_run_id is not None and self.engine is not None:
+        # Record LLM call if database engine is available
+        if self.engine is not None:
             await self._record_llm_call(
                 layer_run_id=layer_run_id,
                 topic_key=topic_key,
@@ -367,8 +372,8 @@ class ModelClient:
             media_type: MIME type of the image (e.g., 'image/png').
             prompt: Analysis prompt.
             model_profile: Name of the model profile to use.
-            layer_run_id: Optional layer run ID for auditing (enables DB recording).
-            topic_key: Optional topic key for auditing context.
+            layer_run_id: Optional layer run ID for context (links call to a layer run).
+            topic_key: Optional topic key for context (links call to a topic).
             call_type: Type of LLM call for categorization (defaults to VISION).
 
         Returns:
@@ -376,6 +381,11 @@ class ModelClient:
 
         Raises:
             ValueError: If provider doesn't support vision.
+
+        Note:
+            All calls are automatically recorded to the database when
+            the client has an engine. layer_run_id and topic_key are optional
+            context that helps link the call to other entities.
         """
         # Resolve profile to provider/model
         if self.config.models is None:
@@ -405,8 +415,8 @@ class ModelClient:
         # For vision calls, the prompt includes image context indicator
         full_prompt = f"[Image: {media_type}]\n{prompt}"
 
-        # Record LLM call if auditing is enabled
-        if layer_run_id is not None and self.engine is not None:
+        # Record LLM call if database engine is available
+        if self.engine is not None:
             await self._record_llm_call(
                 layer_run_id=layer_run_id,
                 topic_key=topic_key,

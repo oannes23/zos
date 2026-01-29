@@ -383,10 +383,14 @@ class TestLLMCallAuditing:
             assert row.estimated_cost_usd > 0
 
     @pytest.mark.asyncio
-    async def test_complete_no_recording_without_layer_run_id(
+    async def test_complete_records_without_layer_run_id(
         self, db_engine, config_with_models
     ) -> None:
-        """complete() does not record LLM call when layer_run_id is None."""
+        """complete() records LLM call even when layer_run_id is None.
+
+        All LLM calls are recorded when engine is available. The layer_run_id
+        is optional context that links the call to a layer run.
+        """
         client = ModelClient(config_with_models, engine=db_engine)
 
         # Mock the rate limiter
@@ -408,13 +412,19 @@ class TestLLMCallAuditing:
                 await client.complete(
                     prompt="Say hello",
                     model_profile="simple",
-                    # No layer_run_id provided
+                    # No layer_run_id provided - still records
                 )
 
-        # Verify no LLM call was recorded
+        # Verify LLM call was recorded with null layer_run_id
         with db_engine.connect() as conn:
             rows = list(conn.execute(select(llm_calls)))
-            assert len(rows) == 0
+            assert len(rows) == 1
+            row = rows[0]
+            assert row.layer_run_id is None  # No layer context
+            assert row.prompt == "Say hello"
+            assert row.response == "Hello!"
+            assert row.tokens_input == 50
+            assert row.tokens_output == 25
 
     @pytest.mark.asyncio
     async def test_complete_no_recording_without_engine(
