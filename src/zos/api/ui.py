@@ -154,6 +154,46 @@ def _get_dev_mode(request: Request) -> bool:
         return False
 
 
+async def _resolve_topic_keys_for_ui(
+    db: "Engine", topic_keys: list[str]
+) -> dict[str, str]:
+    """Resolve multiple topic keys to human-readable names.
+
+    Uses batch resolution for efficiency.
+
+    Args:
+        db: Database engine.
+        topic_keys: List of topic keys to resolve.
+
+    Returns:
+        Dict mapping original topic key to human-readable name.
+    """
+    from zos.api.readable import NameResolver
+
+    if not topic_keys:
+        return {}
+
+    resolver = NameResolver(db)
+    resolved = await resolver.resolve_batch(topic_keys)
+
+    # Build map: original -> readable
+    return {original: readable for readable, original in resolved}
+
+
+async def _resolve_topic_key_for_ui(db: "Engine", topic_key: str) -> str:
+    """Resolve a single topic key to human-readable name.
+
+    Args:
+        db: Database engine.
+        topic_key: Topic key to resolve.
+
+    Returns:
+        Human-readable topic name.
+    """
+    resolved_map = await _resolve_topic_keys_for_ui(db, [topic_key])
+    return resolved_map.get(topic_key, topic_key)
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     """UI home page / dashboard.
@@ -233,7 +273,14 @@ async def insights_list_partial(
             limit=limit,
         )
 
-    formatted = [_format_insight_for_ui(i) for i in insights]
+    # Resolve topic keys to human-readable names
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
 
     return templates.TemplateResponse(
         request=request,
@@ -273,7 +320,14 @@ async def insights_search_partial(
         limit=limit,
     )
 
-    formatted = [_format_insight_for_ui(i) for i in insights]
+    # Resolve topic keys to human-readable names
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
 
     return templates.TemplateResponse(
         request=request,
@@ -307,14 +361,22 @@ async def insights_recent(
     if not insights:
         return HTMLResponse('<p class="text-muted">No insights yet</p>')
 
-    formatted = [_format_insight_for_ui(i) for i in insights]
+    # Resolve topic keys to human-readable names
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
 
     # Simple list for dashboard
     html_parts = []
     for i in formatted:
+        display_name = i["readable_topic_key"] or i["topic_key"]
         html_parts.append(
-            f'<div class="list-item">'
-            f'<a href="/ui/insights/{i["id"]}">{i["topic_key"]}</a>'
+            f'<div class="list-item list-item-truncate">'
+            f'<a href="/ui/insights/{i["id"]}" class="truncate-text" title="{i["topic_key"]}">{display_name}</a>'
             f'<span class="text-muted ml-1">{i["temporal_marker"]}</span>'
             f'</div>'
         )
@@ -358,7 +420,14 @@ async def insights_by_topic_partial(
         rows = conn.execute(stmt).fetchall()
         insights = [_row_to_insight_static(r) for r in rows]
 
-    formatted = [_format_insight_for_ui(i) for i in insights]
+    # Resolve topic keys to human-readable names
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
 
     # Reuse the list partial for related insights
     return templates.TemplateResponse(
@@ -392,7 +461,9 @@ async def insight_detail(
     if not insight:
         raise HTTPException(status_code=404, detail="Insight not found")
 
-    formatted = _format_insight_for_ui(insight)
+    # Resolve topic key to human-readable name
+    readable_topic = await _resolve_topic_key_for_ui(db, insight.topic_key)
+    formatted = _format_insight_for_ui(insight, readable_topic)
 
     return templates.TemplateResponse(
         request=request,
@@ -673,6 +744,7 @@ async def salience_groups_partial(
     request: Request,
     ledger: "SalienceLedger" = Depends(get_ledger),
     config: "Config" = Depends(get_config),
+    db: "Engine" = Depends(get_db),
 ) -> HTMLResponse:
     """Budget groups partial (htmx).
 
@@ -680,6 +752,7 @@ async def salience_groups_partial(
     topic counts, and top topics.
     """
     groups_data = []
+    all_topic_keys = []  # Collect all topic keys for batch resolution
 
     for group in BudgetGroup:
         # Get allocation from config
@@ -725,6 +798,9 @@ async def salience_groups_partial(
             for t in sorted_topics
         ]
 
+        # Collect topic keys for resolution
+        all_topic_keys.extend([t.key for t in sorted_topics])
+
         groups_data.append({
             "group": group.value,
             "allocation": allocation,
@@ -732,6 +808,14 @@ async def salience_groups_partial(
             "topic_count": len(topics_list),
             "top_topics": top_topics,
         })
+
+    # Resolve all topic keys to human-readable names
+    resolved_names = await _resolve_topic_keys_for_ui(db, all_topic_keys)
+
+    # Add readable names to top_topics
+    for group_data in groups_data:
+        for topic in group_data["top_topics"]:
+            topic["readable_topic_key"] = resolved_names.get(topic["topic_key"])
 
     return templates.TemplateResponse(
         request=request,
@@ -745,6 +829,7 @@ async def salience_top_partial(
     request: Request,
     limit: int = Query(20, ge=1, le=100),
     ledger: "SalienceLedger" = Depends(get_ledger),
+    db: "Engine" = Depends(get_db),
 ) -> HTMLResponse:
     """Top topics partial (htmx).
 
@@ -756,9 +841,14 @@ async def salience_top_partial(
     if not topics_with_balance:
         return HTMLResponse('<p class="text-muted">No topics yet</p>')
 
+    # Resolve topic keys to human-readable names
+    topic_keys = [t.key for t in topics_with_balance]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
     formatted = [
         {
             "topic_key": t.key,
+            "readable_topic_key": resolved_names.get(t.key),
             "balance": t.balance,
             "cap": ledger.get_cap(t.key),
             "budget_group": get_budget_group(t.key).value,
@@ -779,6 +869,7 @@ async def salience_topic_detail(
     request: Request,
     topic_key: str,
     ledger: "SalienceLedger" = Depends(get_ledger),
+    db: "Engine" = Depends(get_db),
 ) -> HTMLResponse:
     """Topic detail partial (htmx modal).
 
@@ -790,8 +881,12 @@ async def salience_topic_detail(
     topic = await ledger.get_topic(topic_key)
     transactions = await ledger.get_history(topic_key, limit=20)
 
+    # Resolve topic key to human-readable name
+    readable_topic_key = await _resolve_topic_key_for_ui(db, topic_key)
+
     topic_data = {
         "topic_key": topic_key,
+        "readable_topic_key": readable_topic_key,
         "balance": balance,
         "cap": cap,
         "utilization": balance / cap if cap > 0 else 0,
@@ -1067,7 +1162,7 @@ def _strength_label(strength: float) -> str:
         return "distant memory"
 
 
-def _format_insight_for_ui(insight) -> dict:
+def _format_insight_for_ui(insight, readable_topic_key: str | None = None) -> dict:
     """Format insight for UI templates.
 
     Converts an Insight model to a dictionary suitable for Jinja2 templates,
@@ -1075,6 +1170,7 @@ def _format_insight_for_ui(insight) -> dict:
 
     Args:
         insight: Insight model instance.
+        readable_topic_key: Optional human-readable topic key.
 
     Returns:
         Dictionary with all fields needed for UI rendering.
@@ -1085,6 +1181,7 @@ def _format_insight_for_ui(insight) -> dict:
     return {
         "id": insight.id,
         "topic_key": insight.topic_key,
+        "readable_topic_key": readable_topic_key,
         "category": insight.category,
         "content": insight.content,
         "created_at": insight.created_at,

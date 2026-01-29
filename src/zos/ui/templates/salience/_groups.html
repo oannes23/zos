@@ -24,7 +24,7 @@
              hx-get="/ui/salience/topic/{{ topic.topic_key | urlencode }}"
              hx-target="#topic-detail-modal"
              hx-swap="innerHTML">
-            <span class="topic-key">{{ topic.topic_key | truncate(30) }}</span>
+            <span class="topic-key truncate-text" title="{{ topic.topic_key }}">{{ topic.readable_topic_key or topic.topic_key }}</span>
             <div class="utilization-bar">
                 <div class="progress">
                     <div class="progress-bar" style="width: {{ (topic.balance / topic.cap * 100) | int }}%"></div>

@@ -17,7 +17,7 @@
             hx-target="#topic-detail-modal"
             hx-swap="innerHTML">
             <td>
-                <span class="topic-key">{{ topic.topic_key }}</span>
+                <span class="topic-key truncate-text" title="{{ topic.topic_key }}">{{ topic.readable_topic_key or topic.topic_key }}</span>
             </td>
             <td>
                 <span class="badge badge-{{ topic.budget_group }}">{{ topic.budget_group }}</span>

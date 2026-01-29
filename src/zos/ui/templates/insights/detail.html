@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}{{ insight.topic_key }} — Zos{% endblock %}
+{% block title %}{{ insight.readable_topic_key or insight.topic_key }} — Zos{% endblock %}
 
 {% block content %}
 <nav class="breadcrumb">
-    <a href="/ui/insights">Insights</a> / {{ insight.topic_key }}
+    <a href="/ui/insights">Insights</a> / {{ insight.readable_topic_key or insight.topic_key }}
 </nav>
 
 <div class="card">
     <div class="card-header">
-        <h1 class="card-title">{{ insight.topic_key }}</h1>
+        <h1 class="card-title">{{ insight.readable_topic_key or insight.topic_key }}</h1>
         <span class="badge badge-{{ insight.category }}">{{ insight.category }}</span>
     </div>
 

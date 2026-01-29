@@ -1,6 +1,6 @@
 <div class="modal-content">
     <div class="modal-header">
-        <h2>{{ topic.topic_key }}</h2>
+        <h2 class="truncate-text" title="{{ topic.topic_key }}">{{ topic.readable_topic_key or topic.topic_key }}</h2>
         <button class="close-btn" onclick="this.closest('.modal').innerHTML = ''">&times;</button>
     </div>
 

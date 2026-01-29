@@ -107,6 +107,10 @@ body {
 .card-title {
     font-size: 1.125rem;
     font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 70%;
 }
 
 .card-meta {
@@ -228,6 +232,30 @@ a:hover {
 .mb-2 { margin-bottom: 1rem; }
 .mr-1 { margin-right: 0.5rem; }
 .ml-1 { margin-left: 0.5rem; }
+
+/* Text truncation */
+.truncate-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    display: inline-block;
+}
+
+/* List item with truncation */
+.list-item-truncate {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+}
+
+.list-item-truncate a {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
 
 /* Page Header */
 .page-header {
@@ -697,6 +725,7 @@ a:hover {
     padding: 0.5rem 0;
     border-bottom: 1px solid var(--bg-secondary);
     cursor: pointer;
+    gap: 0.5rem;
 }
 
 .mini-topic:hover {
@@ -710,11 +739,24 @@ a:hover {
     border-bottom: none;
 }
 
+.mini-topic .topic-key {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+}
+
+.mini-topic .utilization-bar {
+    flex-shrink: 0;
+}
+
 .topic-key {
     font-family: monospace;
     font-size: 0.875rem;
     color: var(--text-primary);
-    word-break: break-all;
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Utilization Bar */
@@ -738,6 +780,7 @@ a:hover {
     background: var(--bg-card);
     border-radius: 8px;
     overflow: hidden;
+    table-layout: fixed;
 }
 
 .topics-table th {
@@ -746,6 +789,19 @@ a:hover {
     text-transform: uppercase;
     font-size: 0.75rem;
     letter-spacing: 0.05em;
+}
+
+.topics-table th:nth-child(1) { width: 35%; } /* Topic */
+.topics-table th:nth-child(2) { width: 12%; } /* Group */
+.topics-table th:nth-child(3) { width: 10%; } /* Balance */
+.topics-table th:nth-child(4) { width: 8%; }  /* Cap */
+.topics-table th:nth-child(5) { width: 15%; } /* Utilization */
+.topics-table th:nth-child(6) { width: 20%; } /* Last Activity */
+
+.topics-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .topics-table tbody tr {
