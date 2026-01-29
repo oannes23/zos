@@ -174,7 +174,7 @@ class ModelClient:
         """Call Anthropic vision API."""
         response = await self.anthropic.messages.create(
             model=profile.model,
-            max_tokens=300,
+            max_tokens=1024,
             messages=[{
                 "role": "user",
                 "content": [

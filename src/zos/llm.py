@@ -466,7 +466,7 @@ class ModelClient:
         try:
             response = await client.messages.create(
                 model=model,
-                max_tokens=300,
+                max_tokens=1024,
                 messages=[
                     {
                         "role": "user",
