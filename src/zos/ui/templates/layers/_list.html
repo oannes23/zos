@@ -1,0 +1,28 @@
+{% if layers %}
+<div class="layers-grid">
+    {% for layer in layers %}
+    <div class="card layer-card" onclick="window.location='/ui/layers/{{ layer.name }}'">
+        <div class="card-header">
+            <span class="card-title">{{ layer.name }}</span>
+            <span class="badge badge-{{ layer.category }}">{{ layer.category }}</span>
+        </div>
+        {% if layer.description %}
+        <p class="text-muted mb-1">{{ layer.description | truncate(120) }}</p>
+        {% endif %}
+        <div class="layer-meta">
+            {% if layer.schedule %}
+            <span class="layer-meta-item" title="Cron schedule">&#128339; {{ layer.schedule }}</span>
+            {% elif layer.trigger %}
+            <span class="layer-meta-item" title="Trigger">&#9889; {{ layer.trigger }}</span>
+            {% endif %}
+            {% if layer.target_category %}
+            <span class="layer-meta-item" title="Target category">&#127919; {{ layer.target_category }}</span>
+            {% endif %}
+            <span class="layer-meta-item" title="Pipeline nodes">{{ layer.nodes | length }} node{{ 's' if layer.nodes | length != 1 }}</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No layers configured.</p>
+{% endif %}

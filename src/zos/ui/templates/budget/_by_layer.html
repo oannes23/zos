@@ -15,7 +15,7 @@
         {% for layer in by_layer %}
         <tr>
             <td>
-                <a href="/ui/runs?layer_name={{ layer.layer_name }}">{{ layer.layer_name }}</a>
+                <a href="/ui/layers/{{ layer.layer_name }}">{{ layer.layer_name }}</a>
             </td>
             <td class="text-right">{{ layer.cost_usd | format_cost }}</td>
             <td class="text-right">

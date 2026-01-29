@@ -1340,3 +1340,143 @@ a:hover {
     font-family: monospace;
     font-size: 0.8rem;
 }
+
+
+/* =============================================================================
+   Layers Browser Styles
+   ============================================================================= */
+
+/* Layer cards grid */
+.layers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.layer-card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.layer-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.layer-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.layer-meta-item {
+    white-space: nowrap;
+}
+
+/* Pipeline node visualization */
+.pipeline-nodes {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.pipeline-node {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-left: 2px solid var(--bg-secondary);
+    margin-left: 0.75rem;
+    padding-left: 1rem;
+    position: relative;
+}
+
+.pipeline-node::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 1rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.pipeline-node:last-child {
+    border-left-color: transparent;
+}
+
+.node-type {
+    font-family: monospace;
+    font-size: 0.8rem;
+    background: var(--bg-secondary);
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    white-space: nowrap;
+    min-width: 120px;
+}
+
+.node-name {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.node-params {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+.node-params span {
+    display: inline-block;
+    margin-right: 0.75rem;
+}
+
+/* Layer category badges (reuse existing + add missing) */
+.badge-user { background: #3498db; color: #fff; }
+.badge-dyad { background: #9b59b6; color: #fff; }
+.badge-channel { background: #2ecc71; color: #fff; }
+.badge-subject { background: #f39c12; color: #000; }
+.badge-self { background: #e74c3c; color: #fff; }
+.badge-synthesis { background: #1abc9c; color: #fff; }
+
+/* Layer config card */
+.config-section {
+    margin-bottom: 1rem;
+}
+
+.config-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--bg-secondary);
+}
+
+.config-row:last-child {
+    border-bottom: none;
+}
+
+.config-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.config-value {
+    font-family: monospace;
+    font-size: 0.875rem;
+}
+
+/* Inline entity link inside clickable cards */
+.entity-link {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.entity-link:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}

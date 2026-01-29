@@ -5,7 +5,11 @@
      hx-target="body"
      hx-swap="innerHTML">
     <div class="card-header">
+        {% if insight.entity_link %}
+        <a href="{{ insight.entity_link }}" class="card-title truncate-text entity-link" title="{{ insight.topic_key }}" onclick="event.stopPropagation()">{{ insight.readable_topic_key or insight.topic_key }}</a>
+        {% else %}
         <span class="card-title truncate-text" title="{{ insight.topic_key }}">{{ insight.readable_topic_key or insight.topic_key }}</span>
+        {% endif %}
         <span class="badge badge-{{ insight.category }}">{{ insight.category }}</span>
     </div>
     <p class="insight-content">{{ insight.content | truncate(200) }}</p>

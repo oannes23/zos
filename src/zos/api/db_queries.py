@@ -1456,6 +1456,70 @@ async def get_cost_by_call_type(
         return results
 
 
+async def get_insights_by_run(
+    engine: "Engine",
+    layer_run_id: str,
+    limit: int = 50,
+) -> list[Insight]:
+    """Get insights created by a specific layer run.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        layer_run_id: The layer run ID.
+        limit: Maximum results.
+
+    Returns:
+        List of Insight models.
+    """
+    with engine.connect() as conn:
+        stmt = (
+            select(insights_table)
+            .where(
+                insights_table.c.layer_run_id == layer_run_id,
+                insights_table.c.quarantined == False,
+            )
+            .order_by(insights_table.c.created_at.desc())
+            .limit(limit)
+        )
+        rows = conn.execute(stmt).fetchall()
+        return [_row_to_insight_static(r) for r in rows]
+
+
+async def get_insights_by_layer_name(
+    engine: "Engine",
+    layer_name: str,
+    limit: int = 20,
+) -> list[Insight]:
+    """Get recent insights produced by a specific layer.
+
+    Joins insights to layer_runs by layer_run_id to find insights
+    where the layer_run's layer_name matches.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        layer_name: The layer name to filter by.
+        limit: Maximum results.
+
+    Returns:
+        List of Insight models.
+    """
+    from zos.database import layer_runs
+
+    with engine.connect() as conn:
+        stmt = (
+            select(insights_table)
+            .join(layer_runs, insights_table.c.layer_run_id == layer_runs.c.id)
+            .where(
+                layer_runs.c.layer_name == layer_name,
+                insights_table.c.quarantined == False,
+            )
+            .order_by(insights_table.c.created_at.desc())
+            .limit(limit)
+        )
+        rows = conn.execute(stmt).fetchall()
+        return [_row_to_insight_static(r) for r in rows]
+
+
 async def list_llm_calls(
     engine: "Engine",
     days: int = 30,

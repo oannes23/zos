@@ -1,0 +1,17 @@
+{% for insight in insights %}
+<div class="list-item list-item-truncate">
+    {% if insight.entity_link %}
+    <a href="{{ insight.entity_link }}" class="entity-link truncate-text"
+       title="{{ insight.topic_key }}"
+       onclick="event.stopPropagation()">
+        {{ insight.readable_topic_key or insight.topic_key }}
+    </a>
+    {% else %}
+    <span class="truncate-text" title="{{ insight.topic_key }}">{{ insight.readable_topic_key or insight.topic_key }}</span>
+    {% endif %}
+    <a href="/ui/insights/{{ insight.id }}" class="ml-1 text-muted"
+       onclick="event.stopPropagation()" title="View insight">
+        {{ insight.content | truncate(60) }}
+    </a>
+</div>
+{% endfor %}

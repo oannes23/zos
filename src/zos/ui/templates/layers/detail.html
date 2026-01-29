@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ layer.name }} — Zos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="/ui/layers" class="back-link">&larr; All Layers</a>
+    <h1>{{ layer.name }}</h1>
+    <span class="badge badge-{{ layer.category }}">{{ layer.category }}</span>
+</div>
+
+{% if layer.description %}
+<p class="text-muted">{{ layer.description }}</p>
+{% endif %}
+
+<div class="detail-grid">
+    <div class="detail-main">
+        <!-- Pipeline Visualization -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Pipeline ({{ layer.nodes | length }} nodes)</span>
+            </div>
+            {% include "layers/_config.html" %}
+        </div>
+
+        <!-- Recent Runs -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Recent Runs</span>
+                <a href="/ui/runs?layer_name={{ layer.name }}" class="text-muted">View all</a>
+            </div>
+            <div hx-get="/ui/layers/{{ layer.name }}/runs" hx-trigger="load" hx-swap="innerHTML">
+                Loading runs...
+            </div>
+        </div>
+
+        <!-- Recent Insights -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Recent Insights</span>
+            </div>
+            <div hx-get="/ui/layers/{{ layer.name }}/insights" hx-trigger="load" hx-swap="innerHTML">
+                Loading insights...
+            </div>
+        </div>
+    </div>
+
+    <div class="detail-sidebar">
+        <!-- Configuration -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Configuration</span>
+            </div>
+            <div class="config-section">
+                {% if layer.schedule %}
+                <div class="config-row">
+                    <span class="config-label">Schedule</span>
+                    <span class="config-value">{{ layer.schedule }}</span>
+                </div>
+                {% endif %}
+                {% if layer.trigger %}
+                <div class="config-row">
+                    <span class="config-label">Trigger</span>
+                    <span class="config-value">{{ layer.trigger }}</span>
+                </div>
+                {% endif %}
+                {% if layer.target_category %}
+                <div class="config-row">
+                    <span class="config-label">Target</span>
+                    <span class="config-value">{{ layer.target_category }}</span>
+                </div>
+                {% endif %}
+                {% if layer.target_filter %}
+                <div class="config-row">
+                    <span class="config-label">Filter</span>
+                    <span class="config-value">{{ layer.target_filter }}</span>
+                </div>
+                {% endif %}
+                <div class="config-row">
+                    <span class="config-label">Max Targets</span>
+                    <span class="config-value">{{ layer.max_targets }}</span>
+                </div>
+                <div class="config-row">
+                    <span class="config-label">Hash</span>
+                    <span class="config-value">{{ layer.hash or '—' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

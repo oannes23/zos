@@ -1,0 +1,9 @@
+{% for insight in insights %}
+<div class="list-item list-item-truncate">
+    <a href="/ui/insights/{{ insight.id }}" class="truncate-text" title="{{ insight.topic_key }}">
+        {{ insight.readable_topic_key or insight.topic_key }}
+    </a>
+    <span class="badge badge-{{ insight.category }} ml-1">{{ insight.category }}</span>
+    <span class="text-muted ml-1">{{ insight.temporal_marker }}</span>
+</div>
+{% endfor %}

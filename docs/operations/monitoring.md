@@ -225,6 +225,13 @@ Ensure no pending migrations after updates.
 
 ## Cost Tracking
 
+### Layer Inspection
+
+The web UI provides a layers browser at `/ui/layers` for inspecting layer configurations:
+- View all layer pipelines, schedules, and target filters
+- Click into a layer to see its recent runs and insights
+- Run detail modals now show which insights were created, with linked topics
+
 ### Budget Dashboard
 
 The web UI provides a visual budget dashboard at `/ui/budget` showing:

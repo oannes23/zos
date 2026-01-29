@@ -139,6 +139,90 @@ templates.env.filters["format_duration"] = format_duration
 templates.env.filters["relative_time"] = relative_time
 
 
+def _entity_link_for_topic(topic_key: str) -> str | None:
+    """Parse a topic key and return the best URL for navigation.
+
+    Registered as a Jinja2 global so templates can generate entity links.
+
+    Args:
+        topic_key: The raw topic key (e.g. server:X:user:Y).
+
+    Returns:
+        URL string or None if no linkable entity.
+    """
+    parts = topic_key.split(":")
+    if not parts:
+        return None
+
+    # server-scoped topics
+    if parts[0] == "server" and len(parts) >= 4:
+        entity_type = parts[2]
+        entity_id = parts[3]
+        if entity_type == "user":
+            return f"/ui/users/{entity_id}"
+        elif entity_type == "channel":
+            return f"/ui/channels/{entity_id}"
+        elif entity_type == "dyad":
+            # No dyad page — link to salience topic
+            return f"/ui/salience/topic/{topic_key}"
+        elif entity_type == "emoji":
+            return None
+        elif entity_type == "thread":
+            return None
+
+    # global topics
+    if parts[0] == "user" and len(parts) >= 2:
+        return f"/ui/users/{parts[1]}"
+    if parts[0] == "self":
+        return None
+
+    return None
+
+
+# Register globals after function definitions
+templates.env.globals["entity_link"] = _entity_link_for_topic
+
+
+def _get_all_layers() -> list[dict]:
+    """Load all layer configs and return as dicts.
+
+    Returns:
+        List of dicts with name, category, description, schedule, trigger,
+        target_category, target_filter, max_targets, nodes, hash.
+    """
+    try:
+        layers_dir = Path("layers")
+        if not layers_dir.exists():
+            return []
+        loader = LayerLoader(layers_dir)
+        all_layers = loader.load_all()
+        result = []
+        for name in sorted(all_layers):
+            layer = all_layers[name]
+            result.append({
+                "name": layer.name,
+                "category": layer.category.value if hasattr(layer.category, 'value') else str(layer.category),
+                "description": layer.description,
+                "schedule": layer.schedule,
+                "trigger": layer.trigger,
+                "target_category": layer.target_category,
+                "target_filter": layer.target_filter,
+                "max_targets": layer.max_targets,
+                "nodes": [
+                    {
+                        "name": node.name,
+                        "type": node.type.value if hasattr(node.type, 'value') else str(node.type),
+                        "params": node.params,
+                    }
+                    for node in layer.nodes
+                ],
+                "hash": loader.get_hash(name),
+            })
+        return result
+    except Exception:
+        return []
+
+
 def _get_dev_mode(request: Request) -> bool:
     """Check if dev mode is enabled from app config.
 
@@ -1687,6 +1771,158 @@ async def budget_call_detail(
 
 
 # =============================================================================
+# Layers Browser
+# =============================================================================
+
+
+@router.get("/layers", response_class=HTMLResponse)
+async def layers_page(request: Request) -> HTMLResponse:
+    """Layers browser page.
+
+    Main page for browsing configured reflection layers.
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="layers/list.html",
+        context={"active": "layers", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+# NOTE: /layers/list MUST be defined before /layers/{layer_name}
+@router.get("/layers/list", response_class=HTMLResponse)
+async def layers_list_partial(
+    request: Request,
+) -> HTMLResponse:
+    """Partial for layers card grid (htmx).
+
+    Returns HTML partial with all configured layers as cards.
+    """
+    layers = _get_all_layers()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="layers/_list.html",
+        context={"layers": layers},
+    )
+
+
+@router.get("/layers/{layer_name}/runs", response_class=HTMLResponse)
+async def layer_runs_partial(
+    request: Request,
+    layer_name: str,
+    limit: int = Query(10, ge=1, le=50),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Recent runs for a specific layer (htmx partial).
+
+    Returns a table of recent runs filtered by layer name.
+    """
+    runs, total = list_layer_runs(db, layer_name=layer_name, limit=limit)
+    formatted = [_format_run_for_ui(r) for r in runs]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="layers/_runs.html",
+        context={"runs": formatted, "total": total, "layer_name": layer_name},
+    )
+
+
+@router.get("/layers/{layer_name}/insights", response_class=HTMLResponse)
+async def layer_insights_partial(
+    request: Request,
+    layer_name: str,
+    limit: int = Query(10, ge=1, le=50),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Recent insights for a specific layer (htmx partial).
+
+    Returns insight cards produced by this layer.
+    """
+    from zos.api.db_queries import get_insights_by_layer_name
+
+    insights = await get_insights_by_layer_name(db, layer_name, limit=limit)
+
+    if not insights:
+        return HTMLResponse('<p class="text-muted">No insights from this layer yet</p>')
+
+    # Resolve topic keys
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="layers/_insights.html",
+        context={"insights": formatted},
+    )
+
+
+@router.get("/layers/{layer_name}", response_class=HTMLResponse)
+async def layer_detail(
+    request: Request,
+    layer_name: str,
+) -> HTMLResponse:
+    """Layer detail page.
+
+    Shows full layer configuration, pipeline visualization,
+    recent runs, and recent insights.
+    """
+    all_layers = _get_all_layers()
+    layer = next((l for l in all_layers if l["name"] == layer_name), None)
+    if not layer:
+        raise HTTPException(status_code=404, detail="Layer not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="layers/detail.html",
+        context={"layer": layer, "active": "layers", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+# =============================================================================
+# Enhanced Run Detail
+# =============================================================================
+
+
+@router.get("/runs/{run_id}/insights", response_class=HTMLResponse)
+async def run_insights_partial(
+    request: Request,
+    run_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Insights created by a specific run (htmx partial).
+
+    Returns insight cards produced during a specific layer run.
+    Lazy-loaded inside the run detail modal.
+    """
+    from zos.api.db_queries import get_insights_by_run
+
+    insights = await get_insights_by_run(db, run_id)
+
+    if not insights:
+        return HTMLResponse('<p class="text-muted">No insights created in this run</p>')
+
+    # Resolve topic keys
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="runs/_insights.html",
+        context={"insights": formatted},
+    )
+
+
+# =============================================================================
 # Helper Functions
 # =============================================================================
 
@@ -1708,6 +1944,7 @@ def _format_run_for_ui(run) -> dict:
         "id": run.id,
         "layer_name": run.layer_name,
         "layer_hash": run.layer_hash,
+        "layer_link": f"/ui/layers/{run.layer_name}",
         "status": run.status.value,
         "started_at": run.started_at,
         "completed_at": run.completed_at,
@@ -1837,6 +2074,8 @@ def _format_insight_for_ui(insight, readable_topic_key: str | None = None) -> di
             "tension": insight.valence_tension,
         },
         "supersedes": insight.supersedes,
+        "layer_run_id": insight.layer_run_id,
+        "entity_link": _entity_link_for_topic(insight.topic_key),
     }
 
 

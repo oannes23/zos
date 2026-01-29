@@ -8,7 +8,11 @@
 
 <div class="card">
     <div class="card-header">
+        {% if insight.entity_link %}
+        <h1 class="card-title"><a href="{{ insight.entity_link }}">{{ insight.readable_topic_key or insight.topic_key }}</a></h1>
+        {% else %}
         <h1 class="card-title">{{ insight.readable_topic_key or insight.topic_key }}</h1>
+        {% endif %}
         <span class="badge badge-{{ insight.category }}">{{ insight.category }}</span>
     </div>
 
@@ -25,6 +29,12 @@
             <span class="meta-label">Memory</span>
             <span>{{ insight.temporal_marker }}</span>
         </div>
+        {% if insight.layer_run_id %}
+        <div class="meta-row">
+            <span class="meta-label">Layer Run</span>
+            <span><a href="#" hx-get="/ui/runs/{{ insight.layer_run_id }}" hx-target="#run-detail-modal" hx-swap="innerHTML">{{ insight.layer_run_id[:12] }}...</a></span>
+        </div>
+        {% endif %}
         <div class="meta-row">
             <span class="meta-label">Strength</span>
             <span>{{ insight.strength | round(1) }}</span>
@@ -75,4 +85,6 @@
         Loading...
     </div>
 </div>
+
+<div id="run-detail-modal" class="modal"></div>
 {% endblock %}

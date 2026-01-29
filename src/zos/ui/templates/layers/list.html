@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Layers — Zos{% endblock %}
+
+{% block content %}
+<h1>Layers</h1>
+<p class="text-muted">Configured reflection layers and their pipelines</p>
+
+<div id="layers-list" class="mt-2" hx-get="/ui/layers/list" hx-trigger="load">
+    Loading layers...
+</div>
+{% endblock %}

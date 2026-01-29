@@ -1,0 +1,37 @@
+{% if runs %}
+<table class="runs-table">
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Status</th>
+            <th>Targets</th>
+            <th>Insights</th>
+            <th>Cost</th>
+            <th>Duration</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for run in runs %}
+        <tr class="clickable"
+            hx-get="/ui/runs/{{ run.id }}"
+            hx-target="#run-detail-modal"
+            hx-swap="innerHTML">
+            <td>{{ run.started_at | relative_time }}</td>
+            <td>
+                <span class="badge badge-{{ run.status }}">{{ run.status }}</span>
+            </td>
+            <td>{{ run.targets_processed }}</td>
+            <td>{{ run.insights_created }}</td>
+            <td>{{ run.estimated_cost_usd | format_cost }}</td>
+            <td>{{ run.duration_seconds | format_duration }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% if total > runs | length %}
+<p class="text-muted mt-1"><a href="/ui/runs?layer_name={{ layer_name }}">View all {{ total }} runs</a></p>
+{% endif %}
+<div id="run-detail-modal" class="modal"></div>
+{% else %}
+<p class="text-muted">No runs yet for this layer</p>
+{% endif %}

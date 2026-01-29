@@ -18,7 +18,7 @@
             hx-target="#run-detail-modal"
             hx-swap="innerHTML">
             <td>{{ run.started_at | relative_time }}</td>
-            <td>{{ run.layer_name }}</td>
+            <td><a href="{{ run.layer_link }}" onclick="event.stopPropagation()">{{ run.layer_name }}</a></td>
             <td>
                 <span class="badge badge-{{ run.status }}">{{ run.status }}</span>
             </td>

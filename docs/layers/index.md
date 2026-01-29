@@ -86,6 +86,10 @@ Conversation is the "waking" mode.
 zos layer list
 ```
 
+### Browse in Web UI
+
+Navigate to `/ui/layers` to see all configured layers as a card grid. Click any layer to view its full pipeline, configuration, recent runs, and insights.
+
 ### Validate a Layer
 
 ```bash

@@ -1,6 +1,6 @@
 # Built-in Layers
 
-Zos ships with default reflection layers that implement core cognition.
+Zos ships with default reflection layers that implement core cognition. You can browse all layers visually at `/ui/layers` in the web UI, which shows each layer's pipeline, configuration, recent runs, and insights.
 
 ---
 
@@ -38,7 +38,7 @@ nodes:
     params:
       prompt_template: user/reflection.jinja2
       model: reflection
-      max_tokens: 600
+      max_tokens: 1000
       temperature: 0.7
 
   - name: store
@@ -52,6 +52,57 @@ nodes:
 Insights that capture the "felt sense" of who someone is — not clinical analysis, but phenomenological description. Example:
 
 > "Alice expresses warmth through thoughtful responses. She often acknowledges others before adding her own perspective. There's a carefulness in how she phrases disagreements — she seems to value maintaining connection even when views differ."
+
+---
+
+## nightly-channel-reflection
+
+Reflects on channels based on their recent activity to build understanding of spaces.
+
+**Schedule:** Daily at 3 AM UTC
+
+**What it does:**
+1. Selects up to 15 channels with salience >= 10
+2. Fetches their last 72 hours of messages
+3. Retrieves prior insights about each channel
+4. Generates phenomenological reflection on the space's character
+5. Stores new insight with category `channel_reflection`
+
+**Pipeline:**
+
+```yaml
+nodes:
+  - name: fetch_recent_messages
+    type: fetch_messages
+    params:
+      lookback_hours: 72
+      limit_per_channel: 100
+
+  - name: fetch_prior_understanding
+    type: fetch_insights
+    params:
+      retrieval_profile: recent
+      max_per_topic: 10
+
+  - name: reflect
+    type: llm_call
+    params:
+      prompt_template: channel/reflection.jinja2
+      model: reflection
+      max_tokens: 1000
+      temperature: 0.7
+
+  - name: store
+    type: store_insight
+    params:
+      category: channel_reflection
+```
+
+**Expected output:**
+
+Insights that capture the character and culture of a channel — not topic summaries, but the feel of the space. Example:
+
+> "#general has a rhythm of morning check-ins that set the tone for the day. There's a warmth in how regulars greet each other — inside jokes serve as social glue. When newcomers arrive, the regulars naturally shift to be more explanatory without losing their casual tone."
 
 ---
 
@@ -135,14 +186,14 @@ Self-insights capture the texture of Zos's experience across communities. Exampl
 
 ## Layer Categories
 
-The built-in layers cover two of the six possible categories:
+The built-in layers cover four of the six possible categories:
 
 | Category | Built-in Layer | Description |
 |----------|----------------|-------------|
-| `user` | nightly-user-reflection | Individual understanding |
+| `user` | nightly-user-reflection, weekly-emoji-patterns | Individual understanding |
 | `self` | weekly-self-reflection | Self-understanding |
-| `dyad` | — | Relationship understanding |
-| `channel` | — | Space understanding |
+| `dyad` | nightly-dyad-reflection | Relationship understanding |
+| `channel` | nightly-channel-reflection | Space understanding |
 | `subject` | — | Semantic topic understanding |
 | `synthesis` | — | Cross-scope consolidation |
 

@@ -1,6 +1,6 @@
 <div class="modal-content">
     <div class="modal-header">
-        <h2>{{ run.layer_name }}</h2>
+        <h2><a href="{{ run.layer_link }}">{{ run.layer_name }}</a></h2>
         <button class="close-btn" onclick="this.closest('.modal').innerHTML = ''">&times;</button>
     </div>
 
@@ -33,6 +33,13 @@
             <span>{{ run.insights_created }}</span>
         </div>
     </div>
+
+    {% if run.insights_created > 0 %}
+    <h3 class="mt-2">Insights</h3>
+    <div hx-get="/ui/runs/{{ run.id }}/insights" hx-trigger="load" hx-swap="innerHTML">
+        Loading insights...
+    </div>
+    {% endif %}
 
     <h3 class="mt-2">Model Usage</h3>
     <div class="run-metrics">

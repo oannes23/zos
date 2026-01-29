@@ -540,6 +540,8 @@ The web UI provides a browser-based interface for exploring Zos data at `/ui/`.
 | `/ui/channels` | Browse channels sorted by message count |
 | `/ui/salience` | View salience balances by budget group |
 | `/ui/budget` | Track API costs, token usage, and spending over time |
+| `/ui/layers` | Browse configured reflection layers and their pipelines |
+| `/ui/layers/{name}` | Layer detail — config, pipeline visualization, recent runs and insights |
 | `/ui/runs` | View layer run history and statistics |
 
 ### Users Browser
@@ -568,6 +570,34 @@ The channels browser (`/ui/channels`) displays all tracked channels sorted by me
   - Top users by message count
 - Links to filtered message views
 
+### Layers Browser
+
+The layers browser (`/ui/layers`) displays all configured reflection layers as a card grid.
+
+**Features:**
+- Card grid showing all layers with category, schedule/trigger, and node count
+- Click a layer card for its detail page:
+  - Pipeline visualization (ordered node sequence with types and params)
+  - Configuration sidebar (schedule, target filter, max targets, hash)
+  - Recent runs table with htmx modal for run details
+  - Recent insights produced by this layer
+- Cross-linked from budget by-layer table and run detail modals
+
+### Enhanced Run Details
+
+Run detail modals (`/ui/runs/{id}`) now show:
+- Layer name linked to the layer detail page
+- Insights section (lazy-loaded) showing topic names and content previews for each insight created
+- Topic names link to the relevant entity page (user, channel, salience)
+
+### Cross-Linking
+
+Entities are cross-linked throughout the UI for easy navigation:
+- **Layer names** in run tables and budget breakdowns link to layer detail pages
+- **Topic headings** in insight cards and detail pages link to user/channel/salience pages
+- **Layer run IDs** in insight detail pages open the run detail modal
+- Entity links use `stopPropagation` inside clickable cards to avoid navigation conflicts
+
 ### Budget Dashboard
 
 The budget dashboard (`/ui/budget`) provides cost tracking and visualization.
@@ -575,7 +605,7 @@ The budget dashboard (`/ui/budget`) provides cost tracking and visualization.
 **Features:**
 - Summary cards showing total cost, tokens, runs, calls, and insights (30 days)
 - Daily cost chart with bar visualization
-- Cost breakdown by layer (percentage of total, tokens, runs, insights)
+- Cost breakdown by layer (percentage of total, tokens, runs, insights) — layer names link to layer detail
 - Cost breakdown by model (provider, profile, tokens in/out, calls)
 - Cost breakdown by call type (reflection, vision, conversation, etc.)
 - All data filterable by time period (default 30 days)

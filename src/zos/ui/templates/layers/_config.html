@@ -1,0 +1,19 @@
+<div class="pipeline-nodes">
+    {% for node in layer.nodes %}
+    <div class="pipeline-node">
+        <span class="node-type">{{ node.type }}</span>
+        <div>
+            {% if node.name %}
+            <div class="node-name">{{ node.name }}</div>
+            {% endif %}
+            {% if node.params %}
+            <div class="node-params">
+                {% for key, value in node.params.items() %}
+                <span title="{{ key }}">{{ key }}: {{ value }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
