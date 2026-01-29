@@ -1648,3 +1648,233 @@ async def get_llm_call(
             "error_message": row.error_message,
             "created_at": row.created_at,
         }
+
+
+# =============================================================================
+# Media & Link Analysis Queries
+# =============================================================================
+
+
+async def get_media_stats(
+    engine: "Engine",
+    days: int = 30,
+) -> dict:
+    """Get combined media and link analysis statistics.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        days: Number of days to look back.
+
+    Returns:
+        Dict with images_analyzed, links_fetched, youtube_count, failures,
+        top_domains list.
+    """
+    from datetime import timedelta
+
+    from zos.database import link_analysis, media_analysis
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    with engine.connect() as conn:
+        # Image/media stats
+        media_stmt = (
+            select(func.count())
+            .select_from(media_analysis)
+            .where(media_analysis.c.analyzed_at >= since)
+        )
+        images_analyzed = conn.execute(media_stmt).scalar() or 0
+
+        # Link stats
+        link_total_stmt = (
+            select(func.count())
+            .select_from(link_analysis)
+            .where(link_analysis.c.fetched_at >= since)
+        )
+        links_fetched = conn.execute(link_total_stmt).scalar() or 0
+
+        # YouTube count
+        yt_stmt = (
+            select(func.count())
+            .select_from(link_analysis)
+            .where(
+                link_analysis.c.fetched_at >= since,
+                link_analysis.c.is_youtube == True,
+            )
+        )
+        youtube_count = conn.execute(yt_stmt).scalar() or 0
+
+        # Failures
+        fail_stmt = (
+            select(func.count())
+            .select_from(link_analysis)
+            .where(
+                link_analysis.c.fetched_at >= since,
+                link_analysis.c.fetch_failed == True,
+            )
+        )
+        failures = conn.execute(fail_stmt).scalar() or 0
+
+        # Top domains
+        domain_stmt = (
+            select(
+                link_analysis.c.domain,
+                func.count().label("count"),
+            )
+            .where(link_analysis.c.fetched_at >= since)
+            .group_by(link_analysis.c.domain)
+            .order_by(func.count().desc())
+            .limit(10)
+        )
+        top_domains = [
+            {"domain": row.domain, "count": row.count}
+            for row in conn.execute(domain_stmt).fetchall()
+        ]
+
+        return {
+            "images_analyzed": images_analyzed,
+            "links_fetched": links_fetched,
+            "youtube_count": youtube_count,
+            "failures": failures,
+            "top_domains": top_domains,
+            "days": days,
+        }
+
+
+async def list_media_analysis(
+    engine: "Engine",
+    offset: int = 0,
+    limit: int = 20,
+) -> tuple[list[dict], int]:
+    """List image/media analyses with pagination.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        offset: Pagination offset.
+        limit: Maximum results.
+
+    Returns:
+        Tuple of (list of media analysis dicts, total count).
+    """
+    from zos.database import media_analysis, messages as messages_table
+
+    with engine.connect() as conn:
+        # Count
+        count_stmt = select(func.count()).select_from(media_analysis)
+        total = conn.execute(count_stmt).scalar() or 0
+
+        # Data with message join for context
+        stmt = (
+            select(
+                media_analysis,
+                messages_table.c.channel_id,
+                messages_table.c.author_id,
+            )
+            .select_from(
+                media_analysis.outerjoin(
+                    messages_table,
+                    media_analysis.c.message_id == messages_table.c.id,
+                )
+            )
+            .order_by(media_analysis.c.analyzed_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "id": row.id,
+                "message_id": row.message_id,
+                "media_type": row.media_type,
+                "url": row.url,
+                "filename": row.filename,
+                "width": row.width,
+                "height": row.height,
+                "description": row.description,
+                "analyzed_at": row.analyzed_at,
+                "analysis_model": row.analysis_model,
+                "channel_id": row.channel_id,
+                "author_id": row.author_id,
+            })
+
+        return results, total
+
+
+async def list_link_analysis(
+    engine: "Engine",
+    domain: str | None = None,
+    is_youtube: bool | None = None,
+    offset: int = 0,
+    limit: int = 20,
+) -> tuple[list[dict], int]:
+    """List link analyses with pagination and filters.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        domain: Optional domain filter.
+        is_youtube: Optional YouTube filter.
+        offset: Pagination offset.
+        limit: Maximum results.
+
+    Returns:
+        Tuple of (list of link analysis dicts, total count).
+    """
+    from zos.database import link_analysis, messages as messages_table
+
+    with engine.connect() as conn:
+        conditions = []
+        if domain:
+            conditions.append(link_analysis.c.domain == domain)
+        if is_youtube is not None:
+            conditions.append(link_analysis.c.is_youtube == is_youtube)
+
+        # Count
+        count_base = select(func.count()).select_from(link_analysis)
+        if conditions:
+            count_base = count_base.where(and_(*conditions))
+        total = conn.execute(count_base).scalar() or 0
+
+        # Data with message join
+        stmt = (
+            select(
+                link_analysis,
+                messages_table.c.channel_id,
+                messages_table.c.author_id,
+            )
+            .select_from(
+                link_analysis.outerjoin(
+                    messages_table,
+                    link_analysis.c.message_id == messages_table.c.id,
+                )
+            )
+        )
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+
+        stmt = (
+            stmt.order_by(link_analysis.c.fetched_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "id": row.id,
+                "message_id": row.message_id,
+                "url": row.url,
+                "domain": row.domain,
+                "content_type": row.content_type,
+                "title": row.title,
+                "summary": row.summary,
+                "is_youtube": row.is_youtube,
+                "duration_seconds": row.duration_seconds,
+                "transcript_available": row.transcript_available,
+                "fetched_at": row.fetched_at,
+                "fetch_failed": row.fetch_failed,
+                "fetch_error": row.fetch_error,
+                "channel_id": row.channel_id,
+                "author_id": row.author_id,
+            })
+
+        return results, total

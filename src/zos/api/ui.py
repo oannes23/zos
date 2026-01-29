@@ -1771,6 +1771,113 @@ async def budget_call_detail(
 
 
 # =============================================================================
+# Media Dashboard
+# =============================================================================
+
+
+@router.get("/media", response_class=HTMLResponse)
+async def media_page(request: Request) -> HTMLResponse:
+    """Media dashboard page.
+
+    Main page for browsing link and image analyses.
+    Content loads via htmx for responsive experience.
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="media/dashboard.html",
+        context={"active": "media", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+@router.get("/media/stats", response_class=HTMLResponse)
+async def media_stats_partial(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Media stats partial (htmx).
+
+    Returns summary cards for link and image analysis activity.
+    """
+    from zos.api.db_queries import get_media_stats
+
+    stats = await get_media_stats(db, days=days)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="media/_stats.html",
+        context={"stats": stats},
+    )
+
+
+@router.get("/media/images", response_class=HTMLResponse)
+async def media_images_partial(
+    request: Request,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Image analyses list partial (htmx).
+
+    Returns paginated card grid of image analyses.
+    """
+    from zos.api.db_queries import list_media_analysis
+
+    images, total = await list_media_analysis(db, offset=offset, limit=limit)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="media/_images.html",
+        context={
+            "images": images,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+        },
+    )
+
+
+@router.get("/media/links", response_class=HTMLResponse)
+async def media_links_partial(
+    request: Request,
+    domain: Optional[str] = Query(None),
+    is_youtube: Optional[bool] = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Link analyses list partial (htmx).
+
+    Returns paginated table of link analyses with filters.
+    """
+    from zos.api.db_queries import list_link_analysis
+
+    # Empty string from form should be treated as None
+    filter_domain = domain if domain else None
+
+    links, total = await list_link_analysis(
+        db,
+        domain=filter_domain,
+        is_youtube=is_youtube,
+        offset=offset,
+        limit=limit,
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="media/_links.html",
+        context={
+            "links": links,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "domain": filter_domain,
+            "is_youtube": is_youtube,
+        },
+    )
+
+
+# =============================================================================
 # Layers Browser
 # =============================================================================
 

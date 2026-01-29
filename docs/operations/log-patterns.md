@@ -140,6 +140,29 @@ Image or attachment processed by vision model.
 
 External link content fetched and summarized.
 
+### Links Queued
+
+```json
+{
+  "event": "links_queued",
+  "message_id": "123456789"
+}
+```
+
+Message content queued for link analysis (debug level).
+
+### Links Processed
+
+```json
+{
+  "event": "links_processed",
+  "message_id": "123456789",
+  "links_count": 2
+}
+```
+
+Link analysis completed for a queued message (debug level).
+
 ---
 
 ## Reflection Events
@@ -324,6 +347,32 @@ Referenced topic doesn't exist in database.
 ```
 
 Error reading a specific channel.
+
+### Link Queue Near Full
+
+```json
+{
+  "level": "warning",
+  "event": "link_queue_near_full",
+  "queue_size": 42,
+  "max_size": 50
+}
+```
+
+Link analysis queue is above 80% capacity. Consider increasing `link_queue_max_size` or `link_rate_limit_per_minute`.
+
+### Link Queue Full
+
+```json
+{
+  "level": "warning",
+  "event": "link_queue_full",
+  "message_id": "123456789",
+  "queue_size": 50
+}
+```
+
+Link analysis queue is full; message links were dropped. Increase `link_queue_max_size` or `link_rate_limit_per_minute`.
 
 ### Robots Blocked
 

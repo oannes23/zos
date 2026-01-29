@@ -26,6 +26,7 @@ from zos.database import (
     generate_id,
     insights as insights_table,
     layer_runs as layer_runs_table,
+    media_analysis as media_analysis_table,
     messages as messages_table,
     reactions as reactions_table,
     topics as topics_table,
@@ -959,6 +960,47 @@ class LayerExecutor:
             for m in ctx.messages
         ]
 
+        # Enrich messages with link and media analyses
+        message_ids_with_links = [m.id for m in ctx.messages if m.has_links]
+        message_ids_with_media = [m.id for m in ctx.messages if m.has_media]
+
+        link_analyses_map: dict = {}
+        media_analyses_map: dict = {}
+
+        if message_ids_with_links:
+            from zos.links import get_link_analyses_for_messages
+
+            link_analyses_map = get_link_analyses_for_messages(
+                self.engine, message_ids_with_links
+            )
+
+        if message_ids_with_media:
+            media_analyses_map = self._get_media_analyses_for_messages(
+                message_ids_with_media
+            )
+
+        # Attach link/media summaries to message dicts
+        for i, m in enumerate(ctx.messages):
+            link_summaries = []
+            for la in link_analyses_map.get(m.id, []):
+                if not la.fetch_failed:
+                    link_summaries.append({
+                        "domain": la.domain,
+                        "title": la.title,
+                        "summary": la.summary,
+                        "is_youtube": la.is_youtube,
+                    })
+            messages_data[i]["link_summaries"] = link_summaries
+
+            media_descriptions = []
+            for ma in media_analyses_map.get(m.id, []):
+                media_descriptions.append({
+                    "media_type": ma.get("media_type", "image"),
+                    "filename": ma.get("filename"),
+                    "description": ma.get("description"),
+                })
+            messages_data[i]["media_descriptions"] = media_descriptions
+
         # Resolve Discord mention IDs to display names
         mention_names = await self._resolve_mention_names(ctx.messages)
 
@@ -1590,6 +1632,43 @@ Begin the document with "# Self-Concept" and maintain the existing sections wher
                 )
                 for row in rows
             ]
+
+    def _get_media_analyses_for_messages(
+        self, message_ids: list[str]
+    ) -> dict[str, list[dict]]:
+        """Batch-fetch media analyses for multiple messages.
+
+        Args:
+            message_ids: List of message IDs to query.
+
+        Returns:
+            Dictionary mapping message_id to list of media analysis dicts.
+        """
+        if not message_ids:
+            return {}
+
+        result_map: dict[str, list[dict]] = {}
+
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                select(media_analysis_table).where(
+                    media_analysis_table.c.message_id.in_(message_ids)
+                )
+            ).fetchall()
+
+            for row in rows:
+                entry = {
+                    "media_type": row.media_type,
+                    "filename": row.filename,
+                    "description": row.description,
+                    "width": row.width,
+                    "height": row.height,
+                }
+                if row.message_id not in result_map:
+                    result_map[row.message_id] = []
+                result_map[row.message_id].append(entry)
+
+        return result_map
 
     def _extract_category(self, topic_key: str) -> str:
         """Extract category from topic key.

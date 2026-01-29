@@ -1,0 +1,41 @@
+{% if images %}
+<div class="budget-grid">
+{% for img in images %}
+    <div class="card">
+        <div class="card-header">
+            <span class="badge badge-info">{{ img.media_type }}</span>
+            {% if img.filename %}
+            <span class="text-muted ml-1">{{ img.filename | truncate(30) }}</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <p>{{ img.description | truncate(200) if img.description else "No description" }}</p>
+            {% if img.width and img.height %}
+            <p class="text-muted">{{ img.width }}x{{ img.height }}</p>
+            {% endif %}
+        </div>
+        <div class="card-footer text-muted">
+            {{ img.analyzed_at | relative_time if img.analyzed_at else "—" }}
+            {% if img.message_id %}
+            · <a href="/ui/messages/{{ img.message_id }}">View message</a>
+            {% endif %}
+        </div>
+    </div>
+{% endfor %}
+</div>
+
+{% if total > offset + limit %}
+<div class="pagination mt-1">
+    <button class="btn btn-secondary"
+            hx-get="/ui/media/images?offset={{ offset + limit }}&limit={{ limit }}"
+            hx-target="#images-list"
+            hx-swap="innerHTML">
+        Load more ({{ total - offset - limit }} remaining)
+    </button>
+</div>
+{% endif %}
+
+<p class="text-muted mt-1">Showing {{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total | format_number }}</p>
+{% else %}
+<p class="text-muted">No image analyses yet</p>
+{% endif %}

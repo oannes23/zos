@@ -257,6 +257,10 @@ observation:
   link_fetch_enabled: true
   youtube_transcript_enabled: true
   video_duration_threshold_minutes: 30
+  backfill_hours: 24
+  media_queue_max_size: 100
+  link_queue_max_size: 50
+  link_rate_limit_per_minute: 5
 ```
 
 | Setting | Default | Description |
@@ -266,6 +270,12 @@ observation:
 | `link_fetch_enabled` | true | Fetch and summarize linked pages |
 | `youtube_transcript_enabled` | true | Fetch YouTube transcripts |
 | `video_duration_threshold_minutes` | 30 | Skip transcript for longer videos |
+| `backfill_hours` | 24 | Hours of message history to backfill on startup |
+| `media_queue_max_size` | 100 | Max pending image analyses in queue |
+| `link_queue_max_size` | 50 | Max pending link analyses in queue |
+| `link_rate_limit_per_minute` | 5 | Max link fetch API calls per minute |
+
+Link and media analyses are processed asynchronously via background queues. When a message with images or links is observed, items are queued for analysis without blocking the observation pipeline. Analyzed content (image descriptions, link summaries, YouTube transcripts) is stored in the database and included in subsequent reflections.
 
 ---
 

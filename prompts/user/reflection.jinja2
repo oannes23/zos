@@ -46,8 +46,16 @@ I don't have prior understanding of this person yet.
 {% if messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content | truncate(300) }}
-{% if msg.has_media %}[contains media]{% endif %}
-{% if msg.has_links %}[contains links]{% endif %}
+{% if msg.media_descriptions %}
+{% for media in msg.media_descriptions %}
+  [{{ media.media_type }}{% if media.filename %}: {{ media.filename }}{% endif %}] {{ media.description | truncate(200) }}
+{% endfor %}
+{% elif msg.has_media %}[contains unanalyzed media]{% endif %}
+{% if msg.link_summaries %}
+{% for link in msg.link_summaries %}
+  [{{ link.domain }}{% if link.is_youtube %} video{% endif %}{% if link.title %}: "{{ link.title | truncate(60) }}"{% endif %}] {{ link.summary | truncate(200) }}
+{% endfor %}
+{% elif msg.has_links %}[contains unanalyzed links]{% endif %}
 {% endfor %}
 {% else %}
 No messages in the observation window.

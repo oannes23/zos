@@ -1,0 +1,60 @@
+{% if links %}
+<table class="table">
+    <thead>
+        <tr>
+            <th>Domain</th>
+            <th>Title</th>
+            <th>Summary</th>
+            <th>Type</th>
+            <th>Fetched</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for link in links %}
+        <tr>
+            <td>
+                {{ link.domain }}
+                {% if link.is_youtube %}<span class="badge badge-info">YT</span>{% endif %}
+            </td>
+            <td>
+                {% if link.title %}
+                <a href="{{ link.url }}" target="_blank" rel="noopener" title="{{ link.url }}">
+                    {{ link.title | truncate(50) }}
+                </a>
+                {% else %}
+                <a href="{{ link.url }}" target="_blank" rel="noopener">
+                    {{ link.url | truncate(50) }}
+                </a>
+                {% endif %}
+            </td>
+            <td class="truncate-text">{{ link.summary | truncate(120) if link.summary else "—" }}</td>
+            <td>{{ link.content_type or "—" }}</td>
+            <td>{{ link.fetched_at | relative_time if link.fetched_at else "—" }}</td>
+            <td>
+                {% if link.fetch_failed %}
+                <span class="badge badge-error" title="{{ link.fetch_error or '' }}">Failed</span>
+                {% else %}
+                <span class="badge badge-success">OK</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% if total > offset + limit %}
+<div class="pagination mt-1">
+    <button class="btn btn-secondary"
+            hx-get="/ui/media/links?offset={{ offset + limit }}&limit={{ limit }}{% if domain %}&domain={{ domain }}{% endif %}{% if is_youtube is not none %}&is_youtube={{ is_youtube }}{% endif %}"
+            hx-target="#links-list"
+            hx-swap="innerHTML">
+        Load more ({{ total - offset - limit }} remaining)
+    </button>
+</div>
+{% endif %}
+
+<p class="text-muted mt-1">Showing {{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total | format_number }}</p>
+{% else %}
+<p class="text-muted">No link analyses yet</p>
+{% endif %}

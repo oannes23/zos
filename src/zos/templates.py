@@ -388,6 +388,8 @@ def format_messages_for_prompt(
                 "content": content,
                 "has_media": msg.get("has_media", False),
                 "has_links": msg.get("has_links", False),
+                "link_summaries": msg.get("link_summaries", []),
+                "media_descriptions": msg.get("media_descriptions", []),
             }
         )
 

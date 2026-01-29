@@ -538,6 +538,7 @@ The web UI provides a browser-based interface for exploring Zos data at `/ui/`.
 | `/ui/insights` | Browse and search insights by category |
 | `/ui/users` | Browse users sorted by insight count |
 | `/ui/channels` | Browse channels sorted by message count |
+| `/ui/media` | Browse link analyses, image descriptions, and YouTube summaries |
 | `/ui/salience` | View salience balances by budget group |
 | `/ui/budget` | Track API costs, token usage, and spending over time |
 | `/ui/layers` | Browse configured reflection layers and their pipelines |
@@ -597,6 +598,27 @@ Entities are cross-linked throughout the UI for easy navigation:
 - **Topic headings** in insight cards and detail pages link to user/channel/salience pages
 - **Layer run IDs** in insight detail pages open the run detail modal
 - Entity links use `stopPropagation` inside clickable cards to avoid navigation conflicts
+
+### Media Dashboard
+
+The media dashboard (`/ui/media`) provides visibility into link and image analysis activity.
+
+**Features:**
+- Summary stats cards showing links fetched, YouTube videos, images analyzed, and failures (configurable time window)
+- Top domains table showing most frequently fetched domains
+- Paginated link analysis table with domain, title, summary, content type, and fetch status
+- Filterable by domain and YouTube-only links
+- Paginated image analysis card grid with media type, filename, description, and dimensions
+- Failed fetches highlighted with error status badges
+
+**htmx Partials:**
+| Path | Description |
+|------|-------------|
+| `/ui/media/stats` | Summary cards and top domains |
+| `/ui/media/links` | Paginated link analysis table |
+| `/ui/media/images` | Paginated image analysis grid |
+
+Link and image analyses are produced by the observation pipeline's background queues. Analyzed content is also included in reflection prompts — reflections see link summaries and image descriptions alongside the messages that contained them.
 
 ### Budget Dashboard
 

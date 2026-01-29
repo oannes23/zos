@@ -686,6 +686,52 @@ def get_link_analysis_for_message(engine: Engine, message_id: str) -> list[LinkA
         ]
 
 
+def get_link_analyses_for_messages(
+    engine: Engine, message_ids: list[str]
+) -> dict[str, list[LinkAnalysis]]:
+    """Get link analyses for multiple messages in a single batch query.
+
+    Args:
+        engine: SQLAlchemy engine.
+        message_ids: List of message IDs to query.
+
+    Returns:
+        Dictionary mapping message_id to list of LinkAnalysis records.
+    """
+    if not message_ids:
+        return {}
+
+    result_map: dict[str, list[LinkAnalysis]] = {}
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            select(link_analysis).where(link_analysis.c.message_id.in_(message_ids))
+        )
+        rows = result.fetchall()
+
+        for row in rows:
+            analysis = LinkAnalysis(
+                id=row.id,
+                message_id=row.message_id,
+                url=row.url,
+                domain=row.domain,
+                content_type=ContentType(row.content_type),
+                title=row.title,
+                summary=row.summary,
+                is_youtube=row.is_youtube,
+                duration_seconds=row.duration_seconds,
+                transcript_available=row.transcript_available,
+                fetched_at=row.fetched_at,
+                fetch_failed=row.fetch_failed,
+                fetch_error=row.fetch_error,
+            )
+            if row.message_id not in result_map:
+                result_map[row.message_id] = []
+            result_map[row.message_id].append(analysis)
+
+    return result_map
+
+
 def insert_link_analysis(engine: Engine, analysis: LinkAnalysis) -> None:
     """Insert a link analysis record.
 

@@ -42,6 +42,7 @@ from zos.database import (
     user_profiles,
     users,
 )
+from zos.links import LinkAnalyzer
 from zos.llm import ModelClient, RateLimiter
 from zos.logging import get_logger
 from zos.models import (
@@ -156,6 +157,16 @@ class ZosBot(commands.Bot):
         ] = asyncio.Queue(maxsize=config.observation.media_queue_max_size)
         self._media_analysis_task: asyncio.Task | None = None
 
+        # Queue for pending link analysis tasks
+        self._link_analysis_queue: asyncio.Queue[
+            tuple[str, str]
+        ] = asyncio.Queue(maxsize=config.observation.link_queue_max_size)
+        self._link_analysis_task: asyncio.Task | None = None
+        self._link_rate_limiter = RateLimiter(
+            calls_per_minute=config.observation.link_rate_limit_per_minute
+        )
+        self._link_analyzer: LinkAnalyzer | None = None
+
         # Earning coordinator for salience (lazy initialized when engine is available)
         self._earning_coordinator: "EarningCoordinator | None" = None
 
@@ -193,6 +204,13 @@ class ZosBot(commands.Bot):
             )
             log.info("background_task_started", task="media_analysis")
 
+        # Start link analysis background task if link fetch is enabled
+        if self.config.observation.link_fetch_enabled:
+            self._link_analysis_task = asyncio.create_task(
+                self._process_link_queue()
+            )
+            log.info("background_task_started", task="link_analysis")
+
     def _get_llm_client(self) -> ModelClient:
         """Get or create the LLM client for vision analysis.
 
@@ -202,6 +220,21 @@ class ZosBot(commands.Bot):
         if self._llm_client is None:
             self._llm_client = ModelClient(self.config, engine=self.engine)
         return self._llm_client
+
+    def _get_link_analyzer(self) -> LinkAnalyzer:
+        """Get or create the link analyzer.
+
+        Returns:
+            LinkAnalyzer instance.
+        """
+        if self._link_analyzer is None:
+            self._link_analyzer = LinkAnalyzer(
+                self.config,
+                self.engine,
+                self._get_llm_client(),
+                self._link_rate_limiter,
+            )
+        return self._link_analyzer
 
     def _get_earning_coordinator(self) -> "EarningCoordinator | None":
         """Get or create the earning coordinator for salience earning.
@@ -376,6 +409,7 @@ class ZosBot(commands.Bot):
             "poll_messages_tick_complete",
             messages_stored=total_messages,
             media_queue_depth=self._media_analysis_queue.qsize(),
+            link_queue_depth=self._link_analysis_queue.qsize(),
         )
 
     @poll_messages.before_loop
@@ -1084,6 +1118,10 @@ class ZosBot(commands.Bot):
         # Privacy boundary: never analyze media from anonymous users
         if has_media and message.attachments:
             await self._queue_media_for_analysis(message, author_id)
+
+        # Queue links for analysis
+        if has_links and message.content:
+            await self._queue_links_for_analysis(message, author_id)
 
     # =========================================================================
     # Privacy Gate
@@ -1836,6 +1874,95 @@ class ZosBot(commands.Bot):
                 for row in result
             ]
 
+    # =========================================================================
+    # Link Analysis
+    # =========================================================================
+
+    async def _queue_links_for_analysis(
+        self,
+        message: discord.Message,
+        author_id: str,
+    ) -> None:
+        """Queue message content for link analysis.
+
+        Privacy boundary: Anonymous users (<chat>) have their links logged
+        but NOT analyzed. This respects the privacy gate.
+
+        Args:
+            message: Discord message with links in content.
+            author_id: Resolved author ID (may be <chat_N> for anonymous users).
+        """
+        if not self.config.observation.link_fetch_enabled:
+            return
+
+        # Privacy boundary: never analyze links from anonymous users
+        if author_id.startswith("<chat"):
+            log.debug(
+                "links_skipped_anonymous",
+                message_id=str(message.id),
+            )
+            return
+
+        # Log warning if queue is getting full
+        queue_size = self._link_analysis_queue.qsize()
+        if queue_size > self.config.observation.link_queue_max_size * 0.8:
+            log.warning(
+                "link_queue_near_full",
+                queue_size=queue_size,
+                max_size=self.config.observation.link_queue_max_size,
+            )
+
+        try:
+            self._link_analysis_queue.put_nowait(
+                (str(message.id), message.content)
+            )
+            log.debug(
+                "links_queued",
+                message_id=str(message.id),
+            )
+        except asyncio.QueueFull:
+            log.warning(
+                "link_queue_full",
+                message_id=str(message.id),
+                queue_size=self.config.observation.link_queue_max_size,
+            )
+
+    async def _process_link_queue(self) -> None:
+        """Background task to process queued links for analysis.
+
+        Runs continuously, pulling items from the queue and analyzing them.
+        Uses rate limiting to prevent API exhaustion.
+        """
+        log.debug("link_analysis_task_started")
+
+        while not self._shutdown_requested:
+            try:
+                try:
+                    message_id, content = await asyncio.wait_for(
+                        self._link_analysis_queue.get(),
+                        timeout=5.0,
+                    )
+                except asyncio.TimeoutError:
+                    continue
+
+                analyzer = self._get_link_analyzer()
+                processed = await analyzer.process_links(message_id, content)
+
+                if processed > 0:
+                    log.debug(
+                        "links_processed",
+                        message_id=message_id,
+                        links_count=processed,
+                    )
+
+            except asyncio.CancelledError:
+                log.debug("link_analysis_task_cancelled")
+                break
+            except Exception as e:
+                log.error("link_analysis_queue_error", error=str(e))
+
+        log.debug("link_analysis_task_stopped")
+
     async def graceful_shutdown(self) -> None:
         """Perform graceful shutdown.
 
@@ -1858,6 +1985,14 @@ class ZosBot(commands.Bot):
             except asyncio.CancelledError:
                 pass
             log.debug("media_analysis_task_cancelled")
+
+        if self._link_analysis_task is not None:
+            self._link_analysis_task.cancel()
+            try:
+                await self._link_analysis_task
+            except asyncio.CancelledError:
+                pass
+            log.debug("link_analysis_task_cancelled")
 
         # Close the LLM client if initialized
         if self._llm_client is not None:

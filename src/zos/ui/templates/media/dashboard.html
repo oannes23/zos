@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Media — Zos{% endblock %}
+
+{% block content %}
+<h1>Media Dashboard</h1>
+<p class="text-muted">Link analyses, image descriptions, and YouTube summaries</p>
+
+<div class="budget-summary" hx-get="/ui/media/stats?days=30" hx-trigger="load">
+    Loading stats...
+</div>
+
+<div class="budget-grid mt-2">
+    <div class="card">
+        <h3>Link Analyses</h3>
+        <div id="links-list" hx-get="/ui/media/links" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
+</div>
+
+<div class="mt-2">
+    <div class="card">
+        <h3>Image Analyses</h3>
+        <div id="images-list" hx-get="/ui/media/images" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
+</div>
+{% endblock %}

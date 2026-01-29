@@ -60,7 +60,12 @@ http://localhost:8000/ui/
 Pages available:
 - `/ui/messages` — Browse and search stored messages
 - `/ui/insights` — Browse and filter insights
+- `/ui/users` — Browse users sorted by insight count
+- `/ui/channels` — Browse channels sorted by message count
+- `/ui/media` — Browse link analyses, image descriptions, and YouTube summaries
 - `/ui/salience` — Salience dashboard with budget groups
+- `/ui/budget` — Track API costs, token usage, and spending over time
+- `/ui/layers` — Browse configured reflection layers and their pipelines
 - `/ui/runs` — Layer run history and stats
 
 ---

@@ -177,6 +177,8 @@ class ObservationConfig(BaseModel):
     backfill_hours: int = 24
     reaction_user_rate_limit_per_minute: int = 20
     media_queue_max_size: int = 100
+    link_queue_max_size: int = 50
+    link_rate_limit_per_minute: int = 5
     reaction_resync_hours: int = 24
 
 
