@@ -227,6 +227,8 @@ class ZosBot(commands.Bot):
         """Called when connected to Discord.
 
         Logs connection status with server/channel counts for operational visibility.
+        Also registers the bot's own user profile and redistributes any salience
+        that was incorrectly accumulated on bot user topics.
         """
         guild_count = len(self.guilds)
         channel_count = sum(len(g.text_channels) for g in self.guilds)
@@ -237,6 +239,14 @@ class ZosBot(commands.Bot):
             guilds=guild_count,
             channels=channel_count,
         )
+
+        # Store bot user ID in config for API/UI contexts
+        if self.user:
+            self.config.discord.bot_user_id = str(self.user.id)
+
+        # Register bot profile and redistribute stale salience
+        await self._register_bot_profile()
+        await self._redistribute_bot_salience()
 
     async def on_disconnect(self) -> None:
         """Called when disconnected from Discord.
@@ -251,6 +261,50 @@ class ZosBot(commands.Bot):
         Indicates successful reconnection handling.
         """
         log.info("discord_resumed")
+
+    async def _register_bot_profile(self) -> None:
+        """Register the bot's own user profile in the database.
+
+        Creates a global profile and per-server profiles so that the bot
+        displays with a readable name in the UI instead of ``[unknown|ID]``.
+        """
+        if self.engine is None or self.user is None:
+            return
+
+        # Global profile (server_id=None)
+        await self._upsert_user_profile(self.user, server_id=None)
+
+        # Per-server profiles via guild.me (has roles, join date, etc.)
+        for guild in self.guilds:
+            if guild.me:
+                await self._upsert_user_profile(guild.me, server_id=str(guild.id))
+
+        log.info(
+            "bot_profile_registered",
+            bot_user_id=str(self.user.id),
+            guilds=len(self.guilds),
+        )
+
+    async def _redistribute_bot_salience(self) -> None:
+        """Redistribute any salience incorrectly accumulated on bot user topics.
+
+        Moves salience from ``server:{sid}:user:{bot_id}`` to the corresponding
+        ``server:{sid}:self:zos`` topic. Safe to run on every startup (idempotent).
+        """
+        if self.engine is None or self.user is None:
+            return
+
+        from zos.salience import SalienceLedger
+
+        ledger = SalienceLedger(self.engine, self.config)
+        bot_user_id = str(self.user.id)
+
+        redistributed = await ledger.redistribute_bot_user_salience(bot_user_id)
+        if redistributed > 0:
+            log.info(
+                "bot_salience_redistribution_complete",
+                topics_redistributed=redistributed,
+            )
 
     @tasks.loop(seconds=60)  # Default, overridden in setup_hook
     async def poll_messages(self) -> None:

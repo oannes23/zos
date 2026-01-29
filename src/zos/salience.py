@@ -1471,6 +1471,62 @@ class SalienceLedger:
                 for row in rows
             ]
 
+    async def redistribute_bot_user_salience(self, bot_user_id: str) -> int:
+        """Move any salience accumulated on bot user topics to self topics.
+
+        The bot should not accumulate salience as a community member. Any salience
+        earned to ``server:{sid}:user:{bot_id}`` or ``user:{bot_id}`` is transferred
+        to the corresponding self topic (``server:{sid}:self:zos`` or ``self:zos``).
+
+        Uses decay (not spend) for clean transfer without retention.
+        Idempotent — zero-balance topics are skipped.
+
+        Args:
+            bot_user_id: The Discord user ID of the bot.
+
+        Returns:
+            Number of topics redistributed.
+        """
+        # Find all topics that are user topics for the bot
+        with self.engine.connect() as conn:
+            stmt = select(topics).where(
+                topics.c.category == "user",
+            )
+            rows = conn.execute(stmt).fetchall()
+
+        redistributed = 0
+        for row in rows:
+            key = row.key
+            # Match server:{sid}:user:{bot_id} or user:{bot_id}
+            if key == f"user:{bot_user_id}":
+                self_topic = "self:zos"
+            elif key.endswith(f":user:{bot_user_id}") and key.startswith("server:"):
+                # Extract server_id from server:{sid}:user:{bot_id}
+                parts = key.split(":")
+                server_id = parts[1]
+                self_topic = f"server:{server_id}:self:zos"
+            else:
+                continue
+
+            balance = await self.get_balance(key)
+            if balance <= 0:
+                continue
+
+            # Decay full balance from bot user topic
+            await self.decay(key, balance, reason=f"redistribute_to_{self_topic}")
+            # Earn same amount to self topic
+            await self.earn(self_topic, balance, reason=f"redistributed_from_{key}")
+
+            log.info(
+                "bot_salience_redistributed",
+                source=key,
+                target=self_topic,
+                amount=balance,
+            )
+            redistributed += 1
+
+        return redistributed
+
 
 class TopicWithBalance:
     """Topic with computed salience balance."""
@@ -1627,6 +1683,9 @@ class EarningCoordinator:
         # 4. Mentions
         mentions = self.extract_mentions(message.content)
         for mentioned_id in mentions:
+            # Skip the bot itself — self-mention handling is in step 5
+            if mentioned_id == self.bot_user_id:
+                continue
             mention_topic = await self.earn_mention(
                 server_id, mentioned_id, message.id, propagate=propagate
             )

@@ -866,3 +866,98 @@ async def test_earning_coordinator_without_bot_id_skips_self_mention(
     # Should not include self topic when bot_user_id is None
     assert "server:server789:self:zos" not in topics
     assert "self:zos" not in topics
+
+
+# =============================================================================
+# Test: Bot Mention Does NOT Earn to user:{bot_id} Topic
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_bot_mention_does_not_earn_to_bot_user_topic(
+    earning_coordinator, ledger: SalienceLedger
+) -> None:
+    """Test that mentioning the bot does NOT earn salience to user:{bot_id} topic."""
+    from zos.models import Message, VisibilityScope, utcnow
+
+    message = Message(
+        id="msg_bot_skip",
+        channel_id="channel456",
+        server_id="server789",
+        author_id="user111",
+        content="Hey <@999888777> what do you think?",
+        created_at=utcnow(),
+        visibility_scope=VisibilityScope.PUBLIC,
+    )
+
+    topics = await earning_coordinator.process_message(message)
+
+    # Bot user topic should NOT appear in earned topics
+    assert "server:server789:user:999888777" not in topics
+
+    # Bot user topic should have zero balance
+    balance = await ledger.get_balance("server:server789:user:999888777")
+    assert balance == 0.0
+
+    # But the self topic SHOULD have earned
+    assert "server:server789:self:zos" in topics
+    self_balance = await ledger.get_balance("server:server789:self:zos")
+    assert self_balance > 0
+
+
+# =============================================================================
+# Test: Redistribution Moves Salience from Bot User Topics to Self Topics
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_redistribute_bot_user_salience(ledger: SalienceLedger) -> None:
+    """Test that redistribution moves salience from bot user topics to self topics."""
+    bot_id = "999888777"
+
+    # Simulate salience that was incorrectly accumulated on bot user topics
+    await ledger.earn(f"server:s1:user:{bot_id}", 20.0)
+    await ledger.earn(f"server:s2:user:{bot_id}", 10.0)
+
+    # Verify it's there
+    assert await ledger.get_balance(f"server:s1:user:{bot_id}") == 20.0
+    assert await ledger.get_balance(f"server:s2:user:{bot_id}") == 10.0
+
+    # Redistribute
+    count = await ledger.redistribute_bot_user_salience(bot_id)
+
+    assert count == 2
+
+    # Bot user topics should now be zero
+    assert await ledger.get_balance(f"server:s1:user:{bot_id}") == 0.0
+    assert await ledger.get_balance(f"server:s2:user:{bot_id}") == 0.0
+
+    # Self topics should have received the salience
+    assert await ledger.get_balance("server:s1:self:zos") == 20.0
+    assert await ledger.get_balance("server:s2:self:zos") == 10.0
+
+
+# =============================================================================
+# Test: Redistribution Is Idempotent
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_redistribute_bot_user_salience_idempotent(ledger: SalienceLedger) -> None:
+    """Test that running redistribution twice is a no-op the second time."""
+    bot_id = "999888777"
+
+    # Simulate stale salience
+    await ledger.earn(f"server:s1:user:{bot_id}", 15.0)
+
+    # First redistribution
+    count1 = await ledger.redistribute_bot_user_salience(bot_id)
+    assert count1 == 1
+    assert await ledger.get_balance("server:s1:self:zos") == 15.0
+
+    # Second redistribution — should be a no-op
+    count2 = await ledger.redistribute_bot_user_salience(bot_id)
+    assert count2 == 0
+
+    # Self topic balance unchanged
+    assert await ledger.get_balance("server:s1:self:zos") == 15.0

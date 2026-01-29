@@ -206,6 +206,7 @@ class DiscordConfig(BaseModel):
 
     polling_interval_seconds: int = 300
     operators: OperatorsConfig = Field(default_factory=OperatorsConfig)
+    bot_user_id: str | None = None  # Auto-detected at runtime from Discord
 
 
 class DatabaseConfig(BaseModel):
