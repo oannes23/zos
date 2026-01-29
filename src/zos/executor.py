@@ -52,6 +52,7 @@ from zos.models import (
 from zos.salience import SalienceLedger
 from zos.templates import (
     TemplateEngine,
+    extract_channel_mention_ids,
     extract_mention_ids,
     format_insights_for_prompt,
     format_messages_for_prompt,
@@ -924,6 +925,57 @@ class LayerExecutor:
 
         return user_id_to_name
 
+    async def _resolve_channel_mention_names(
+        self,
+        messages: list[Message],
+    ) -> dict[str, str]:
+        """Resolve Discord channel IDs from mentions to channel names.
+
+        Extracts all mentioned channel IDs from message content and batch queries
+        the channels table to get names.
+
+        Args:
+            messages: List of Message models to extract channel mentions from.
+
+        Returns:
+            Dictionary mapping channel_id -> channel_name.
+            Channels not found in the database are omitted from the result.
+        """
+        # Extract all unique mentioned channel IDs
+        mentioned_ids: set[str] = set()
+        for msg in messages:
+            if msg.content:
+                mentioned_ids.update(extract_channel_mention_ids(msg.content))
+
+        if not mentioned_ids:
+            return {}
+
+        # Batch query channels table
+        with self.engine.connect() as conn:
+            query = (
+                select(
+                    channels_table.c.id,
+                    channels_table.c.name,
+                )
+                .where(channels_table.c.id.in_(mentioned_ids))
+            )
+
+            rows = conn.execute(query).fetchall()
+
+        # Build mapping
+        channel_id_to_name: dict[str, str] = {}
+        for row in rows:
+            if row.name:
+                channel_id_to_name[row.id] = row.name
+
+        log.debug(
+            "channel_mention_names_resolved",
+            mentioned_count=len(mentioned_ids),
+            resolved_count=len(channel_id_to_name),
+        )
+
+        return channel_id_to_name
+
     async def _handle_llm_call(self, node: Node, ctx: ExecutionContext) -> None:
         """Call the LLM with rendered prompt.
 
@@ -1004,6 +1056,9 @@ class LayerExecutor:
         # Resolve Discord mention IDs to display names
         mention_names = await self._resolve_mention_names(ctx.messages)
 
+        # Resolve Discord channel mention IDs to channel names
+        channel_names = await self._resolve_channel_mention_names(ctx.messages)
+
         # Prepare insights data for template
         insights_data = [
             {
@@ -1052,7 +1107,8 @@ class LayerExecutor:
                 "user_profiles": user_profiles,
                 "channel_info": channel_info,
                 "messages": format_messages_for_prompt(
-                    messages_data, {}, mention_names=mention_names
+                    messages_data, {}, mention_names=mention_names,
+                    channel_names=channel_names,
                 ),
                 "insights": format_insights_for_prompt(insights_data),
                 "individual_insights": ctx.individual_insights,

@@ -28,6 +28,9 @@ from zos.logging import get_logger
 # Discord user mention format: <@123456789> or <@!123456789> (with nickname)
 DISCORD_MENTION_PATTERN = re.compile(r"<@!?(\d+)>")
 
+# Discord channel mention format: <#123456789>
+DISCORD_CHANNEL_MENTION_PATTERN = re.compile(r"<#(\d+)>")
+
 log = get_logger("templates")
 
 
@@ -323,6 +326,20 @@ def extract_mention_ids(content: str) -> list[str]:
     return DISCORD_MENTION_PATTERN.findall(content)
 
 
+def extract_channel_mention_ids(content: str) -> list[str]:
+    """Extract Discord channel IDs from mentions in content.
+
+    Discord channel mention format: <#123456789>
+
+    Args:
+        content: Message content to parse.
+
+    Returns:
+        List of channel IDs mentioned in the content.
+    """
+    return DISCORD_CHANNEL_MENTION_PATTERN.findall(content)
+
+
 def replace_mentions(
     content: str,
     user_id_to_name: dict[str, str],
@@ -347,6 +364,30 @@ def replace_mentions(
     return DISCORD_MENTION_PATTERN.sub(replacer, content)
 
 
+def replace_channel_mentions(
+    content: str,
+    channel_id_to_name: dict[str, str],
+) -> str:
+    """Replace Discord channel mention IDs with channel names.
+
+    Args:
+        content: Message content with raw channel mentions like <#123456789>.
+        channel_id_to_name: Mapping of channel_id -> channel name.
+
+    Returns:
+        Content with channel mentions replaced by #channel-name format.
+        Unknown channels keep original <#CHANNEL_ID> format.
+    """
+    def replacer(match: re.Match[str]) -> str:
+        channel_id = match.group(1)
+        if channel_id in channel_id_to_name:
+            return f"#{channel_id_to_name[channel_id]}"
+        # Unknown channel - keep original format
+        return match.group(0)
+
+    return DISCORD_CHANNEL_MENTION_PATTERN.sub(replacer, content)
+
+
 # =============================================================================
 # Context Formatting Helpers
 # =============================================================================
@@ -356,6 +397,7 @@ def format_messages_for_prompt(
     messages: list[dict[str, Any]],
     anonymize: dict[str, str] | None = None,
     mention_names: dict[str, str] | None = None,
+    channel_names: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Format messages for template context.
 
@@ -364,6 +406,9 @@ def format_messages_for_prompt(
         anonymize: Optional mapping of user_id -> display name for anonymization.
         mention_names: Optional mapping of user_id -> display name for mention resolution.
             When provided, Discord mentions like <@123456789> are replaced with @DisplayName.
+        channel_names: Optional mapping of channel_id -> channel name for channel mention
+            resolution. When provided, Discord channel mentions like <#123456789> are
+            replaced with #channel-name.
 
     Returns:
         List of formatted message dicts ready for template rendering.
@@ -376,10 +421,12 @@ def format_messages_for_prompt(
         author_id = msg.get("author_id", "unknown")
         display = anonymize.get(author_id, author_id)
 
-        # Get the content and resolve mentions if mapping provided
+        # Get the content and resolve mentions if mappings provided
         content = msg.get("content", "")
         if mention_names:
             content = replace_mentions(content, mention_names)
+        if channel_names:
+            content = replace_channel_mentions(content, channel_names)
 
         formatted.append(
             {

@@ -144,6 +144,10 @@ Target: server:123:user:456 (Alice)
 │    • self-concept.md                │
 │    • Topic metadata                 │
 │                                     │
+│    Mentions resolved:               │
+│    • <@ID> → @DisplayName           │
+│    • <#ID> → #channel-name          │
+│                                     │
 │    Model: claude-sonnet-4           │
 │    Temperature: 0.7                 │
 └────────────────┬────────────────────┘

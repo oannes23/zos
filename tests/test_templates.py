@@ -912,3 +912,155 @@ def test_format_messages_no_mention_names() -> None:
     formatted = format_messages_for_prompt(messages)
 
     assert formatted[0]["content"] == "Hey <@456> check this out!"
+
+
+# =============================================================================
+# Discord Channel Mention Utilities Tests
+# =============================================================================
+
+
+def test_extract_channel_mention_ids_basic() -> None:
+    """Test extracting channel mention IDs from content."""
+    from zos.templates import extract_channel_mention_ids
+
+    content = "Check out <#123456789> for updates"
+    ids = extract_channel_mention_ids(content)
+
+    assert ids == ["123456789"]
+
+
+def test_extract_channel_mention_ids_multiple() -> None:
+    """Test extracting multiple channel mention IDs."""
+    from zos.templates import extract_channel_mention_ids
+
+    content = "See <#111> and <#222> and <#333>"
+    ids = extract_channel_mention_ids(content)
+
+    assert ids == ["111", "222", "333"]
+
+
+def test_extract_channel_mention_ids_none() -> None:
+    """Test content with no channel mentions."""
+    from zos.templates import extract_channel_mention_ids
+
+    content = "Just a normal message with no channel mentions"
+    ids = extract_channel_mention_ids(content)
+
+    assert ids == []
+
+
+def test_extract_channel_mention_ids_empty() -> None:
+    """Test empty content."""
+    from zos.templates import extract_channel_mention_ids
+
+    ids = extract_channel_mention_ids("")
+
+    assert ids == []
+
+
+def test_extract_channel_mention_ids_not_user_mentions() -> None:
+    """Test that user mentions are not extracted as channel mentions."""
+    from zos.templates import extract_channel_mention_ids
+
+    content = "Hey <@123456789> check <#987654321>"
+    ids = extract_channel_mention_ids(content)
+
+    assert ids == ["987654321"]
+
+
+def test_replace_channel_mentions_basic() -> None:
+    """Test replacing channel mentions with channel names."""
+    from zos.templates import replace_channel_mentions
+
+    content = "Check out <#123456789> for updates"
+    mapping = {"123456789": "general"}
+
+    result = replace_channel_mentions(content, mapping)
+
+    assert result == "Check out #general for updates"
+
+
+def test_replace_channel_mentions_multiple() -> None:
+    """Test replacing multiple channel mentions."""
+    from zos.templates import replace_channel_mentions
+
+    content = "<#111> and <#222> and <#333>"
+    mapping = {"111": "general", "222": "random", "333": "dev"}
+
+    result = replace_channel_mentions(content, mapping)
+
+    assert result == "#general and #random and #dev"
+
+
+def test_replace_channel_mentions_unknown_channel() -> None:
+    """Test that unknown channels keep original mention format."""
+    from zos.templates import replace_channel_mentions
+
+    content = "<#123> and <#456>"
+    mapping = {"123": "general"}  # 456 not in mapping
+
+    result = replace_channel_mentions(content, mapping)
+
+    assert result == "#general and <#456>"
+
+
+def test_replace_channel_mentions_empty_mapping() -> None:
+    """Test with empty mapping - all channel mentions should remain unchanged."""
+    from zos.templates import replace_channel_mentions
+
+    content = "Check <#123> and <#456>"
+    result = replace_channel_mentions(content, {})
+
+    assert result == content
+
+
+def test_replace_channel_mentions_no_mentions() -> None:
+    """Test content with no channel mentions."""
+    from zos.templates import replace_channel_mentions
+
+    content = "Just a normal message"
+    mapping = {"123": "general"}
+
+    result = replace_channel_mentions(content, mapping)
+
+    assert result == content
+
+
+def test_format_messages_with_channel_names() -> None:
+    """Test message formatting with channel name resolution."""
+    messages = [
+        {"author_id": "123", "content": "Check out <#456> for the discussion"},
+        {"author_id": "789", "content": "Also see <#101112>"},
+    ]
+    channel_names = {"456": "general", "101112": "dev-chat"}
+
+    formatted = format_messages_for_prompt(messages, channel_names=channel_names)
+
+    assert formatted[0]["content"] == "Check out #general for the discussion"
+    assert formatted[1]["content"] == "Also see #dev-chat"
+
+
+def test_format_messages_with_both_mention_and_channel_names() -> None:
+    """Test message formatting with both user and channel name resolution."""
+    messages = [
+        {"author_id": "123", "content": "Hey <@456>, check <#789>!"},
+    ]
+    mention_names = {"456": "Alice"}
+    channel_names = {"789": "announcements"}
+
+    formatted = format_messages_for_prompt(
+        messages, mention_names=mention_names, channel_names=channel_names
+    )
+
+    assert formatted[0]["content"] == "Hey @Alice, check #announcements!"
+
+
+def test_format_messages_no_channel_names() -> None:
+    """Test message formatting without channel_names preserves original."""
+    messages = [
+        {"author_id": "123", "content": "Check out <#456> for updates"},
+    ]
+
+    formatted = format_messages_for_prompt(messages)
+
+    assert formatted[0]["content"] == "Check out <#456> for updates"

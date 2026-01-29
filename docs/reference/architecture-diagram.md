@@ -124,6 +124,7 @@ Renders prompt templates.
 - Jinja2 templates
 - Context assembly
 - Self-concept inclusion
+- Discord mention resolution (user `<@ID>` → `@Name`, channel `<#ID>` → `#name`)
 
 ### Insight Retriever
 
