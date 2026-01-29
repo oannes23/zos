@@ -222,7 +222,7 @@ class TestHtmxIntegration:
         response = client.get("/ui/")
         # Should have htmx load triggers for dashboard content
         assert 'hx-get="/ui/insights/recent"' in response.text
-        assert 'hx-get="/ui/salience/top"' in response.text
+        assert 'hx-get="/ui/salience/top' in response.text  # May have query params
         assert 'hx-get="/ui/runs/recent"' in response.text
 
 
@@ -288,3 +288,94 @@ class TestDarkTheme:
         assert "--success: #4ecca3" in response.text
         assert "--warning: #ffc107" in response.text
         assert "--error: #ff6b6b" in response.text
+
+
+# =============================================================================
+# Test: Topic Display Formatting
+# =============================================================================
+
+
+class TestFormatTopicDisplay:
+    """Tests for: _format_topic_display handles names correctly."""
+
+    def test_user_name_with_space(self) -> None:
+        """User names with spaces should be preserved."""
+        from zos.api.ui import _format_topic_display
+
+        # Simulates resolved key with user name containing space
+        resolved_key = "server:Test Server:user:Ron Juggeri"
+        result = _format_topic_display(resolved_key)
+        assert result == "Test Server - Ron Juggeri"
+
+    def test_server_name_with_space(self) -> None:
+        """Server names with spaces should be preserved."""
+        from zos.api.ui import _format_topic_display
+
+        resolved_key = "server:My Cool Server:user:Alice"
+        result = _format_topic_display(resolved_key)
+        assert result == "My Cool Server - Alice"
+
+    def test_both_names_with_spaces(self) -> None:
+        """Both server and user names can have spaces."""
+        from zos.api.ui import _format_topic_display
+
+        resolved_key = "server:Test Server:user:Ron Juggeri"
+        result = _format_topic_display(resolved_key)
+        assert result == "Test Server - Ron Juggeri"
+
+    def test_unknown_user_displays_correctly(self) -> None:
+        """Unknown user placeholder should display completely."""
+        from zos.api.ui import _format_topic_display
+
+        # Uses pipe instead of colon to avoid breaking split
+        resolved_key = "server:Test Server:user:[unknown|123456789]"
+        result = _format_topic_display(resolved_key)
+        assert result == "Test Server - [unknown|123456789]"
+
+    def test_unknown_server_displays_correctly(self) -> None:
+        """Unknown server placeholder should display completely."""
+        from zos.api.ui import _format_topic_display
+
+        resolved_key = "server:[unknown|987654321]:user:Alice"
+        result = _format_topic_display(resolved_key)
+        assert result == "[unknown|987654321] - Alice"
+
+    def test_unknown_both_displays_correctly(self) -> None:
+        """Both unknown placeholders should display completely."""
+        from zos.api.ui import _format_topic_display
+
+        resolved_key = "server:[unknown|111]:user:[unknown|222]"
+        result = _format_topic_display(resolved_key)
+        assert result == "[unknown|111] - [unknown|222]"
+
+    def test_dyad_names_with_spaces(self) -> None:
+        """Dyad topic with names containing spaces."""
+        from zos.api.ui import _format_topic_display
+
+        resolved_key = "server:Test Server:dyad:Ron Juggeri:Alice Smith"
+        result = _format_topic_display(resolved_key)
+        assert result == "Test Server - Ron Juggeri & Alice Smith"
+
+    def test_channel_name_with_space(self) -> None:
+        """Channel names can have spaces."""
+        from zos.api.ui import _format_topic_display
+
+        resolved_key = "server:Test Server:channel:#general chat"
+        result = _format_topic_display(resolved_key)
+        assert result == "Test Server - #general chat"
+
+    def test_global_user_with_space(self) -> None:
+        """Global user topic with name containing space."""
+        from zos.api.ui import _format_topic_display
+
+        resolved_key = "user:Ron Juggeri"
+        result = _format_topic_display(resolved_key)
+        assert result == "Ron Juggeri"
+
+    def test_global_dyad_with_spaces(self) -> None:
+        """Global dyad topic with names containing spaces."""
+        from zos.api.ui import _format_topic_display
+
+        resolved_key = "dyad:Ron Juggeri:Alice Smith"
+        result = _format_topic_display(resolved_key)
+        assert result == "Ron Juggeri & Alice Smith"

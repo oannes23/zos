@@ -50,7 +50,7 @@ class NameResolver:
             # Server-scoped topics: server:<id>:...
             server_id = parts[1]
             server_name = await self._get_server_name(server_id)
-            parts[1] = server_name or f"[unknown:{server_id}]"
+            parts[1] = server_name or f"[unknown|{server_id}]"
 
             if len(parts) >= 4:
                 entity_type = parts[2]
@@ -101,7 +101,7 @@ class NameResolver:
             if name:
                 parts[index] = f"#{name}"
             else:
-                parts[index] = f"[unknown:{entity_id}]"
+                parts[index] = f"[unknown|{entity_id}]"
         # emoji: already human-readable in key
         # role: would need separate table, fallback to ID for now
         elif entity_type == "role":
@@ -133,7 +133,7 @@ class NameResolver:
         """Get user display name by ID, using cache.
 
         Falls back to username#discriminator if no display name.
-        Returns [unknown:ID] if user not found.
+        Returns [unknown|ID] if user not found.
 
         Args:
             user_id: Discord user snowflake ID.
@@ -143,7 +143,7 @@ class NameResolver:
         """
         cache_key = f"user:{user_id}"
         if cache_key in self._cache:
-            return self._cache[cache_key] or f"[unknown:{user_id}]"
+            return self._cache[cache_key] or f"[unknown|{user_id}]"
 
         with self.db.connect() as conn:
             # Try to find most recent profile for this user
@@ -170,7 +170,7 @@ class NameResolver:
                 name = None
 
         self._cache[cache_key] = name
-        return name or f"[unknown:{user_id}]"
+        return name or f"[unknown|{user_id}]"
 
     async def _get_channel_name(self, channel_id: str) -> str | None:
         """Get channel name by ID, using cache.

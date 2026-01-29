@@ -350,7 +350,7 @@ class TestServerNameResolution:
 
         assert response.status_code == 200
         data = response.json()
-        assert f"[unknown:{server_id}]" in data["insights"][0]["topic_key"]
+        assert f"[unknown|{server_id}]" in data["insights"][0]["topic_key"]
 
 
 # =============================================================================
@@ -448,7 +448,7 @@ class TestUserNameResolution:
 
         assert response.status_code == 200
         data = response.json()
-        assert f"[unknown:{user_id}]" in data["insights"][0]["topic_key"]
+        assert f"[unknown|{user_id}]" in data["insights"][0]["topic_key"]
 
 
 # =============================================================================
@@ -493,7 +493,7 @@ class TestChannelNameResolution:
 
         assert response.status_code == 200
         data = response.json()
-        assert f"[unknown:{channel_id}]" in data["insights"][0]["topic_key"]
+        assert f"[unknown|{channel_id}]" in data["insights"][0]["topic_key"]
 
 
 # =============================================================================
