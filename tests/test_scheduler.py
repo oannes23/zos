@@ -890,6 +890,53 @@ async def test_cron_schedule_utc_timezone(
         scheduler_with_layers.stop()
 
 
+@pytest.mark.asyncio
+async def test_cron_schedule_respects_configured_timezone(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    layers_dir: Path,
+    sample_layer_yaml: str,
+) -> None:
+    """Test that cron schedules respect the configured timezone."""
+    from zoneinfo import ZoneInfo
+
+    # Create a config with Pacific timezone
+    test_config.scheduler.timezone = "America/Los_Angeles"
+
+    # Write sample layer file
+    (layers_dir / "nightly-user-reflection.yaml").write_text(sample_layer_yaml)
+
+    # Create scheduler with Pacific timezone config
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    scheduler.start()
+
+    try:
+        job = scheduler.get_job("layer:nightly-user-reflection")
+
+        # The next run time should be timezone-aware
+        assert job["next_run_time"].tzinfo is not None
+
+        # Convert to Pacific to verify the scheduled time
+        pacific_time = job["next_run_time"].astimezone(ZoneInfo("America/Los_Angeles"))
+        # The job is scheduled for "0 13 * * *" (1pm Pacific)
+        assert pacific_time.hour == 13
+        assert pacific_time.minute == 0
+    finally:
+        scheduler.stop()
+
+
 # =============================================================================
 # Integration Tests
 # =============================================================================

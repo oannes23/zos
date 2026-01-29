@@ -134,6 +134,7 @@ class SalienceConfig(BaseModel):
     decay_threshold_days: int = 7
     decay_rate_per_day: float = 0.01
     warm_threshold: float = 1.0
+    cost_per_token: float = 0.001  # Salience cost per LLM token for reflection spending
     budget: SalienceBudgetConfig = Field(default_factory=SalienceBudgetConfig)
     self_budget: float = 20
 

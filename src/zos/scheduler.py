@@ -21,6 +21,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -85,6 +86,10 @@ class ReflectionScheduler:
         self.config = config
         self._db_path = db_path  # Stored for reference but not used
 
+        # Resolve configured timezone
+        tz_name = config.scheduler.timezone
+        self._timezone = ZoneInfo(tz_name) if tz_name != "UTC" else timezone.utc
+
         # Create scheduler with in-memory job store
         # Jobs are rebuilt from layer YAML files on every startup,
         # so persistence is not needed (and async methods can't be pickled)
@@ -94,7 +99,7 @@ class ReflectionScheduler:
                 "max_instances": 1,  # No concurrent runs of same job
                 "misfire_grace_time": 3600,  # 1 hour grace for missed jobs
             },
-            timezone=timezone.utc,  # All schedules in UTC
+            timezone=self._timezone,
         )
 
     def start(self) -> None:
@@ -109,7 +114,7 @@ class ReflectionScheduler:
         log.info(
             "scheduler_started",
             jobs=len(self.scheduler.get_jobs()),
-            timezone="UTC",
+            timezone=self.config.scheduler.timezone,
         )
 
     def stop(self) -> None:
@@ -147,9 +152,9 @@ class ReflectionScheduler:
         if existing:
             self.scheduler.remove_job(job_id)
 
-        # Parse cron schedule with explicit UTC timezone
+        # Parse cron schedule with configured timezone
         try:
-            trigger = CronTrigger.from_crontab(layer.schedule, timezone=timezone.utc)
+            trigger = CronTrigger.from_crontab(layer.schedule, timezone=self._timezone)
         except ValueError as e:
             log.error(
                 "invalid_cron_schedule",

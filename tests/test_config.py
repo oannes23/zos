@@ -173,6 +173,7 @@ def test_salience_config_defaults() -> None:
     assert config.weights.message == 1.0
     assert config.propagation_factor == 0.3
     assert config.warm_threshold == 1.0
+    assert config.cost_per_token == 0.001
     assert config.budget.social == 0.30
 
 
