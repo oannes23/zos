@@ -518,12 +518,13 @@ class LinkAnalyzer:
 
             # This library is synchronous, run in executor
             loop = asyncio.get_event_loop()
-            transcript_list = await loop.run_in_executor(
-                None, lambda: YouTubeTranscriptApi.get_transcript(video_id)
+            ytt = YouTubeTranscriptApi()
+            transcript = await loop.run_in_executor(
+                None, lambda: ytt.fetch(video_id)
             )
 
-            # Combine transcript segments
-            return " ".join(segment["text"] for segment in transcript_list)
+            # Combine transcript snippets
+            return " ".join(snippet.text for snippet in transcript.snippets)
 
         except Exception as e:
             log.debug("transcript_unavailable", video_id=video_id, error=str(e))
@@ -563,14 +564,15 @@ class LinkAnalyzer:
                     from youtube_transcript_api import YouTubeTranscriptApi
 
                     loop = asyncio.get_event_loop()
-                    transcript_list = await loop.run_in_executor(
-                        None, lambda: YouTubeTranscriptApi.get_transcript(video_id)
+                    ytt = YouTubeTranscriptApi()
+                    transcript = await loop.run_in_executor(
+                        None, lambda: ytt.fetch(video_id)
                     )
-                    if transcript_list:
-                        # Duration is approximately the end time of the last segment
-                        last_segment = transcript_list[-1]
+                    if transcript.snippets:
+                        # Duration is approximately the end time of the last snippet
+                        last_snippet = transcript.snippets[-1]
                         duration_seconds = int(
-                            last_segment.get("start", 0) + last_segment.get("duration", 0)
+                            last_snippet.start + last_snippet.duration
                         )
                 except Exception:
                     pass
