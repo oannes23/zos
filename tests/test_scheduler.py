@@ -32,7 +32,7 @@ from zos.database import (
 from zos.executor import LayerExecutor
 from zos.layers import Layer, LayerCategory, LayerLoader, Node, NodeType
 from zos.models import LayerRun, LayerRunStatus, Topic, TopicCategory, utcnow
-from zos.salience import ReflectionSelector, SalienceLedger
+from zos.salience import BudgetGroup, ReflectionSelector, SalienceLedger
 from zos.scheduler import ReflectionScheduler
 
 
@@ -994,3 +994,270 @@ async def test_full_scheduled_execution_flow(
         mock_executor.execute_layer.assert_called_once()
     finally:
         scheduler.stop()
+
+
+# =============================================================================
+# Per-Server Reflection Budget Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_active_servers(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    engine,
+) -> None:
+    """Test _get_active_servers returns distinct server IDs from topics."""
+    # Create topics for multiple servers
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values([
+                {
+                    "key": "server:111:user:user1",
+                    "category": "user",
+                    "is_global": False,
+                    "provisional": False,
+                    "created_at": utcnow(),
+                },
+                {
+                    "key": "server:111:user:user2",
+                    "category": "user",
+                    "is_global": False,
+                    "provisional": False,
+                    "created_at": utcnow(),
+                },
+                {
+                    "key": "server:222:channel:chan1",
+                    "category": "channel",
+                    "is_global": False,
+                    "provisional": False,
+                    "created_at": utcnow(),
+                },
+                {
+                    "key": "user:global1",  # Global topic - should not be included
+                    "category": "user",
+                    "is_global": True,
+                    "provisional": False,
+                    "created_at": utcnow(),
+                },
+            ])
+        )
+        conn.commit()
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    servers = await scheduler._get_active_servers()
+
+    # Should get exactly 2 distinct server IDs
+    assert len(servers) == 2
+    assert set(servers) == {"111", "222"}
+
+
+@pytest.mark.asyncio
+async def test_per_server_budget_selection(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    layers_dir: Path,
+    sample_layer_yaml: str,
+    engine,
+) -> None:
+    """Test that per-server budgets are used for topic selection."""
+    import yaml
+
+    # Create config with different budgets per server
+    config_data = {
+        "data_dir": str(tmp_path),
+        "servers": {
+            "high_priority": {
+                "reflection_budget": 150.0
+            },
+            "low_priority": {
+                "reflection_budget": 50.0
+            }
+        },
+        "salience": {
+            "global_reflection_budget": 20.0
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    from zos.config import Config
+    test_config = Config.load(config_path)
+
+    # Write layer file
+    (layers_dir / "nightly-user-reflection.yaml").write_text(sample_layer_yaml)
+
+    # Create topics for both servers
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values([
+                {
+                    "key": "server:high_priority:user:user1",
+                    "category": "user",
+                    "is_global": False,
+                    "provisional": False,
+                    "created_at": utcnow(),
+                },
+                {
+                    "key": "server:low_priority:user:user2",
+                    "category": "user",
+                    "is_global": False,
+                    "provisional": False,
+                    "created_at": utcnow(),
+                },
+            ])
+        )
+        conn.commit()
+
+    # Add salience to make topics selectable
+    await ledger.earn("server:high_priority:user:user1", 50.0, reason="test")
+    await ledger.earn("server:low_priority:user:user2", 50.0, reason="test")
+
+    # Re-create selector with new config
+    selector = ReflectionSelector(ledger, test_config)
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=LayerLoader(layers_dir),
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    # Verify server configs are being used correctly
+    high_config = test_config.get_server_config("high_priority")
+    low_config = test_config.get_server_config("low_priority")
+    unconfigured = test_config.get_server_config("unconfigured")
+
+    assert high_config.reflection_budget == 150.0
+    assert low_config.reflection_budget == 50.0
+    assert unconfigured.reflection_budget == 100.0  # Default
+
+    # Verify global budget is configured
+    assert test_config.salience.global_reflection_budget == 20.0
+
+
+@pytest.mark.asyncio
+async def test_select_topics_with_no_servers(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    layers_dir: Path,
+    sample_layer_yaml: str,
+    engine,
+) -> None:
+    """Test _select_topics includes global topics when no servers have topics."""
+    # Write layer file
+    (layers_dir / "nightly-user-reflection.yaml").write_text(sample_layer_yaml)
+
+    # Create a fresh loader that knows about the layer
+    loader = LayerLoader(layers_dir)
+    # Force loading the layers
+    loader.load_all()
+
+    # Create only a global topic (no server topics)
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values(
+                key="user:global1",
+                category="user",
+                is_global=True,
+                provisional=False,
+                created_at=utcnow(),
+            )
+        )
+        conn.commit()
+
+    # Add salience to the global topic
+    await ledger.earn("user:global1", 50.0, reason="test")
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    layer = loader.get_layer("nightly-user-reflection")
+    assert layer is not None, "Layer should be loaded"
+    topics = await scheduler._select_topics(layer)
+
+    # Should get the global topic from global budget
+    assert "user:global1" in topics
+
+
+@pytest.mark.asyncio
+async def test_global_only_selection(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    ledger: SalienceLedger,
+    test_config: Config,
+    engine,
+) -> None:
+    """Test select_for_reflection with global_only=True."""
+    # Create both server-scoped and global topics
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values([
+                {
+                    "key": "server:123:user:user1",
+                    "category": "user",
+                    "is_global": False,
+                    "provisional": False,
+                    "created_at": utcnow(),
+                },
+                {
+                    "key": "user:global1",
+                    "category": "user",
+                    "is_global": True,
+                    "provisional": False,
+                    "created_at": utcnow(),
+                },
+            ])
+        )
+        conn.commit()
+
+    # Add salience to both
+    await ledger.earn("server:123:user:user1", 50.0, reason="test")
+    await ledger.earn("user:global1", 50.0, reason="test")
+
+    selector = ReflectionSelector(ledger, test_config)
+
+    # Select with global_only=True
+    selected = await selector.select_for_reflection(
+        total_budget=100.0,
+        server_id=None,
+        global_only=True,
+    )
+
+    # Should only get GLOBAL group populated
+    assert len(selected[BudgetGroup.GLOBAL]) > 0
+    assert "user:global1" in selected[BudgetGroup.GLOBAL]
+
+    # Other groups should be empty
+    assert len(selected[BudgetGroup.SOCIAL]) == 0
+    assert len(selected[BudgetGroup.SPACES]) == 0
+    assert len(selected[BudgetGroup.SEMANTIC]) == 0
+    assert len(selected[BudgetGroup.CULTURE]) == 0

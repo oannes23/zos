@@ -2075,6 +2075,7 @@ class ReflectionSelector:
         self,
         total_budget: float,
         server_id: str | None = None,
+        global_only: bool = False,
     ) -> dict[BudgetGroup, list[str]]:
         """Select topics for reflection within budget constraints.
 
@@ -2085,10 +2086,30 @@ class ReflectionSelector:
         Args:
             total_budget: Total salience budget available for reflection.
             server_id: Optional server ID to filter topics.
+            global_only: If True, only select global topics (BudgetGroup.GLOBAL).
 
         Returns:
             Dictionary mapping budget groups to lists of selected topic keys.
         """
+        selected: dict[BudgetGroup, list[str]] = {group: [] for group in BudgetGroup}
+
+        # Global-only mode: only select from GLOBAL group
+        if global_only:
+            topics_selected, _, _ = await self._select_from_group_with_stats(
+                BudgetGroup.GLOBAL, total_budget, server_id=None
+            )
+            selected[BudgetGroup.GLOBAL] = topics_selected
+
+            log.info(
+                "reflection_selection_complete",
+                total_budget=total_budget,
+                server_id=server_id,
+                global_only=True,
+                topics_selected={g.value: len(t) for g, t in selected.items()},
+            )
+
+            return selected
+
         budget_config = self.config.salience.budget
 
         # Phase 1: Initial allocation and selection
@@ -2100,7 +2121,6 @@ class ReflectionSelector:
             BudgetGroup.CULTURE: total_budget * budget_config.culture,
         }
 
-        selected: dict[BudgetGroup, list[str]] = {group: [] for group in BudgetGroup}
         remaining_budgets: dict[BudgetGroup, float] = {}
         group_demands: dict[BudgetGroup, float] = {}
 

@@ -1054,3 +1054,128 @@ def test_server_config_focus_with_other_overrides(tmp_path: Path) -> None:
     assert server_config.focus == 2.0
     assert server_config.privacy_gate_role == "456"
     assert server_config.threads_as_topics is False
+
+
+# ===== SERVER REFLECTION BUDGET CONFIGURATION =====
+
+
+def test_server_config_reflection_budget_default() -> None:
+    """Test that server reflection_budget defaults to 100.0."""
+    from zos.config import ServerOverrideConfig
+    server_config = ServerOverrideConfig()
+    assert server_config.reflection_budget == 100.0
+
+
+def test_server_config_reflection_budget_custom(tmp_path: Path) -> None:
+    """Test custom server reflection budget."""
+    config_data = {
+        "servers": {
+            "123": {
+                "reflection_budget": 150.0
+            }
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    server_config = config.get_server_config("123")
+    assert server_config.reflection_budget == 150.0
+
+
+def test_server_config_reflection_budget_low_priority(tmp_path: Path) -> None:
+    """Test server reflection budget can be set low for quieter servers."""
+    config_data = {
+        "servers": {
+            "456": {
+                "reflection_budget": 50.0
+            }
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    server_config = config.get_server_config("456")
+    assert server_config.reflection_budget == 50.0
+
+
+def test_server_config_reflection_budget_zero(tmp_path: Path) -> None:
+    """Test server reflection budget can be zero (no reflection)."""
+    config_data = {
+        "servers": {
+            "789": {
+                "reflection_budget": 0.0
+            }
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    server_config = config.get_server_config("789")
+    assert server_config.reflection_budget == 0.0
+
+
+def test_server_config_reflection_budget_with_other_overrides(tmp_path: Path) -> None:
+    """Test reflection_budget works alongside other server overrides."""
+    config_data = {
+        "servers": {
+            "123": {
+                "reflection_budget": 200.0,
+                "focus": 2.0,
+                "privacy_gate_role": "456",
+            }
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    server_config = config.get_server_config("123")
+    assert server_config.reflection_budget == 200.0
+    assert server_config.focus == 2.0
+    assert server_config.privacy_gate_role == "456"
+
+
+# ===== GLOBAL REFLECTION BUDGET CONFIGURATION =====
+
+
+def test_salience_global_reflection_budget_default() -> None:
+    """Test that global_reflection_budget defaults to 15.0."""
+    config = SalienceConfig()
+    assert config.global_reflection_budget == 15.0
+
+
+def test_salience_global_reflection_budget_custom(tmp_path: Path) -> None:
+    """Test custom global reflection budget."""
+    config_data = {
+        "salience": {
+            "global_reflection_budget": 25.0
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    assert config.salience.global_reflection_budget == 25.0
+
+
+def test_salience_global_reflection_budget_zero(tmp_path: Path) -> None:
+    """Test global reflection budget can be zero (no global topics)."""
+    config_data = {
+        "salience": {
+            "global_reflection_budget": 0.0
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    assert config.salience.global_reflection_budget == 0.0

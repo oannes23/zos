@@ -26,6 +26,9 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from sqlalchemy import distinct, select
+
+from zos.database import topics as topics_table
 from zos.layers import Layer, LayerCategory, LayerLoader
 from zos.logging import get_logger
 from zos.models import LayerRun, utcnow
@@ -234,6 +237,9 @@ class ReflectionScheduler:
     async def _select_topics(self, layer: Layer) -> list[str]:
         """Select topics for a layer based on its configuration.
 
+        Iterates over active servers with per-server budgets, then adds
+        global topics with a separate budget.
+
         Args:
             layer: The layer to select topics for.
 
@@ -244,27 +250,40 @@ class ReflectionScheduler:
         if layer.category == LayerCategory.SELF:
             return await self._get_self_topics()
 
-        # Use budget-based selection
-        total_budget = self._get_total_budget(layer.category)
-
-        selected = await self.selector.select_for_reflection(
-            total_budget=total_budget,
-        )
-
-        # Get topics for this layer's budget group
+        all_topics: list[str] = []
         group = self._category_to_group(layer.category)
-        topics = selected.get(group, [])
+
+        # 1. Select from each server with per-server budget
+        servers = await self._get_active_servers()
+        for server_id in servers:
+            server_config = self.config.get_server_config(server_id)
+            budget = server_config.reflection_budget
+
+            selected = await self.selector.select_for_reflection(
+                total_budget=budget,
+                server_id=server_id,
+            )
+            all_topics.extend(selected.get(group, []))
+
+        # 2. Select global topics with separate budget
+        global_budget = self.config.salience.global_reflection_budget
+        global_selected = await self.selector.select_for_reflection(
+            total_budget=global_budget,
+            server_id=None,
+            global_only=True,
+        )
+        all_topics.extend(global_selected.get(BudgetGroup.GLOBAL, []))
 
         # Filter by target_category if specified
         if layer.target_category:
-            topics = [
+            all_topics = [
                 t
-                for t in topics
+                for t in all_topics
                 if self._topic_matches_category(t, layer.target_category)
             ]
 
         # Apply layer's max_targets
-        return topics[: layer.max_targets]
+        return all_topics[: layer.max_targets]
 
     async def _get_self_topics(self) -> list[str]:
         """Get self topics for self-reflection.
@@ -280,24 +299,25 @@ class ReflectionScheduler:
 
         return self_topics
 
-    def _get_total_budget(self, category: LayerCategory) -> float:
-        """Get total reflection budget for a category.
-
-        Args:
-            category: The layer category.
+    async def _get_active_servers(self) -> list[str]:
+        """Get list of server IDs with active topics.
 
         Returns:
-            Total budget for reflection.
+            List of distinct server IDs extracted from topic keys.
         """
-        # Use a reasonable default budget
-        # This could be made configurable
-        base_budget = 100.0
-
-        # Self gets its own budget from config
-        if category == LayerCategory.SELF:
-            return self.config.salience.self_budget
-
-        return base_budget
+        with self.ledger.engine.connect() as conn:
+            result = conn.execute(
+                select(distinct(topics_table.c.key)).where(
+                    topics_table.c.key.like("server:%")
+                )
+            )
+            # Extract server IDs from keys like "server:123:user:456"
+            server_ids: set[str] = set()
+            for (key,) in result:
+                parts = key.split(":")
+                if len(parts) >= 2 and parts[0] == "server":
+                    server_ids.add(parts[1])
+            return list(server_ids)
 
     def _category_to_group(self, category: LayerCategory) -> BudgetGroup:
         """Map layer category to budget group.

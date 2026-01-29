@@ -137,6 +137,7 @@ class SalienceConfig(BaseModel):
     cost_per_token: float = 0.001  # Salience cost per LLM token for reflection spending
     budget: SalienceBudgetConfig = Field(default_factory=SalienceBudgetConfig)
     self_budget: float = 20
+    global_reflection_budget: float = 15.0  # Budget for global topics (cross-server/DM)
 
 
 class ChattinessConfig(BaseModel):
@@ -219,6 +220,7 @@ class ServerOverrideConfig(BaseModel):
     disabled_layers: list[str] = Field(default_factory=list)
     chattiness: dict[str, Any] | None = None
     focus: float = 1.0
+    reflection_budget: float = 100.0  # Per-server reflection budget
 
 
 class Config(BaseModel):

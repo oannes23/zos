@@ -161,6 +161,7 @@ salience:
     culture: 0.10
 
   self_budget: 20
+  global_reflection_budget: 15.0
 ```
 
 ### salience.caps
@@ -184,6 +185,8 @@ How reflection budget is allocated across topic groups. Should sum to ~1.0.
 | `decay_threshold_days` | 7 | Days of inactivity before decay starts |
 | `decay_rate_per_day` | 0.01 | Daily decay rate after threshold |
 | `warm_threshold` | 1.0 | Minimum salience to receive propagation |
+| `self_budget` | 20 | Budget for self-reflection topics |
+| `global_reflection_budget` | 15.0 | Budget for global topics (cross-server users/DMs) |
 
 ---
 
@@ -302,16 +305,43 @@ servers:
     chattiness:
       threshold_min: 30
       threshold_max: 80
+    focus: 1.0
+    reflection_budget: 100.0
 ```
 
 ### Server Override Options
 
-| Setting | Description |
-|---------|-------------|
-| `privacy_gate_role` | Only track users with this role |
-| `threads_as_topics` | Create separate topics for threads (default: true) |
-| `disabled_layers` | Layers that won't run for this server |
-| `chattiness` | Server-specific chattiness overrides |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `privacy_gate_role` | null | Only track users with this role |
+| `threads_as_topics` | true | Create separate topics for threads |
+| `disabled_layers` | [] | Layers that won't run for this server |
+| `chattiness` | null | Server-specific chattiness overrides |
+| `focus` | 1.0 | Salience earning multiplier (higher = more attention) |
+| `reflection_budget` | 100.0 | Per-server reflection budget allocation |
+
+### focus
+
+Multiplier applied to all salience earning from this server. Use this to prioritize certain servers:
+
+- `focus: 2.0` — High-priority server, earns double salience
+- `focus: 0.5` — Lower-priority server, earns half salience
+- `focus: 0.0` — No salience earned (effectively muted)
+
+### reflection_budget
+
+Budget allocated for selecting topics from this server during reflection. Each server gets its own budget, allowing independent attention allocation:
+
+```yaml
+servers:
+  "high_priority_server":
+    reflection_budget: 150.0    # More topics selected
+  "quiet_server":
+    reflection_budget: 50.0     # Fewer topics selected
+  # Unconfigured servers use default: 100.0
+```
+
+Global topics (cross-server users, DM contacts) use a separate budget configured via `salience.global_reflection_budget`.
 
 ---
 
