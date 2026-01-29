@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Messages — Zos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Messages</h1>
+    <div class="page-actions">
+        <input type="search"
+               name="q"
+               placeholder="Search messages..."
+               hx-get="/ui/messages/search"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#messages-list"
+               hx-include="[name='channel_id'], [name='author_id']"
+               class="search-input">
+    </div>
+</div>
+
+<div class="filters">
+    <select name="channel_id"
+            id="channel-filter"
+            hx-get="/ui/messages/list"
+            hx-trigger="change"
+            hx-target="#messages-list"
+            hx-include="[name='q'], [name='author_id']">
+        <option value="">All channels</option>
+        {% for channel in channels %}
+        <option value="{{ channel.channel_id }}">{{ channel.name }} ({{ channel.count }})</option>
+        {% endfor %}
+    </select>
+
+    <select name="author_id"
+            id="author-filter"
+            hx-get="/ui/messages/list"
+            hx-trigger="change"
+            hx-target="#messages-list"
+            hx-include="[name='q'], [name='channel_id']">
+        <option value="">All authors</option>
+        {% for author in authors %}
+        <option value="{{ author.author_id }}">{{ author.name }} ({{ author.count }})</option>
+        {% endfor %}
+    </select>
+</div>
+
+<div id="messages-list" hx-get="/ui/messages/list" hx-trigger="load">
+    Loading...
+</div>
+{% endblock %}

@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from zos.api.dev import router as dev_router
 from zos.api.health import router as health_router
 from zos.api.insights import router as insights_router
+from zos.api.messages import router as messages_router
 from zos.api.runs import router as runs_router
 from zos.api.salience import router as salience_router
 from zos.api.ui import router as ui_router
@@ -56,6 +57,7 @@ def create_app(config: "Config") -> FastAPI:
 Zos is a Discord agent that observes, reflects, and accumulates understanding.
 
 This API provides introspection into Zos's internal state:
+- **Messages**: Stored Discord messages for browsing and search
 - **Insights**: Accumulated understanding about users, relationships, and topics
 - **Salience**: The attention-budget system governing what Zos thinks about
 - **Layer Runs**: Audit trail of reflection executions
@@ -102,6 +104,7 @@ Currently no authentication (local development only).
     # Register routes
     app.include_router(health_router)
     app.include_router(insights_router)
+    app.include_router(messages_router)
     app.include_router(runs_router)
     app.include_router(salience_router)
     app.include_router(ui_router)

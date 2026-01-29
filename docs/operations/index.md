@@ -42,9 +42,26 @@ curl http://localhost:8000/salience
 # Recent insights
 curl http://localhost:8000/insights
 
+# Recent messages
+curl http://localhost:8000/messages
+
 # Layer run history
 curl http://localhost:8000/runs
 ```
+
+### Web UI
+
+A web-based dashboard is available for browsing data visually:
+
+```
+http://localhost:8000/ui/
+```
+
+Pages available:
+- `/ui/messages` — Browse and search stored messages
+- `/ui/insights` — Browse and filter insights
+- `/ui/salience` — Salience dashboard with budget groups
+- `/ui/runs` — Layer run history and stats
 
 ---
 

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Message from {{ message.author_name or message.author_id }} — Zos{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+    <a href="/ui/messages">Messages</a> / {{ message.author_name or message.author_id }}
+</nav>
+
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">{{ message.author_name or message.author_id }}</h1>
+        <span class="badge badge-channel">#{{ message.channel_name or message.channel_id }}</span>
+    </div>
+
+    <div class="message-content-full">
+        {{ message.content }}
+    </div>
+
+    <div class="message-meta mt-2">
+        <div class="meta-row">
+            <span class="meta-label">Posted</span>
+            <span>{{ message.created_at.strftime('%Y-%m-%d %H:%M') }} ({{ message.temporal_marker }})</span>
+        </div>
+        {% if message.server_name or message.server_id %}
+        <div class="meta-row">
+            <span class="meta-label">Server</span>
+            <span>{{ message.server_name or message.server_id }}</span>
+        </div>
+        {% endif %}
+        <div class="meta-row">
+            <span class="meta-label">Visibility</span>
+            <span>{{ message.visibility_scope }}</span>
+        </div>
+    </div>
+
+    {% if message.reactions_aggregate %}
+    <h3 class="mt-2">Reactions</h3>
+    <div class="reactions-grid">
+        {% for emoji, count in message.reactions_aggregate.items() %}
+        <div class="reaction-item">
+            <span class="reaction-emoji">{{ emoji }}</span>
+            <span class="reaction-count">{{ count }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <h3 class="mt-2">Details</h3>
+    <div class="metrics-grid">
+        <div class="metric">
+            <span class="metric-value">{% if message.has_media %}Yes{% else %}No{% endif %}</span>
+            <span class="metric-label">Has Media</span>
+        </div>
+        <div class="metric">
+            <span class="metric-value">{% if message.has_links %}Yes{% else %}No{% endif %}</span>
+            <span class="metric-label">Has Links</span>
+        </div>
+        <div class="metric">
+            <span class="metric-value">{% if message.reply_to_id %}Yes{% else %}No{% endif %}</span>
+            <span class="metric-label">Is Reply</span>
+        </div>
+    </div>
+
+    {% if message.reply_to_id %}
+    <div class="related-message mt-2">
+        <h3>Replying To</h3>
+        <div hx-get="/ui/messages/{{ message.reply_to_id }}/preview"
+             hx-trigger="load">
+            Loading original message...
+        </div>
+    </div>
+    {% endif %}
+
+    {% if message.thread_id %}
+    <div class="meta-row mt-1">
+        <span class="meta-label">Thread</span>
+        <span>{{ message.thread_id }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<div class="related-messages mt-2">
+    <h3>Other Messages in This Channel</h3>
+    <div hx-get="/ui/messages/channel/{{ message.channel_id }}?exclude={{ message.id }}"
+         hx-trigger="load">
+        Loading...
+    </div>
+</div>
+{% endblock %}

@@ -402,6 +402,254 @@ async def insight_detail(
 
 
 # =============================================================================
+# Messages Browser (Story 5.12)
+# =============================================================================
+
+
+@router.get("/messages", response_class=HTMLResponse)
+async def messages_page(
+    request: Request,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Messages browser page.
+
+    Main page for browsing and searching messages with filtering
+    by channel and author.
+    """
+    from zos.api.db_queries import get_authors_for_filter, get_channels_for_filter
+
+    channels = await get_channels_for_filter(db)
+    authors = await get_authors_for_filter(db)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="messages/list.html",
+        context={
+            "active": "messages",
+            "dev_mode": _get_dev_mode(request),
+            "channels": channels,
+            "authors": authors,
+        },
+    )
+
+
+@router.get("/messages/list", response_class=HTMLResponse)
+async def messages_list_partial(
+    request: Request,
+    channel_id: Optional[str] = Query(None, description="Filter by channel"),
+    author_id: Optional[str] = Query(None, description="Filter by author"),
+    q: Optional[str] = Query(None, description="Search query"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(20, ge=1, le=100, description="Page size"),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for messages list (htmx).
+
+    Returns HTML partial with paginated list of messages,
+    optionally filtered by channel or author.
+    """
+    from zos.api.db_queries import list_messages as db_list, search_messages as db_search
+
+    # Empty string from form should be treated as None
+    filter_channel = channel_id if channel_id else None
+    filter_author = author_id if author_id else None
+
+    if q:
+        messages, total = await db_search(
+            db,
+            query=q,
+            channel_id=filter_channel,
+            author_id=filter_author,
+            offset=offset,
+            limit=limit,
+        )
+    else:
+        messages, total = await db_list(
+            db,
+            channel_id=filter_channel,
+            author_id=filter_author,
+            offset=offset,
+            limit=limit,
+        )
+
+    formatted = [_format_message_for_ui(m, db) for m in messages]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="messages/_list.html",
+        context={
+            "messages": formatted,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "channel_id": filter_channel,
+            "author_id": filter_author,
+            "q": q,
+        },
+    )
+
+
+@router.get("/messages/search", response_class=HTMLResponse)
+async def messages_search_partial(
+    request: Request,
+    q: str = Query(..., min_length=2, description="Search query"),
+    channel_id: Optional[str] = Query(None, description="Filter by channel"),
+    author_id: Optional[str] = Query(None, description="Filter by author"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Search partial for messages (htmx).
+
+    Performs content search and returns the list partial.
+    Triggered by debounced keyup in search input.
+    """
+    from zos.api.db_queries import search_messages as db_search
+
+    # Empty string from form should be treated as None
+    filter_channel = channel_id if channel_id else None
+    filter_author = author_id if author_id else None
+
+    messages, total = await db_search(
+        db,
+        query=q,
+        channel_id=filter_channel,
+        author_id=filter_author,
+        offset=offset,
+        limit=limit,
+    )
+
+    formatted = [_format_message_for_ui(m, db) for m in messages]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="messages/_list.html",
+        context={
+            "messages": formatted,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "channel_id": filter_channel,
+            "author_id": filter_author,
+            "q": q,
+        },
+    )
+
+
+@router.get("/messages/recent", response_class=HTMLResponse)
+async def messages_recent(
+    request: Request,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Recent messages partial for dashboard card.
+
+    Returns a short list of the most recent messages for the dashboard.
+    """
+    from zos.api.db_queries import list_messages as db_list
+
+    messages, total = await db_list(db, offset=0, limit=5)
+
+    if not messages:
+        return HTMLResponse('<p class="text-muted">No messages yet</p>')
+
+    formatted = [_format_message_for_ui(m, db) for m in messages]
+
+    # Simple list for dashboard
+    html_parts = []
+    for m in formatted:
+        author = m["author_name"] or m["author_id"][:8] + "..."
+        content_preview = m["content"][:50] + "..." if len(m["content"]) > 50 else m["content"]
+        html_parts.append(
+            f'<div class="list-item">'
+            f'<a href="/ui/messages/{m["id"]}">{author}</a>'
+            f'<span class="text-muted ml-1">{content_preview}</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/messages/channel/{channel_id}", response_class=HTMLResponse)
+async def messages_by_channel_partial(
+    request: Request,
+    channel_id: str,
+    exclude: Optional[str] = Query(None, description="Message ID to exclude"),
+    limit: int = Query(5, ge=1, le=20),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Related messages partial for detail page (htmx).
+
+    Returns other messages in the same channel, excluding the current one.
+    """
+    from sqlalchemy import and_, select
+
+    from zos.database import messages as messages_table
+
+    with db.connect() as conn:
+        conditions = [
+            messages_table.c.channel_id == channel_id,
+            messages_table.c.deleted_at.is_(None),
+        ]
+        if exclude:
+            conditions.append(messages_table.c.id != exclude)
+
+        stmt = (
+            select(messages_table)
+            .where(and_(*conditions))
+            .order_by(messages_table.c.created_at.desc())
+            .limit(limit)
+        )
+
+        rows = conn.execute(stmt).fetchall()
+
+    from zos.api.db_queries import _row_to_message
+
+    messages = [_row_to_message(r) for r in rows]
+    formatted = [_format_message_for_ui(m, db) for m in messages]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="messages/_list.html",
+        context={
+            "messages": formatted,
+            "total": len(formatted),
+            "offset": 0,
+            "limit": limit,
+            "channel_id": None,
+            "author_id": None,
+            "q": None,
+        },
+    )
+
+
+# NOTE: /messages/{message_id} must be defined after other /messages/* routes
+@router.get("/messages/{message_id}", response_class=HTMLResponse)
+async def message_detail(
+    request: Request,
+    message_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Message detail page.
+
+    Shows full message content, metadata, reactions,
+    and related messages in the same channel.
+    """
+    from zos.api.db_queries import get_message
+
+    message = await get_message(db, message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    formatted = _format_message_for_ui(message, db)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="messages/detail.html",
+        context={"message": formatted, "active": "messages", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+# =============================================================================
 # Salience Dashboard (Story 5.7)
 # =============================================================================
 
@@ -853,4 +1101,92 @@ def _format_insight_for_ui(insight) -> dict:
             "tension": insight.valence_tension,
         },
         "supersedes": insight.supersedes,
+    }
+
+
+def _format_message_for_ui(message, db: "Engine") -> dict:
+    """Format message for UI templates.
+
+    Converts a Message model to a dictionary suitable for Jinja2 templates,
+    including resolved names for author, channel, and server.
+
+    Args:
+        message: Message model instance.
+        db: Database engine for name resolution.
+
+    Returns:
+        Dictionary with all fields needed for UI rendering.
+    """
+    from sqlalchemy import func, select
+
+    from zos.database import channels, servers, user_profiles
+
+    # Resolve names
+    channel_name = None
+    server_name = None
+    author_name = None
+
+    with db.connect() as conn:
+        # Get channel name
+        stmt = select(channels.c.name).where(channels.c.id == message.channel_id)
+        row = conn.execute(stmt).fetchone()
+        if row:
+            channel_name = row.name
+
+        # Get server name
+        if message.server_id:
+            stmt = select(servers.c.name).where(servers.c.id == message.server_id)
+            row = conn.execute(stmt).fetchone()
+            if row:
+                server_name = row.name
+
+        # Get author name (most recent profile)
+        subq = (
+            select(
+                user_profiles.c.user_id,
+                func.max(user_profiles.c.captured_at).label("max_captured"),
+            )
+            .where(user_profiles.c.user_id == message.author_id)
+            .group_by(user_profiles.c.user_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                user_profiles.c.display_name,
+                user_profiles.c.username,
+                user_profiles.c.discriminator,
+            )
+            .join(
+                subq,
+                (user_profiles.c.user_id == subq.c.user_id)
+                & (user_profiles.c.captured_at == subq.c.max_captured),
+            )
+        )
+        row = conn.execute(stmt).fetchone()
+        if row:
+            if row.display_name:
+                author_name = row.display_name
+            elif row.discriminator and row.discriminator != "0":
+                author_name = f"{row.username}#{row.discriminator}"
+            else:
+                author_name = row.username
+
+    return {
+        "id": message.id,
+        "channel_id": message.channel_id,
+        "channel_name": channel_name,
+        "server_id": message.server_id,
+        "server_name": server_name,
+        "author_id": message.author_id,
+        "author_name": author_name,
+        "content": message.content,
+        "created_at": message.created_at,
+        "temporal_marker": relative_time(message.created_at),
+        "visibility_scope": message.visibility_scope.value,
+        "reactions_aggregate": message.reactions_aggregate,
+        "reply_to_id": message.reply_to_id,
+        "thread_id": message.thread_id,
+        "has_media": message.has_media,
+        "has_links": message.has_links,
     }

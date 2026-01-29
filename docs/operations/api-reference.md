@@ -1,6 +1,6 @@
 # API Reference
 
-The Zos introspection API provides endpoints for querying insights, salience, and operational state.
+The Zos introspection API provides endpoints for querying messages, insights, salience, and operational state.
 
 ---
 
@@ -11,6 +11,8 @@ http://localhost:8000
 ```
 
 Start the API with `zos api`. Interactive documentation is available at `/docs` (Swagger UI) and `/redoc`.
+
+A web UI is also available at `/ui/` for browsing messages, insights, salience, and layer runs.
 
 ---
 
@@ -34,6 +36,147 @@ Check system health status.
 **Status values:**
 - `ok` — All components healthy
 - `degraded` — One or more components have issues
+
+---
+
+## Messages
+
+### GET /messages
+
+List stored Discord messages with optional filters.
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `channel_id` | string | — | Filter by channel |
+| `author_id` | string | — | Filter by author |
+| `server_id` | string | — | Filter by server |
+| `since` | datetime | — | Only messages after this time |
+| `until` | datetime | — | Only messages before this time |
+| `readable` | bool | false | Replace IDs with human-readable names |
+| `offset` | int | 0 | Pagination offset |
+| `limit` | int | 20 | Maximum results (1-100) |
+
+**Example:**
+```bash
+curl "http://localhost:8000/messages?channel_id=123456&limit=10"
+```
+
+**Response:**
+```json
+{
+  "readable": false,
+  "messages": [
+    {
+      "id": "1234567890",
+      "channel_id": "123456",
+      "channel_name": null,
+      "server_id": "789012",
+      "server_name": null,
+      "author_id": "456789",
+      "author_name": null,
+      "content": "Hello everyone!",
+      "created_at": "2024-01-15T10:30:00.000000Z",
+      "visibility_scope": "public",
+      "reactions_aggregate": {"👍": 3, "❤️": 1},
+      "reply_to_id": null,
+      "thread_id": null,
+      "has_media": false,
+      "has_links": false,
+      "temporal_marker": "2 days ago"
+    }
+  ],
+  "total": 1542,
+  "offset": 0,
+  "limit": 10
+}
+```
+
+With `readable=true`, the response includes resolved names:
+```json
+{
+  "readable": true,
+  "messages": [
+    {
+      "id": "1234567890",
+      "channel_id": "123456",
+      "channel_name": "general",
+      "server_id": "789012",
+      "server_name": "My Server",
+      "author_id": "456789",
+      "author_name": "Alice",
+      "content": "Hello everyone!",
+      ...
+    }
+  ],
+  ...
+}
+```
+
+---
+
+### GET /messages/search
+
+Search messages by content.
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `q` | string | required | Search query (min 2 chars) |
+| `channel_id` | string | — | Filter by channel |
+| `author_id` | string | — | Filter by author |
+| `server_id` | string | — | Filter by server |
+| `readable` | bool | false | Replace IDs with human-readable names |
+| `offset` | int | 0 | Pagination offset |
+| `limit` | int | 20 | Maximum results (1-100) |
+
+**Example:**
+```bash
+curl "http://localhost:8000/messages/search?q=hello&readable=true"
+```
+
+---
+
+### GET /messages/{message_id}
+
+Get a single message by ID.
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `readable` | bool | false | Replace IDs with human-readable names |
+
+**Example:**
+```bash
+curl "http://localhost:8000/messages/1234567890?readable=true"
+```
+
+---
+
+### GET /messages/stats
+
+Get message statistics by channel and author.
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `server_id` | string | — | Filter by server |
+| `readable` | bool | false | Replace IDs with human-readable names |
+
+**Response:**
+```json
+{
+  "total": 5432,
+  "by_channel": [
+    {"channel_id": "123", "channel_name": "general", "count": 2100},
+    {"channel_id": "456", "channel_name": "random", "count": 1500}
+  ],
+  "by_author": [
+    {"author_id": "789", "author_name": "Alice", "count": 450},
+    {"author_id": "012", "author_name": "Bob", "count": 320}
+  ]
+}
+```
 
 ---
 

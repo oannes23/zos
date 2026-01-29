@@ -114,6 +114,10 @@ echo "Health:"
 curl -s http://localhost:8000/health | jq .
 
 echo
+echo "Message Stats:"
+curl -s "http://localhost:8000/messages/stats" | jq '{total, top_channels: .by_channel[:3], top_authors: .by_author[:3]}'
+
+echo
 echo "Layer Run Stats (24h):"
 curl -s "http://localhost:8000/runs/stats/summary?days=1" | jq '{
   total_runs,
