@@ -967,3 +967,89 @@ def test_load_or_default_searches_config_yml(tmp_path: Path) -> None:
     """Test load_or_default searches for config.yml as fallback."""
     config = Config.load_or_default(None)
     assert config is not None
+
+
+# ===== SERVER FOCUS CONFIGURATION =====
+
+
+def test_server_config_focus_default() -> None:
+    """Test that server focus defaults to 1.0."""
+    from zos.config import ServerOverrideConfig
+    server_config = ServerOverrideConfig()
+    assert server_config.focus == 1.0
+
+
+def test_server_config_focus_custom(tmp_path: Path) -> None:
+    """Test custom server focus multiplier."""
+    config_data = {
+        "servers": {
+            "123": {
+                "focus": 3.0
+            }
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    server_config = config.get_server_config("123")
+    assert server_config.focus == 3.0
+
+
+def test_server_config_focus_fractional(tmp_path: Path) -> None:
+    """Test server focus can be fractional (e.g., 0.5)."""
+    config_data = {
+        "servers": {
+            "456": {
+                "focus": 0.5
+            }
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    server_config = config.get_server_config("456")
+    assert server_config.focus == 0.5
+
+
+def test_server_config_focus_zero(tmp_path: Path) -> None:
+    """Test server focus can be zero (no salience earning)."""
+    config_data = {
+        "servers": {
+            "789": {
+                "focus": 0.0
+            }
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    server_config = config.get_server_config("789")
+    assert server_config.focus == 0.0
+
+
+def test_server_config_focus_with_other_overrides(tmp_path: Path) -> None:
+    """Test server focus works alongside other server overrides."""
+    config_data = {
+        "servers": {
+            "123": {
+                "focus": 2.0,
+                "privacy_gate_role": "456",
+                "threads_as_topics": False,
+            }
+        }
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = Config.load(config_path)
+    server_config = config.get_server_config("123")
+    assert server_config.focus == 2.0
+    assert server_config.privacy_gate_role == "456"
+    assert server_config.threads_as_topics is False

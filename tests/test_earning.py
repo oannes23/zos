@@ -570,3 +570,203 @@ class TestEdgeCases:
 
         # No emoji topic (requires server_id)
         assert not any("emoji:" in t for t in topics)
+
+
+class TestServerFocusMultiplier:
+    """Tests for server focus configuration multiplier."""
+
+    @pytest.mark.asyncio
+    async def test_message_earning_with_focus_multiplier(self, engine):
+        """Message earning is multiplied by server focus."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.servers = {"srv1": ServerOverrideConfig(focus=3.0)}
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="user1", server_id="srv1")
+        await earning.process_message(msg)
+
+        # Author earning should be 3x
+        balance = await earning.ledger.get_balance("server:srv1:user:user1")
+        expected = earning.weights.message * 3.0
+        assert balance == expected
+
+    @pytest.mark.asyncio
+    async def test_channel_earning_with_focus_multiplier(self, engine):
+        """Channel earning is multiplied by server focus."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.servers = {"srv1": ServerOverrideConfig(focus=2.0)}
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="user1", server_id="srv1", channel_id="ch1")
+        await earning.process_message(msg)
+
+        # Channel earning should be 2x
+        balance = await earning.ledger.get_balance("server:srv1:channel:ch1")
+        expected = earning.weights.message * 2.0
+        assert balance == expected
+
+    @pytest.mark.asyncio
+    async def test_reaction_earning_with_focus_multiplier(self, engine):
+        """Reaction earning is multiplied by server focus."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.servers = {"srv1": ServerOverrideConfig(focus=2.5)}
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="author1", server_id="srv1")
+        reaction = create_reaction(user_id="reactor1", server_id="srv1")
+
+        # Disable propagation for simpler balance verification
+        await earning.process_reaction(reaction, msg, propagate=False)
+
+        # Author and reactor earnings should be 2.5x
+        author_balance = await earning.ledger.get_balance("server:srv1:user:author1")
+        reactor_balance = await earning.ledger.get_balance("server:srv1:user:reactor1")
+        expected = earning.weights.reaction * 2.5
+
+        assert author_balance == expected
+        assert reactor_balance == expected
+
+    @pytest.mark.asyncio
+    async def test_thread_creation_with_focus_multiplier(self, engine):
+        """Thread creation earning is multiplied by server focus."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.servers = {"srv1": ServerOverrideConfig(focus=4.0)}
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        await earning.process_thread_creation(
+            thread_id="thread1",
+            channel_id="ch1",
+            creator_id="creator1",
+            server_id="srv1",
+        )
+
+        # Both creator and thread topic earnings should be 4x
+        creator_balance = await earning.ledger.get_balance("server:srv1:user:creator1")
+        thread_balance = await earning.ledger.get_balance("server:srv1:thread:thread1")
+        expected = earning.weights.thread_create * 4.0
+
+        assert creator_balance == expected
+        assert thread_balance == expected
+
+    @pytest.mark.asyncio
+    async def test_focus_default_is_one(self, earning: EarningCoordinator):
+        """Default server focus of 1.0 does not change earnings."""
+        msg = create_message(author_id="user1", server_id="srv1")
+        await earning.process_message(msg)
+
+        # Balance should be exactly the weight (no multiplier effect)
+        balance = await earning.ledger.get_balance("server:srv1:user:user1")
+        assert balance == earning.weights.message
+
+    @pytest.mark.asyncio
+    async def test_focus_zero_no_earning(self, engine):
+        """Focus of 0.0 results in no salience earning."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.servers = {"srv1": ServerOverrideConfig(focus=0.0)}
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="user1", server_id="srv1")
+        await earning.process_message(msg)
+
+        # No earning should occur
+        balance = await earning.ledger.get_balance("server:srv1:user:user1")
+        assert balance == 0.0
+
+    @pytest.mark.asyncio
+    async def test_focus_fractional(self, engine):
+        """Fractional focus (e.g., 0.5) halves salience earning."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.servers = {"srv1": ServerOverrideConfig(focus=0.5)}
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="user1", server_id="srv1")
+        await earning.process_message(msg)
+
+        balance = await earning.ledger.get_balance("server:srv1:user:user1")
+        expected = earning.weights.message * 0.5
+        assert balance == expected
+
+    @pytest.mark.asyncio
+    async def test_focus_applied_before_media_boost(self, engine):
+        """Focus is applied before media boost (multiplicative)."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.servers = {"srv1": ServerOverrideConfig(focus=2.0)}
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="user1", server_id="srv1", has_media=True)
+        await earning.process_message(msg)
+
+        # focus * base * media_boost = 2.0 * 1.0 * 1.2 = 2.4
+        balance = await earning.ledger.get_balance("server:srv1:user:user1")
+        expected = earning.weights.message * 2.0 * earning.weights.media_boost_factor
+        assert balance == expected
+
+    @pytest.mark.asyncio
+    async def test_focus_does_not_affect_dms(self, earning: EarningCoordinator):
+        """Focus multiplier does not apply to DMs (no server_id)."""
+        # DMs have server_id=None, so focus doesn't apply
+        msg = create_message(author_id="user1", server_id=None)
+
+        await earning.process_dm(msg)
+
+        balance = await earning.ledger.get_balance("user:user1")
+        # DM activity warms global topic + dm_message earning (no focus applied)
+        initial_warmth = earning.config.salience.initial_global_warmth
+        expected = initial_warmth + earning.weights.dm_message
+        assert balance == expected
+
+    @pytest.mark.asyncio
+    async def test_focus_per_server_independent(self, engine):
+        """Different servers can have different focus values."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.servers = {
+            "srv1": ServerOverrideConfig(focus=3.0),
+            "srv2": ServerOverrideConfig(focus=0.5),
+        }
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        # Message in srv1
+        msg1 = create_message(author_id="user1", server_id="srv1")
+        await earning.process_message(msg1)
+
+        # Message in srv2
+        msg2 = create_message(author_id="user1", server_id="srv2")
+        await earning.process_message(msg2)
+
+        balance_srv1 = await earning.ledger.get_balance("server:srv1:user:user1")
+        balance_srv2 = await earning.ledger.get_balance("server:srv2:user:user1")
+
+        assert balance_srv1 == earning.weights.message * 3.0
+        assert balance_srv2 == earning.weights.message * 0.5

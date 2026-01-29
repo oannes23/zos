@@ -1545,6 +1545,7 @@ class EarningCoordinator:
         - Propagation to related warm topics
         - Global topic warming for server messages
         - Global topic warming for DMs
+        - Server focus multiplier (applied before other multipliers)
 
         Args:
             message: The Message model to process.
@@ -1566,6 +1567,11 @@ class EarningCoordinator:
 
         server_id = message.server_id
         base_amount = self.weights.message
+
+        # Apply server focus multiplier (before other multipliers)
+        if server_id:
+            server_config = self.ledger.config.get_server_config(server_id)
+            base_amount *= server_config.focus
 
         # Apply media/link boost
         if message.has_media or message.has_links:
@@ -1629,6 +1635,7 @@ class EarningCoordinator:
         """Earn salience for the channel with propagation.
 
         DMs don't have channel topics. Server messages earn for the channel.
+        Applies server focus multiplier.
 
         Args:
             message: The Message model.
@@ -1642,10 +1649,14 @@ class EarningCoordinator:
         if not message.server_id:
             return None  # DMs don't have channel topics
 
+        # Apply server focus multiplier
+        server_config = self.ledger.config.get_server_config(message.server_id)
+        amount = self.weights.message * server_config.focus
+
         channel_topic = f"server:{message.server_id}:channel:{message.channel_id}"
         await self.ledger.earn_with_propagation(
             channel_topic,
-            self.weights.message,
+            amount,
             reason=f"message:{message.id}",
             propagate=propagate,
         )
@@ -1665,7 +1676,9 @@ class EarningCoordinator:
         - Dyad between author and reactor (relationship signal)
         - Custom emoji topic (if custom emoji used)
 
-        Also handles global topic warming for server activity.
+        Also handles:
+        - Global topic warming for server activity
+        - Server focus multiplier (applied to base amount)
 
         Args:
             reaction: The Reaction model.
@@ -1680,6 +1693,11 @@ class EarningCoordinator:
         topics_earned: list[str] = []
         server_id = message.server_id
         base_amount = self.weights.reaction
+
+        # Apply server focus multiplier
+        if server_id:
+            server_config = self.ledger.config.get_server_config(server_id)
+            base_amount *= server_config.focus
 
         # Skip if reactor is anonymous
         if reaction.user_id.startswith("<chat"):
@@ -1854,7 +1872,7 @@ class EarningCoordinator:
         """Process thread creation for salience earning with propagation.
 
         Thread creation earns boosted amount for the creator and creates
-        a thread topic.
+        a thread topic. Applies server focus multiplier.
 
         Args:
             thread_id: Discord thread ID.
@@ -1871,6 +1889,10 @@ class EarningCoordinator:
         if creator_id.startswith("<chat"):
             return topics_earned
 
+        # Apply server focus multiplier
+        server_config = self.ledger.config.get_server_config(server_id)
+        base_amount = self.weights.thread_create * server_config.focus
+
         # Check and warm global topic
         await self.ledger.check_and_warm_global(creator_id, server_id)
 
@@ -1878,7 +1900,7 @@ class EarningCoordinator:
         creator_topic = f"server:{server_id}:user:{creator_id}"
         await self.ledger.earn_with_propagation(
             creator_topic,
-            self.weights.thread_create,
+            base_amount,
             reason=f"thread_create:{thread_id}",
             propagate=propagate,
         )
@@ -1888,7 +1910,7 @@ class EarningCoordinator:
         thread_topic = f"server:{server_id}:thread:{thread_id}"
         await self.ledger.earn_with_propagation(
             thread_topic,
-            self.weights.thread_create,
+            base_amount,
             reason=f"thread_create:{thread_id}",
             propagate=propagate,
         )

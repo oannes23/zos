@@ -194,6 +194,16 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 - **Rationale**: Typo fixes and minor adjustments shouldn't boost attention. Earning should reflect meaningful new activity.
 - **Implications**: `edited_at` tracking is for content updates only, not salience
 
+### Server Focus Multiplier
+
+- **Decision**: Each server can configure a `focus` multiplier (default 1.0) that scales all salience earning in that server.
+- **Rationale**: Different communities deserve different levels of attention. A small, deeply engaged community might warrant more reflection per message than a high-volume server. Focus allows operators to tune attention allocation across servers.
+- **Examples**:
+  - `focus: 3.0` — A small but important community where every message should carry more weight
+  - `focus: 0.5` — A high-volume server where individual messages matter less
+  - `focus: 1.0` — Default, no scaling
+- **Implications**: Applied at earning time before propagation; affects all earning weights uniformly; configured per-server in `ServerOverrideConfig`
+
 ### Global Dyad Warming
 
 - **Decision**: Global dyads warm automatically when both constituent global users are warm.
@@ -300,6 +310,10 @@ def earn_from_reaction(reaction: Reaction, message: Message):
     base_amount = config.weights.reaction  # 0.5
     server_id = message.server_id
 
+    # Apply server focus multiplier
+    server_config = config.get_server_config(server_id)
+    base_amount *= server_config.focus  # default 1.0
+
     # 1. Message author earns (attention received)
     author_topic = get_topic(f"server:{server_id}:user:{message.author_id}")
     earn_salience(author_topic, base_amount)
@@ -330,9 +344,13 @@ When a message with media or links is observed:
 
 ```python
 def earn_from_message(message: Message):
-    """Earn salience from a message, with media/link boost."""
+    """Earn salience from a message, with media/link boost and server focus."""
 
     base_amount = config.weights.message  # 1.0
+
+    # Apply server focus multiplier first
+    server_config = config.get_server_config(message.server_id)
+    base_amount *= server_config.focus  # default 1.0
 
     # Apply media/link boost
     if message.has_media or message.has_links:
@@ -492,6 +510,13 @@ salience:
   # Self budget (separate pool)
   self_budget:
     daily_allocation: 50  # Fixed amount, not percentage
+
+# Per-server overrides (in servers section of config)
+servers:
+  "123456789012345678":  # server_id
+    focus: 1.5           # 50% boost to all salience earning in this server
+  "987654321098765432":
+    focus: 0.5           # Reduce salience earning for high-volume server
 ```
 
 ---

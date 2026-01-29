@@ -217,6 +217,7 @@ class ServerOverrideConfig(BaseModel):
     threads_as_topics: bool = True
     disabled_layers: list[str] = Field(default_factory=list)
     chattiness: dict[str, Any] | None = None
+    focus: float = 1.0
 
 
 class Config(BaseModel):
