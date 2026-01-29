@@ -791,6 +791,383 @@ async def message_detail(
 
 
 # =============================================================================
+# Users Browser
+# =============================================================================
+
+
+@router.get("/users", response_class=HTMLResponse)
+async def users_page(request: Request) -> HTMLResponse:
+    """Users browser page.
+
+    Main page for browsing users sorted by insight count.
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="users/list.html",
+        context={"active": "users", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+@router.get("/users/list", response_class=HTMLResponse)
+async def users_list_partial(
+    request: Request,
+    q: Optional[str] = Query(None, description="Search query"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(20, ge=1, le=100, description="Page size"),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for users list (htmx).
+
+    Returns HTML partial with paginated list of users,
+    optionally filtered by search query.
+    """
+    from zos.api.db_queries import list_users_with_stats
+
+    users, total = await list_users_with_stats(
+        db,
+        offset=offset,
+        limit=limit,
+    )
+
+    # Filter by search query if provided
+    if q:
+        q_lower = q.lower()
+        users = [
+            u for u in users
+            if q_lower in (u.get("name") or "").lower()
+            or q_lower in (u.get("username") or "").lower()
+        ]
+        total = len(users)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="users/_list.html",
+        context={
+            "users": users,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "q": q,
+        },
+    )
+
+
+# NOTE: Partial routes must be defined before the {user_id} route
+@router.get("/users/{user_id}/insights", response_class=HTMLResponse)
+async def user_insights_partial(
+    request: Request,
+    user_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for user insights (htmx)."""
+    from zos.api.db_queries import get_user_insights
+
+    insights = await get_user_insights(db, user_id)
+
+    if not insights:
+        return HTMLResponse('<p class="text-muted">No insights yet</p>')
+
+    # Resolve topic keys
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
+
+    html_parts = []
+    for i in formatted:
+        display_name = i["readable_topic_key"] or i["topic_key"]
+        html_parts.append(
+            f'<div class="list-item list-item-truncate">'
+            f'<a href="/ui/insights/{i["id"]}" class="truncate-text" title="{i["topic_key"]}">{display_name}</a>'
+            f'<span class="text-muted ml-1">{i["temporal_marker"]}</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/users/{user_id}/dyads", response_class=HTMLResponse)
+async def user_dyads_partial(
+    request: Request,
+    user_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for user dyad relationships (htmx)."""
+    from zos.api.db_queries import get_user_dyads
+
+    insights = await get_user_dyads(db, user_id)
+
+    if not insights:
+        return HTMLResponse('<p class="text-muted">No relationship insights yet</p>')
+
+    # Resolve topic keys
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
+
+    html_parts = []
+    for i in formatted:
+        display_name = i["readable_topic_key"] or i["topic_key"]
+        html_parts.append(
+            f'<div class="list-item list-item-truncate">'
+            f'<a href="/ui/insights/{i["id"]}" class="truncate-text" title="{i["topic_key"]}">{display_name}</a>'
+            f'<span class="text-muted ml-1">{i["temporal_marker"]}</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/users/{user_id}/messages", response_class=HTMLResponse)
+async def user_messages_partial(
+    request: Request,
+    user_id: str,
+    limit: int = Query(5, ge=1, le=20),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for user's recent messages (htmx)."""
+    from zos.api.db_queries import list_messages
+
+    messages, total = await list_messages(
+        db,
+        author_id=user_id,
+        limit=limit,
+    )
+
+    if not messages:
+        return HTMLResponse('<p class="text-muted">No messages</p>')
+
+    formatted = [_format_message_for_ui(m, db) for m in messages]
+
+    html_parts = []
+    for m in formatted:
+        channel = m["channel_name"] or m["channel_id"][:8] + "..."
+        content_preview = m["content"][:80] + "..." if len(m["content"]) > 80 else m["content"]
+        html_parts.append(
+            f'<div class="list-item">'
+            f'<a href="/ui/messages/{m["id"]}" class="truncate-text">{content_preview}</a>'
+            f'<span class="text-muted ml-1">#{channel}</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/users/{user_id}", response_class=HTMLResponse)
+async def user_detail(
+    request: Request,
+    user_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """User detail page.
+
+    Shows full user info, insights, dyads, and recent messages.
+    """
+    from zos.api.db_queries import get_user_details
+
+    user = await get_user_details(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="users/detail.html",
+        context={"user": user, "active": "users", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+# =============================================================================
+# Channels Browser
+# =============================================================================
+
+
+@router.get("/channels", response_class=HTMLResponse)
+async def channels_page(request: Request) -> HTMLResponse:
+    """Channels browser page.
+
+    Main page for browsing channels sorted by message count.
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="channels/list.html",
+        context={"active": "channels", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+@router.get("/channels/list", response_class=HTMLResponse)
+async def channels_list_partial(
+    request: Request,
+    q: Optional[str] = Query(None, description="Search query"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(20, ge=1, le=100, description="Page size"),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for channels list (htmx).
+
+    Returns HTML partial with paginated list of channels,
+    optionally filtered by search query.
+    """
+    from zos.api.db_queries import list_channels_with_stats
+
+    channels, total = await list_channels_with_stats(
+        db,
+        offset=offset,
+        limit=limit,
+    )
+
+    # Filter by search query if provided
+    if q:
+        q_lower = q.lower()
+        channels = [
+            c for c in channels
+            if q_lower in (c.get("name") or "").lower()
+            or q_lower in (c.get("server_name") or "").lower()
+        ]
+        total = len(channels)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="channels/_list.html",
+        context={
+            "channels": channels,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "q": q,
+        },
+    )
+
+
+# NOTE: Partial routes must be defined before the {channel_id} route
+@router.get("/channels/{channel_id}/insights", response_class=HTMLResponse)
+async def channel_insights_partial(
+    request: Request,
+    channel_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for channel insights (htmx)."""
+    from zos.api.db_queries import get_channel_insights
+
+    insights = await get_channel_insights(db, channel_id)
+
+    if not insights:
+        return HTMLResponse('<p class="text-muted">No related insights yet</p>')
+
+    # Resolve topic keys
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
+
+    html_parts = []
+    for i in formatted:
+        display_name = i["readable_topic_key"] or i["topic_key"]
+        html_parts.append(
+            f'<div class="list-item list-item-truncate">'
+            f'<a href="/ui/insights/{i["id"]}" class="truncate-text" title="{i["topic_key"]}">{display_name}</a>'
+            f'<span class="text-muted ml-1">{i["temporal_marker"]}</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/channels/{channel_id}/messages", response_class=HTMLResponse)
+async def channel_messages_partial(
+    request: Request,
+    channel_id: str,
+    limit: int = Query(5, ge=1, le=20),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for channel's recent messages (htmx)."""
+    from zos.api.db_queries import list_messages
+
+    messages, total = await list_messages(
+        db,
+        channel_id=channel_id,
+        limit=limit,
+    )
+
+    if not messages:
+        return HTMLResponse('<p class="text-muted">No messages</p>')
+
+    formatted = [_format_message_for_ui(m, db) for m in messages]
+
+    html_parts = []
+    for m in formatted:
+        author = m["author_name"] or m["author_id"][:8] + "..."
+        content_preview = m["content"][:80] + "..." if len(m["content"]) > 80 else m["content"]
+        html_parts.append(
+            f'<div class="list-item">'
+            f'<a href="/ui/messages/{m["id"]}" class="truncate-text">{content_preview}</a>'
+            f'<span class="text-muted ml-1">{author}</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/channels/{channel_id}/top-users", response_class=HTMLResponse)
+async def channel_top_users_partial(
+    request: Request,
+    channel_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for channel's top users (htmx)."""
+    from zos.api.db_queries import get_channel_top_users
+
+    users = await get_channel_top_users(db, channel_id)
+
+    if not users:
+        return HTMLResponse('<p class="text-muted">No users found</p>')
+
+    html_parts = []
+    for u in users:
+        name = u.get("name") or u.get("user_id", "Unknown")[:8] + "..."
+        html_parts.append(
+            f'<div class="list-item">'
+            f'<a href="/ui/users/{u["user_id"]}">{name}</a>'
+            f'<span class="text-muted ml-1">{u["message_count"]:,} messages</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/channels/{channel_id}", response_class=HTMLResponse)
+async def channel_detail(
+    request: Request,
+    channel_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Channel detail page.
+
+    Shows full channel info, insights, messages, and top users.
+    """
+    from zos.api.db_queries import get_channel_details
+
+    channel = await get_channel_details(db, channel_id)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="channels/detail.html",
+        context={"channel": channel, "active": "channels", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+# =============================================================================
 # Salience Dashboard (Story 5.7)
 # =============================================================================
 

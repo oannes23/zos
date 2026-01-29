@@ -1,0 +1,40 @@
+{% for user in users %}
+<div class="card user-card"
+     hx-get="/ui/users/{{ user.user_id }}"
+     hx-push-url="true"
+     hx-target="body"
+     hx-swap="innerHTML">
+    <div class="card-header">
+        <span class="card-title">{{ user.name }}</span>
+        {% if user.username and user.username != user.display_name %}
+        <span class="text-muted">@{{ user.username }}</span>
+        {% endif %}
+    </div>
+    <div class="card-meta">
+        <span class="badge badge-info">{{ user.insight_count }} insight{% if user.insight_count != 1 %}s{% endif %}</span>
+        <span class="badge badge-channel">{{ user.message_count | format_number }} message{% if user.message_count != 1 %}s{% endif %}</span>
+    </div>
+</div>
+{% endfor %}
+
+{% if users %}
+<div class="pagination">
+    {% if offset > 0 %}
+    <button hx-get="/ui/users/list?offset={{ offset - limit }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            hx-target="#users-list">
+        Previous
+    </button>
+    {% endif %}
+
+    <span class="page-info">{{ offset + 1 }}-{{ offset + users|length }} of {{ total }}</span>
+
+    {% if offset + limit < total %}
+    <button hx-get="/ui/users/list?offset={{ offset + limit }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            hx-target="#users-list">
+        Next
+    </button>
+    {% endif %}
+</div>
+{% else %}
+<p class="empty-state">No users found.</p>
+{% endif %}

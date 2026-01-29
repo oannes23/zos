@@ -12,7 +12,7 @@ http://localhost:8000
 
 Start the API with `zos api`. Interactive documentation is available at `/docs` (Swagger UI) and `/redoc`.
 
-A web UI is also available at `/ui/` for browsing messages, insights, salience, and layer runs.
+A web UI is also available at `/ui/` for browsing messages, insights, users, channels, salience, and layer runs.
 
 ---
 
@@ -522,6 +522,50 @@ Bulk delete insights matching criteria.
 ### GET /dev/create-insight
 
 HTML form for manual insight creation.
+
+---
+
+## Web UI
+
+The web UI provides a browser-based interface for exploring Zos data at `/ui/`.
+
+### Navigation
+
+| Path | Description |
+|------|-------------|
+| `/ui/` | Dashboard with top topics, recent insights, and recent runs |
+| `/ui/messages` | Browse and search stored messages |
+| `/ui/insights` | Browse and search insights by category |
+| `/ui/users` | Browse users sorted by insight count |
+| `/ui/channels` | Browse channels sorted by message count |
+| `/ui/salience` | View salience balances by budget group |
+| `/ui/runs` | View layer run history and statistics |
+
+### Users Browser
+
+The users browser (`/ui/users`) displays all tracked users sorted by insight count.
+
+**Features:**
+- Search users by name
+- Click a user to see their detail page with:
+  - Overview stats (messages, bio, pronouns, join date)
+  - Insights about this user
+  - Relationship insights (dyads involving this user)
+  - Recent messages
+- Links to filtered message views
+
+### Channels Browser
+
+The channels browser (`/ui/channels`) displays all tracked channels sorted by message count.
+
+**Features:**
+- Search channels by name
+- Click a channel to see its detail page with:
+  - Overview stats (messages, active users, type, created date)
+  - Related insights
+  - Recent messages
+  - Top users by message count
+- Links to filtered message views
 
 ---
 

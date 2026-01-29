@@ -622,3 +622,567 @@ async def get_authors_for_filter(
             })
 
         return results
+
+
+# =============================================================================
+# User Queries
+# =============================================================================
+
+
+async def list_users_with_stats(
+    engine: "Engine",
+    server_id: str | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> tuple[list[dict], int]:
+    """List users with insight counts and message counts.
+
+    Returns users sorted by insight count (descending).
+    Excludes anonymous users.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        server_id: Optional server filter.
+        offset: Pagination offset.
+        limit: Maximum results.
+
+    Returns:
+        Tuple of (list of user dicts, total count).
+    """
+    from zos.database import insights as insights_table, messages as messages_table, user_profiles
+
+    with engine.connect() as conn:
+        # Get latest profile for each user
+        profile_subq = (
+            select(
+                user_profiles.c.user_id,
+                func.max(user_profiles.c.captured_at).label("max_captured"),
+            )
+            .group_by(user_profiles.c.user_id)
+            .subquery()
+        )
+
+        latest_profiles = (
+            select(
+                user_profiles.c.user_id,
+                user_profiles.c.display_name,
+                user_profiles.c.username,
+                user_profiles.c.is_bot,
+            )
+            .join(
+                profile_subq,
+                (user_profiles.c.user_id == profile_subq.c.user_id)
+                & (user_profiles.c.captured_at == profile_subq.c.max_captured),
+            )
+            .where(user_profiles.c.is_bot == False)  # Exclude bots
+            .subquery()
+        )
+
+        # Count insights per user (from topic keys containing user ID)
+        # Topic keys like server:X:user:USER_ID or user:USER_ID
+        insight_counts = (
+            select(
+                latest_profiles.c.user_id,
+                func.count(insights_table.c.id).label("insight_count"),
+            )
+            .select_from(
+                latest_profiles.outerjoin(
+                    insights_table,
+                    insights_table.c.topic_key.like(
+                        func.concat("%:user:", latest_profiles.c.user_id, "%")
+                    )
+                    | insights_table.c.topic_key.like(
+                        func.concat("user:", latest_profiles.c.user_id)
+                    ),
+                )
+            )
+            .where(
+                (insights_table.c.quarantined == False) | (insights_table.c.id.is_(None))
+            )
+            .group_by(latest_profiles.c.user_id)
+            .subquery()
+        )
+
+        # Count messages per user
+        message_counts = (
+            select(
+                messages_table.c.author_id.label("user_id"),
+                func.count().label("message_count"),
+            )
+            .where(
+                messages_table.c.deleted_at.is_(None),
+                ~messages_table.c.author_id.like("<chat%"),
+            )
+            .group_by(messages_table.c.author_id)
+            .subquery()
+        )
+
+        # Build server filter for insights if needed
+        server_filter = []
+        if server_id:
+            server_filter.append(
+                insights_table.c.topic_key.like(f"server:{server_id}:%")
+            )
+
+        # Main query joining profiles with counts
+        base_query = (
+            select(
+                latest_profiles.c.user_id,
+                latest_profiles.c.display_name,
+                latest_profiles.c.username,
+                func.coalesce(insight_counts.c.insight_count, 0).label("insight_count"),
+                func.coalesce(message_counts.c.message_count, 0).label("message_count"),
+            )
+            .select_from(
+                latest_profiles
+                .outerjoin(insight_counts, latest_profiles.c.user_id == insight_counts.c.user_id)
+                .outerjoin(message_counts, latest_profiles.c.user_id == message_counts.c.user_id)
+            )
+        )
+
+        # Count total
+        count_stmt = select(func.count()).select_from(latest_profiles)
+        total = conn.execute(count_stmt).scalar() or 0
+
+        # Data query with pagination, sorted by insight count
+        data_stmt = (
+            base_query
+            .order_by(func.coalesce(insight_counts.c.insight_count, 0).desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        results = []
+        for row in conn.execute(data_stmt).fetchall():
+            name = row.display_name or row.username or f"[{row.user_id}]"
+            results.append({
+                "user_id": row.user_id,
+                "display_name": row.display_name,
+                "username": row.username,
+                "name": name,
+                "insight_count": row.insight_count,
+                "message_count": row.message_count,
+            })
+
+        return results, total
+
+
+async def get_user_details(
+    engine: "Engine",
+    user_id: str,
+) -> dict | None:
+    """Get detailed information about a user.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        user_id: The user ID.
+
+    Returns:
+        Dict with user details or None if not found.
+    """
+    from zos.database import messages as messages_table, user_profiles
+
+    with engine.connect() as conn:
+        # Get latest profile
+        stmt = (
+            select(
+                user_profiles.c.user_id,
+                user_profiles.c.display_name,
+                user_profiles.c.username,
+                user_profiles.c.discriminator,
+                user_profiles.c.avatar_url,
+                user_profiles.c.is_bot,
+                user_profiles.c.joined_at,
+                user_profiles.c.account_created_at,
+                user_profiles.c.bio,
+                user_profiles.c.pronouns,
+                user_profiles.c.captured_at,
+            )
+            .where(user_profiles.c.user_id == user_id)
+            .order_by(user_profiles.c.captured_at.desc())
+            .limit(1)
+        )
+        row = conn.execute(stmt).fetchone()
+
+        if not row:
+            return None
+
+        # Count messages
+        msg_count_stmt = (
+            select(func.count())
+            .select_from(messages_table)
+            .where(
+                messages_table.c.author_id == user_id,
+                messages_table.c.deleted_at.is_(None),
+            )
+        )
+        message_count = conn.execute(msg_count_stmt).scalar() or 0
+
+        name = row.display_name or row.username or f"[{user_id}]"
+
+        return {
+            "user_id": row.user_id,
+            "display_name": row.display_name,
+            "username": row.username,
+            "discriminator": row.discriminator,
+            "name": name,
+            "avatar_url": row.avatar_url,
+            "is_bot": row.is_bot,
+            "joined_at": row.joined_at,
+            "account_created_at": row.account_created_at,
+            "bio": row.bio,
+            "pronouns": row.pronouns,
+            "captured_at": row.captured_at,
+            "message_count": message_count,
+        }
+
+
+async def get_user_insights(
+    engine: "Engine",
+    user_id: str,
+    limit: int = 20,
+) -> list:
+    """Get insights about a specific user.
+
+    Finds insights where topic_key contains the user ID.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        user_id: The user ID.
+        limit: Maximum results.
+
+    Returns:
+        List of Insight models.
+    """
+    from zos.database import insights as insights_table
+    from zos.insights import _row_to_insight_static
+
+    with engine.connect() as conn:
+        stmt = (
+            select(insights_table)
+            .where(
+                insights_table.c.quarantined == False,
+                (
+                    insights_table.c.topic_key.like(f"%:user:{user_id}")
+                    | insights_table.c.topic_key.like(f"%:user:{user_id}:%")
+                    | insights_table.c.topic_key.like(f"user:{user_id}")
+                ),
+            )
+            .order_by(insights_table.c.created_at.desc())
+            .limit(limit)
+        )
+        rows = conn.execute(stmt).fetchall()
+        return [_row_to_insight_static(r) for r in rows]
+
+
+async def get_user_dyads(
+    engine: "Engine",
+    user_id: str,
+    limit: int = 10,
+) -> list:
+    """Get dyad insights involving a specific user.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        user_id: The user ID.
+        limit: Maximum results.
+
+    Returns:
+        List of Insight models for dyad topics.
+    """
+    from zos.database import insights as insights_table
+    from zos.insights import _row_to_insight_static
+
+    with engine.connect() as conn:
+        stmt = (
+            select(insights_table)
+            .where(
+                insights_table.c.quarantined == False,
+                insights_table.c.topic_key.like(f"%:dyad:%"),
+                insights_table.c.topic_key.like(f"%{user_id}%"),
+            )
+            .order_by(insights_table.c.created_at.desc())
+            .limit(limit)
+        )
+        rows = conn.execute(stmt).fetchall()
+        return [_row_to_insight_static(r) for r in rows]
+
+
+# =============================================================================
+# Channel Queries
+# =============================================================================
+
+
+async def list_channels_with_stats(
+    engine: "Engine",
+    server_id: str | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> tuple[list[dict], int]:
+    """List channels with message and insight counts.
+
+    Returns channels sorted by message count (descending).
+
+    Args:
+        engine: SQLAlchemy database engine.
+        server_id: Optional server filter.
+        offset: Pagination offset.
+        limit: Maximum results.
+
+    Returns:
+        Tuple of (list of channel dicts, total count).
+    """
+    from zos.database import channels as channels_table, messages as messages_table, servers
+
+    with engine.connect() as conn:
+        base_conditions = []
+        if server_id:
+            base_conditions.append(channels_table.c.server_id == server_id)
+
+        # Count messages per channel
+        message_counts = (
+            select(
+                messages_table.c.channel_id,
+                func.count().label("message_count"),
+            )
+            .where(messages_table.c.deleted_at.is_(None))
+            .group_by(messages_table.c.channel_id)
+            .subquery()
+        )
+
+        # Main query
+        base_query = (
+            select(
+                channels_table.c.id,
+                channels_table.c.name,
+                channels_table.c.server_id,
+                channels_table.c.type,
+                servers.c.name.label("server_name"),
+                func.coalesce(message_counts.c.message_count, 0).label("message_count"),
+            )
+            .select_from(
+                channels_table
+                .outerjoin(servers, channels_table.c.server_id == servers.c.id)
+                .outerjoin(message_counts, channels_table.c.id == message_counts.c.channel_id)
+            )
+        )
+
+        if base_conditions:
+            base_query = base_query.where(and_(*base_conditions))
+
+        # Count total
+        count_subq = select(channels_table.c.id)
+        if base_conditions:
+            count_subq = count_subq.where(and_(*base_conditions))
+        count_stmt = select(func.count()).select_from(count_subq.subquery())
+        total = conn.execute(count_stmt).scalar() or 0
+
+        # Data query with pagination
+        data_stmt = (
+            base_query
+            .order_by(func.coalesce(message_counts.c.message_count, 0).desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        results = []
+        for row in conn.execute(data_stmt).fetchall():
+            results.append({
+                "channel_id": row.id,
+                "name": row.name or f"[{row.id}]",
+                "server_id": row.server_id,
+                "server_name": row.server_name,
+                "type": row.type,
+                "message_count": row.message_count,
+            })
+
+        return results, total
+
+
+async def get_channel_details(
+    engine: "Engine",
+    channel_id: str,
+) -> dict | None:
+    """Get detailed information about a channel.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        channel_id: The channel ID.
+
+    Returns:
+        Dict with channel details or None if not found.
+    """
+    from zos.database import channels as channels_table, messages as messages_table, servers
+
+    with engine.connect() as conn:
+        # Get channel info
+        stmt = (
+            select(
+                channels_table.c.id,
+                channels_table.c.name,
+                channels_table.c.server_id,
+                channels_table.c.type,
+                channels_table.c.parent_id,
+                channels_table.c.created_at,
+                servers.c.name.label("server_name"),
+            )
+            .select_from(
+                channels_table.outerjoin(servers, channels_table.c.server_id == servers.c.id)
+            )
+            .where(channels_table.c.id == channel_id)
+        )
+        row = conn.execute(stmt).fetchone()
+
+        if not row:
+            return None
+
+        # Count messages
+        msg_count_stmt = (
+            select(func.count())
+            .select_from(messages_table)
+            .where(
+                messages_table.c.channel_id == channel_id,
+                messages_table.c.deleted_at.is_(None),
+            )
+        )
+        message_count = conn.execute(msg_count_stmt).scalar() or 0
+
+        # Count unique authors
+        author_count_stmt = (
+            select(func.count(func.distinct(messages_table.c.author_id)))
+            .select_from(messages_table)
+            .where(
+                messages_table.c.channel_id == channel_id,
+                messages_table.c.deleted_at.is_(None),
+                ~messages_table.c.author_id.like("<chat%"),
+            )
+        )
+        author_count = conn.execute(author_count_stmt).scalar() or 0
+
+        return {
+            "channel_id": row.id,
+            "name": row.name or f"[{channel_id}]",
+            "server_id": row.server_id,
+            "server_name": row.server_name,
+            "type": row.type,
+            "parent_id": row.parent_id,
+            "created_at": row.created_at,
+            "message_count": message_count,
+            "author_count": author_count,
+        }
+
+
+async def get_channel_insights(
+    engine: "Engine",
+    channel_id: str,
+    limit: int = 20,
+) -> list:
+    """Get insights about a specific channel.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        channel_id: The channel ID.
+        limit: Maximum results.
+
+    Returns:
+        List of Insight models.
+    """
+    from zos.database import insights as insights_table
+    from zos.insights import _row_to_insight_static
+
+    with engine.connect() as conn:
+        stmt = (
+            select(insights_table)
+            .where(
+                insights_table.c.quarantined == False,
+                (
+                    insights_table.c.topic_key.like(f"%:channel:{channel_id}")
+                    | insights_table.c.context_channel == channel_id
+                ),
+            )
+            .order_by(insights_table.c.created_at.desc())
+            .limit(limit)
+        )
+        rows = conn.execute(stmt).fetchall()
+        return [_row_to_insight_static(r) for r in rows]
+
+
+async def get_channel_top_users(
+    engine: "Engine",
+    channel_id: str,
+    limit: int = 10,
+) -> list[dict]:
+    """Get top users in a channel by message count.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        channel_id: The channel ID.
+        limit: Maximum results.
+
+    Returns:
+        List of dicts with user info and message count.
+    """
+    from zos.database import messages as messages_table, user_profiles
+
+    with engine.connect() as conn:
+        # Get latest profile for each user
+        profile_subq = (
+            select(
+                user_profiles.c.user_id,
+                func.max(user_profiles.c.captured_at).label("max_captured"),
+            )
+            .group_by(user_profiles.c.user_id)
+            .subquery()
+        )
+
+        latest_profiles = (
+            select(
+                user_profiles.c.user_id,
+                user_profiles.c.display_name,
+                user_profiles.c.username,
+            )
+            .join(
+                profile_subq,
+                (user_profiles.c.user_id == profile_subq.c.user_id)
+                & (user_profiles.c.captured_at == profile_subq.c.max_captured),
+            )
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                messages_table.c.author_id,
+                latest_profiles.c.display_name,
+                latest_profiles.c.username,
+                func.count().label("message_count"),
+            )
+            .select_from(
+                messages_table.outerjoin(
+                    latest_profiles,
+                    messages_table.c.author_id == latest_profiles.c.user_id,
+                )
+            )
+            .where(
+                messages_table.c.channel_id == channel_id,
+                messages_table.c.deleted_at.is_(None),
+                ~messages_table.c.author_id.like("<chat%"),
+            )
+            .group_by(
+                messages_table.c.author_id,
+                latest_profiles.c.display_name,
+                latest_profiles.c.username,
+            )
+            .order_by(func.count().desc())
+            .limit(limit)
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            name = row.display_name or row.username or f"[{row.author_id}]"
+            results.append({
+                "user_id": row.author_id,
+                "name": name,
+                "message_count": row.message_count,
+            })
+
+        return results

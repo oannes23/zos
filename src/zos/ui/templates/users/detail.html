@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ user.name }} — Zos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="/ui/users" class="back-link">&larr; All Users</a>
+    <h1>{{ user.name }}</h1>
+    {% if user.username and user.username != user.display_name %}
+    <p class="text-muted">@{{ user.username }}{% if user.discriminator and user.discriminator != "0" %}#{{ user.discriminator }}{% endif %}</p>
+    {% endif %}
+</div>
+
+<div class="detail-grid">
+    <div class="detail-main">
+        <!-- User Stats -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Overview</span>
+            </div>
+            <div class="card-body stats-grid">
+                <div class="stat">
+                    <span class="stat-value">{{ user.message_count | format_number }}</span>
+                    <span class="stat-label">Messages</span>
+                </div>
+                {% if user.bio %}
+                <div class="stat wide">
+                    <span class="stat-label">Bio</span>
+                    <span class="stat-value small">{{ user.bio }}</span>
+                </div>
+                {% endif %}
+                {% if user.pronouns %}
+                <div class="stat">
+                    <span class="stat-label">Pronouns</span>
+                    <span class="stat-value small">{{ user.pronouns }}</span>
+                </div>
+                {% endif %}
+                {% if user.joined_at %}
+                <div class="stat">
+                    <span class="stat-label">Joined</span>
+                    <span class="stat-value small">{{ user.joined_at | relative_time }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Insights about this user -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Insights</span>
+            </div>
+            <div hx-get="/ui/users/{{ user.user_id }}/insights" hx-trigger="load" hx-swap="innerHTML">
+                Loading insights...
+            </div>
+        </div>
+
+        <!-- Dyad relationships -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Relationships</span>
+            </div>
+            <div hx-get="/ui/users/{{ user.user_id }}/dyads" hx-trigger="load" hx-swap="innerHTML">
+                Loading relationships...
+            </div>
+        </div>
+    </div>
+
+    <div class="detail-sidebar">
+        <!-- Recent Messages -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Recent Messages</span>
+                <a href="/ui/messages?author_id={{ user.user_id }}" class="text-muted">View all</a>
+            </div>
+            <div hx-get="/ui/users/{{ user.user_id }}/messages" hx-trigger="load" hx-swap="innerHTML">
+                Loading messages...
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

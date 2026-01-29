@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Channels — Zos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Channels</h1>
+    <div class="page-actions">
+        <input type="search"
+               name="q"
+               placeholder="Search channels..."
+               hx-get="/ui/channels/list"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#channels-list"
+               class="search-input">
+    </div>
+</div>
+
+<div id="channels-list" hx-get="/ui/channels/list" hx-trigger="load">
+    Loading...
+</div>
+{% endblock %}

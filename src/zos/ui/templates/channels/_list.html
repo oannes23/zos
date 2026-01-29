@@ -1,0 +1,42 @@
+{% for channel in channels %}
+<div class="card channel-card"
+     hx-get="/ui/channels/{{ channel.channel_id }}"
+     hx-push-url="true"
+     hx-target="body"
+     hx-swap="innerHTML">
+    <div class="card-header">
+        <span class="card-title">#{{ channel.name }}</span>
+        {% if channel.server_name %}
+        <span class="text-muted">{{ channel.server_name }}</span>
+        {% endif %}
+    </div>
+    <div class="card-meta">
+        <span class="badge badge-channel">{{ channel.message_count | format_number }} message{% if channel.message_count != 1 %}s{% endif %}</span>
+        {% if channel.type %}
+        <span class="badge">{{ channel.type }}</span>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+{% if channels %}
+<div class="pagination">
+    {% if offset > 0 %}
+    <button hx-get="/ui/channels/list?offset={{ offset - limit }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            hx-target="#channels-list">
+        Previous
+    </button>
+    {% endif %}
+
+    <span class="page-info">{{ offset + 1 }}-{{ offset + channels|length }} of {{ total }}</span>
+
+    {% if offset + limit < total %}
+    <button hx-get="/ui/channels/list?offset={{ offset + limit }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            hx-target="#channels-list">
+        Next
+    </button>
+    {% endif %}
+</div>
+{% else %}
+<p class="empty-state">No channels found.</p>
+{% endif %}
