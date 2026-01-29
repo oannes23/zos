@@ -1107,3 +1107,168 @@ a:hover {
 .back-link:hover {
     color: var(--text-primary);
 }
+
+
+/* =============================================================================
+   Budget Dashboard Styles
+   ============================================================================= */
+
+/* Budget Stats Cards - Summary row */
+.budget-stats-cards {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+}
+
+.budget-stats-cards .stat-card {
+    flex: 1;
+    min-width: 140px;
+}
+
+.budget-stat-primary {
+    border-left: 4px solid var(--accent);
+}
+
+.budget-stat-primary .stat-value {
+    color: var(--accent);
+    font-size: 2rem;
+}
+
+/* Budget Grid - Two column layout for breakdowns */
+.budget-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .budget-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Budget Tables */
+.budget-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.budget-table th {
+    text-align: left;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 2px solid var(--bg-secondary);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.budget-table td {
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--bg-secondary);
+}
+
+.budget-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.budget-table .text-right {
+    text-align: right;
+}
+
+.budget-table .total-row {
+    background: var(--bg-secondary);
+}
+
+.budget-table .total-row td {
+    border-bottom: none;
+    padding-top: 1rem;
+}
+
+/* Cost Bar - Inline percentage visualization */
+.cost-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.cost-bar {
+    height: 8px;
+    background: var(--accent);
+    border-radius: 2px;
+    min-width: 2px;
+    transition: width 0.3s;
+}
+
+.cost-bar-container span {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* Daily Chart - Bar chart visualization */
+.daily-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 120px;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--bg-secondary);
+    margin-bottom: 1rem;
+    overflow-x: auto;
+}
+
+.daily-bar-container {
+    flex: 1;
+    min-width: 20px;
+    max-width: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+}
+
+.daily-bar {
+    width: 100%;
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    transition: height 0.3s;
+}
+
+.daily-label {
+    font-size: 0.625rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+    transform: rotate(-45deg);
+    white-space: nowrap;
+}
+
+/* Model name styling */
+.model-name {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-left: 0.5rem;
+}
+
+/* Text utilities for budget */
+.text-small {
+    font-size: 0.75rem;
+}
+
+/* Model profile badges */
+.badge-simple { background: #4ecdc4; color: #000; }
+.badge-moderate { background: #3498db; color: #fff; }
+.badge-complex { background: #9b59b6; color: #fff; }
+.badge-default { background: var(--bg-secondary); color: var(--text-primary); }
+
+/* Call type badges */
+.badge-reflection { background: #3498db; color: #fff; }
+.badge-vision { background: #9b59b6; color: #fff; }
+.badge-conversation { background: #2ecc71; color: #fff; }
+.badge-synthesis { background: #f39c12; color: #000; }
+.badge-other { background: var(--text-secondary); color: #000; }

@@ -1,0 +1,50 @@
+{% if by_layer %}
+{% set total_cost = by_layer | map(attribute='cost_usd') | sum %}
+<table class="budget-table">
+    <thead>
+        <tr>
+            <th>Layer</th>
+            <th class="text-right">Cost</th>
+            <th class="text-right">% of Total</th>
+            <th class="text-right">Tokens</th>
+            <th class="text-right">Runs</th>
+            <th class="text-right">Insights</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for layer in by_layer %}
+        <tr>
+            <td>
+                <a href="/ui/runs?layer_name={{ layer.layer_name }}">{{ layer.layer_name }}</a>
+            </td>
+            <td class="text-right">{{ layer.cost_usd | format_cost }}</td>
+            <td class="text-right">
+                {% if total_cost > 0 %}
+                <div class="cost-bar-container">
+                    <div class="cost-bar" style="width: {{ (layer.cost_usd / total_cost * 100) }}%"></div>
+                    <span>{{ "%.1f" | format((layer.cost_usd / total_cost * 100)) }}%</span>
+                </div>
+                {% else %}
+                0%
+                {% endif %}
+            </td>
+            <td class="text-right">{{ layer.tokens | format_number }}</td>
+            <td class="text-right">{{ layer.runs | format_number }}</td>
+            <td class="text-right">{{ layer.insights | format_number }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td><strong>Total</strong></td>
+            <td class="text-right"><strong>{{ total_cost | format_cost }}</strong></td>
+            <td class="text-right">100%</td>
+            <td class="text-right"><strong>{{ by_layer | map(attribute='tokens') | sum | format_number }}</strong></td>
+            <td class="text-right"><strong>{{ by_layer | map(attribute='runs') | sum | format_number }}</strong></td>
+            <td class="text-right"><strong>{{ by_layer | map(attribute='insights') | sum | format_number }}</strong></td>
+        </tr>
+    </tfoot>
+</table>
+{% else %}
+<p class="text-muted">No layer cost data for the selected period</p>
+{% endif %}

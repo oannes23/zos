@@ -1,0 +1,51 @@
+{% if by_model %}
+{% set total_cost = by_model | map(attribute='cost_usd') | sum %}
+<table class="budget-table">
+    <thead>
+        <tr>
+            <th>Model</th>
+            <th class="text-right">Cost</th>
+            <th class="text-right">% of Total</th>
+            <th class="text-right">Tokens</th>
+            <th class="text-right">Calls</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for model in by_model %}
+        <tr>
+            <td>
+                <span class="badge badge-{{ model.model_profile or 'default' }}">{{ model.model_profile or 'unknown' }}</span>
+                <span class="model-name">{{ model.model_name }}</span>
+            </td>
+            <td class="text-right">{{ model.cost_usd | format_cost }}</td>
+            <td class="text-right">
+                {% if total_cost > 0 %}
+                <div class="cost-bar-container">
+                    <div class="cost-bar" style="width: {{ (model.cost_usd / total_cost * 100) }}%"></div>
+                    <span>{{ "%.1f" | format((model.cost_usd / total_cost * 100)) }}%</span>
+                </div>
+                {% else %}
+                0%
+                {% endif %}
+            </td>
+            <td class="text-right">
+                {{ model.tokens | format_number }}
+                <span class="text-muted text-small">({{ model.tokens_input | format_number }} in / {{ model.tokens_output | format_number }} out)</span>
+            </td>
+            <td class="text-right">{{ model.calls | format_number }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td><strong>Total</strong></td>
+            <td class="text-right"><strong>{{ total_cost | format_cost }}</strong></td>
+            <td class="text-right">100%</td>
+            <td class="text-right"><strong>{{ by_model | map(attribute='tokens') | sum | format_number }}</strong></td>
+            <td class="text-right"><strong>{{ by_model | map(attribute='calls') | sum | format_number }}</strong></td>
+        </tr>
+    </tfoot>
+</table>
+{% else %}
+<p class="text-muted">No model cost data for the selected period</p>
+{% endif %}

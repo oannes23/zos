@@ -4,7 +4,7 @@ These functions provide paginated and filtered access to database entities
 for the API layer. They return raw models rather than formatted responses.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, delete, func, select, update
@@ -1183,6 +1183,274 @@ async def get_channel_top_users(
                 "user_id": row.author_id,
                 "name": name,
                 "message_count": row.message_count,
+            })
+
+        return results
+
+
+# =============================================================================
+# Budget / Cost Queries
+# =============================================================================
+
+
+async def get_budget_summary(
+    engine: "Engine",
+    days: int = 30,
+) -> dict:
+    """Get overall budget summary.
+
+    Returns total cost, tokens, runs, and insights for the specified period.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        days: Number of days to look back (default 30).
+
+    Returns:
+        Dict with total_cost_usd, total_tokens, total_runs, total_insights,
+        and avg_cost_per_run.
+    """
+    from datetime import timedelta
+
+    from zos.database import layer_runs, llm_calls
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    with engine.connect() as conn:
+        # Get layer runs stats
+        runs_stmt = (
+            select(
+                func.count().label("total_runs"),
+                func.coalesce(func.sum(layer_runs.c.tokens_total), 0).label("total_tokens"),
+                func.coalesce(func.sum(layer_runs.c.estimated_cost_usd), 0.0).label("total_cost"),
+                func.coalesce(func.sum(layer_runs.c.insights_created), 0).label("total_insights"),
+            )
+            .where(layer_runs.c.started_at >= since)
+        )
+        runs_row = conn.execute(runs_stmt).fetchone()
+
+        total_runs = runs_row.total_runs or 0
+        total_tokens = runs_row.total_tokens or 0
+        total_cost = runs_row.total_cost or 0.0
+        total_insights = runs_row.total_insights or 0
+
+        avg_cost_per_run = total_cost / total_runs if total_runs > 0 else 0.0
+
+        # Get LLM calls count
+        calls_stmt = (
+            select(func.count())
+            .select_from(llm_calls)
+            .where(llm_calls.c.created_at >= since)
+        )
+        total_calls = conn.execute(calls_stmt).scalar() or 0
+
+        return {
+            "total_cost_usd": total_cost,
+            "total_tokens": total_tokens,
+            "total_runs": total_runs,
+            "total_insights": total_insights,
+            "total_calls": total_calls,
+            "avg_cost_per_run": avg_cost_per_run,
+            "days": days,
+        }
+
+
+async def get_daily_costs(
+    engine: "Engine",
+    days: int = 30,
+) -> list[dict]:
+    """Get daily cost breakdown for visualization.
+
+    Returns cost and token data grouped by day.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        days: Number of days to look back (default 30).
+
+    Returns:
+        List of dicts with date, cost_usd, tokens, runs, insights.
+    """
+    from datetime import timedelta
+
+    from zos.database import layer_runs
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    with engine.connect() as conn:
+        # Group by date - SQLite specific date function
+        stmt = (
+            select(
+                func.date(layer_runs.c.started_at).label("date"),
+                func.coalesce(func.sum(layer_runs.c.estimated_cost_usd), 0.0).label("cost_usd"),
+                func.coalesce(func.sum(layer_runs.c.tokens_total), 0).label("tokens"),
+                func.count().label("runs"),
+                func.coalesce(func.sum(layer_runs.c.insights_created), 0).label("insights"),
+            )
+            .where(layer_runs.c.started_at >= since)
+            .group_by(func.date(layer_runs.c.started_at))
+            .order_by(func.date(layer_runs.c.started_at))
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "date": row.date,
+                "cost_usd": float(row.cost_usd),
+                "tokens": int(row.tokens),
+                "runs": int(row.runs),
+                "insights": int(row.insights),
+            })
+
+        return results
+
+
+async def get_cost_by_layer(
+    engine: "Engine",
+    days: int = 30,
+) -> list[dict]:
+    """Get cost breakdown by layer name.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        days: Number of days to look back (default 30).
+
+    Returns:
+        List of dicts with layer_name, cost_usd, tokens, runs, insights,
+        sorted by cost descending.
+    """
+    from datetime import timedelta
+
+    from zos.database import layer_runs
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    with engine.connect() as conn:
+        stmt = (
+            select(
+                layer_runs.c.layer_name,
+                func.coalesce(func.sum(layer_runs.c.estimated_cost_usd), 0.0).label("cost_usd"),
+                func.coalesce(func.sum(layer_runs.c.tokens_total), 0).label("tokens"),
+                func.coalesce(func.sum(layer_runs.c.tokens_input), 0).label("tokens_input"),
+                func.coalesce(func.sum(layer_runs.c.tokens_output), 0).label("tokens_output"),
+                func.count().label("runs"),
+                func.coalesce(func.sum(layer_runs.c.insights_created), 0).label("insights"),
+            )
+            .where(layer_runs.c.started_at >= since)
+            .group_by(layer_runs.c.layer_name)
+            .order_by(func.sum(layer_runs.c.estimated_cost_usd).desc())
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "layer_name": row.layer_name,
+                "cost_usd": float(row.cost_usd),
+                "tokens": int(row.tokens),
+                "tokens_input": int(row.tokens_input),
+                "tokens_output": int(row.tokens_output),
+                "runs": int(row.runs),
+                "insights": int(row.insights),
+            })
+
+        return results
+
+
+async def get_cost_by_model(
+    engine: "Engine",
+    days: int = 30,
+) -> list[dict]:
+    """Get cost breakdown by model.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        days: Number of days to look back (default 30).
+
+    Returns:
+        List of dicts with model_provider, model_name, model_profile,
+        cost_usd, tokens, calls, sorted by cost descending.
+    """
+    from datetime import timedelta
+
+    from zos.database import llm_calls
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    with engine.connect() as conn:
+        stmt = (
+            select(
+                llm_calls.c.model_provider,
+                llm_calls.c.model_name,
+                llm_calls.c.model_profile,
+                func.coalesce(func.sum(llm_calls.c.estimated_cost_usd), 0.0).label("cost_usd"),
+                func.coalesce(func.sum(llm_calls.c.tokens_total), 0).label("tokens"),
+                func.coalesce(func.sum(llm_calls.c.tokens_input), 0).label("tokens_input"),
+                func.coalesce(func.sum(llm_calls.c.tokens_output), 0).label("tokens_output"),
+                func.count().label("calls"),
+            )
+            .where(llm_calls.c.created_at >= since)
+            .group_by(
+                llm_calls.c.model_provider,
+                llm_calls.c.model_name,
+                llm_calls.c.model_profile,
+            )
+            .order_by(func.sum(llm_calls.c.estimated_cost_usd).desc())
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "model_provider": row.model_provider,
+                "model_name": row.model_name,
+                "model_profile": row.model_profile,
+                "cost_usd": float(row.cost_usd),
+                "tokens": int(row.tokens),
+                "tokens_input": int(row.tokens_input),
+                "tokens_output": int(row.tokens_output),
+                "calls": int(row.calls),
+            })
+
+        return results
+
+
+async def get_cost_by_call_type(
+    engine: "Engine",
+    days: int = 30,
+) -> list[dict]:
+    """Get cost breakdown by call type (reflection, vision, conversation, etc).
+
+    Args:
+        engine: SQLAlchemy database engine.
+        days: Number of days to look back (default 30).
+
+    Returns:
+        List of dicts with call_type, cost_usd, tokens, calls,
+        sorted by cost descending.
+    """
+    from datetime import timedelta
+
+    from zos.database import llm_calls
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    with engine.connect() as conn:
+        stmt = (
+            select(
+                llm_calls.c.call_type,
+                func.coalesce(func.sum(llm_calls.c.estimated_cost_usd), 0.0).label("cost_usd"),
+                func.coalesce(func.sum(llm_calls.c.tokens_total), 0).label("tokens"),
+                func.count().label("calls"),
+            )
+            .where(llm_calls.c.created_at >= since)
+            .group_by(llm_calls.c.call_type)
+            .order_by(func.sum(llm_calls.c.estimated_cost_usd).desc())
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "call_type": row.call_type,
+                "cost_usd": float(row.cost_usd),
+                "tokens": int(row.tokens),
+                "calls": int(row.calls),
             })
 
         return results

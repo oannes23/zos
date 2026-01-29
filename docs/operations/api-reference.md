@@ -539,6 +539,7 @@ The web UI provides a browser-based interface for exploring Zos data at `/ui/`.
 | `/ui/users` | Browse users sorted by insight count |
 | `/ui/channels` | Browse channels sorted by message count |
 | `/ui/salience` | View salience balances by budget group |
+| `/ui/budget` | Track API costs, token usage, and spending over time |
 | `/ui/runs` | View layer run history and statistics |
 
 ### Users Browser
@@ -566,6 +567,18 @@ The channels browser (`/ui/channels`) displays all tracked channels sorted by me
   - Recent messages
   - Top users by message count
 - Links to filtered message views
+
+### Budget Dashboard
+
+The budget dashboard (`/ui/budget`) provides cost tracking and visualization.
+
+**Features:**
+- Summary cards showing total cost, tokens, runs, calls, and insights (30 days)
+- Daily cost chart with bar visualization
+- Cost breakdown by layer (percentage of total, tokens, runs, insights)
+- Cost breakdown by model (provider, profile, tokens in/out, calls)
+- Cost breakdown by call type (reflection, vision, conversation, etc.)
+- All data filterable by time period (default 30 days)
 
 ---
 

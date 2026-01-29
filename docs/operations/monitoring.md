@@ -225,6 +225,16 @@ Ensure no pending migrations after updates.
 
 ## Cost Tracking
 
+### Budget Dashboard
+
+The web UI provides a visual budget dashboard at `/ui/budget` showing:
+- Total cost summary (30 days)
+- Daily cost chart with bar visualization
+- Cost breakdown by layer, model, and call type
+- Token usage statistics
+
+### API Endpoints
+
 Monitor LLM API costs via the runs endpoint:
 
 ```bash

@@ -1,0 +1,36 @@
+{% if daily %}
+{% set max_cost = daily | map(attribute='cost_usd') | max %}
+<div class="daily-chart">
+    {% for day in daily %}
+    <div class="daily-bar-container" title="{{ day.date }}: {{ day.cost_usd | format_cost }} ({{ day.tokens | format_number }} tokens)">
+        <div class="daily-bar" style="height: {{ (day.cost_usd / max_cost * 100) if max_cost > 0 else 0 }}%"></div>
+        <span class="daily-label">{{ day.date[-5:] }}</span>
+    </div>
+    {% endfor %}
+</div>
+
+<table class="budget-table mt-1">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th class="text-right">Cost</th>
+            <th class="text-right">Tokens</th>
+            <th class="text-right">Runs</th>
+            <th class="text-right">Insights</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for day in daily | reverse %}
+        <tr>
+            <td>{{ day.date }}</td>
+            <td class="text-right">{{ day.cost_usd | format_cost }}</td>
+            <td class="text-right">{{ day.tokens | format_number }}</td>
+            <td class="text-right">{{ day.runs | format_number }}</td>
+            <td class="text-right">{{ day.insights | format_number }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">No cost data for the selected period</p>
+{% endif %}

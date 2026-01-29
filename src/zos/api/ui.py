@@ -1495,6 +1495,130 @@ async def run_detail_partial(
 
 
 # =============================================================================
+# Budget Dashboard
+# =============================================================================
+
+
+@router.get("/budget", response_class=HTMLResponse)
+async def budget_page(request: Request) -> HTMLResponse:
+    """Budget dashboard page.
+
+    Main page for viewing cost tracking, token usage,
+    and budget visualizations over time.
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="budget/dashboard.html",
+        context={"active": "budget", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+@router.get("/budget/summary", response_class=HTMLResponse)
+async def budget_summary_partial(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Budget summary partial (htmx).
+
+    Returns summary cards showing total cost, tokens, runs, and insights.
+    """
+    from zos.api.db_queries import get_budget_summary
+
+    summary = await get_budget_summary(db, days=days)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="budget/_summary.html",
+        context={"summary": summary},
+    )
+
+
+@router.get("/budget/daily", response_class=HTMLResponse)
+async def budget_daily_partial(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Daily cost breakdown partial (htmx).
+
+    Returns a chart/table showing costs over time.
+    """
+    from zos.api.db_queries import get_daily_costs
+
+    daily = await get_daily_costs(db, days=days)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="budget/_daily.html",
+        context={"daily": daily, "days": days},
+    )
+
+
+@router.get("/budget/by-layer", response_class=HTMLResponse)
+async def budget_by_layer_partial(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Cost by layer partial (htmx).
+
+    Returns a breakdown of costs grouped by layer name.
+    """
+    from zos.api.db_queries import get_cost_by_layer
+
+    by_layer = await get_cost_by_layer(db, days=days)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="budget/_by_layer.html",
+        context={"by_layer": by_layer, "days": days},
+    )
+
+
+@router.get("/budget/by-model", response_class=HTMLResponse)
+async def budget_by_model_partial(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Cost by model partial (htmx).
+
+    Returns a breakdown of costs grouped by model.
+    """
+    from zos.api.db_queries import get_cost_by_model
+
+    by_model = await get_cost_by_model(db, days=days)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="budget/_by_model.html",
+        context={"by_model": by_model, "days": days},
+    )
+
+
+@router.get("/budget/by-call-type", response_class=HTMLResponse)
+async def budget_by_call_type_partial(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Cost by call type partial (htmx).
+
+    Returns a breakdown of costs grouped by call type.
+    """
+    from zos.api.db_queries import get_cost_by_call_type
+
+    by_call_type = await get_cost_by_call_type(db, days=days)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="budget/_by_call_type.html",
+        context={"by_call_type": by_call_type, "days": days},
+    )
+
+
+# =============================================================================
 # Helper Functions
 # =============================================================================
 

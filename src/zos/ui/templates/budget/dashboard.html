@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Budget — Zos{% endblock %}
+
+{% block content %}
+<h1>Budget Dashboard</h1>
+<p class="text-muted">Track API costs, token usage, and spending over time</p>
+
+<div class="budget-summary" hx-get="/ui/budget/summary?days=30" hx-trigger="load">
+    Loading summary...
+</div>
+
+<div class="budget-grid mt-2">
+    <div class="card">
+        <h3>Daily Costs (30 days)</h3>
+        <div hx-get="/ui/budget/daily?days=30" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
+</div>
+
+<div class="budget-grid mt-2">
+    <div class="card">
+        <h3>Cost by Layer</h3>
+        <div hx-get="/ui/budget/by-layer?days=30" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Cost by Model</h3>
+        <div hx-get="/ui/budget/by-model?days=30" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
+</div>
+
+<div class="budget-grid mt-2">
+    <div class="card">
+        <h3>Cost by Call Type</h3>
+        <div hx-get="/ui/budget/by-call-type?days=30" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
+</div>
+{% endblock %}

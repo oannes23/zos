@@ -1,0 +1,26 @@
+<div class="budget-stats-cards">
+    <div class="stat-card budget-stat-primary">
+        <span class="stat-value">{{ summary.total_cost_usd | format_cost }}</span>
+        <span class="stat-label">Total Cost ({{ summary.days }}d)</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ summary.total_tokens | format_number }}</span>
+        <span class="stat-label">Total Tokens</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ summary.total_runs | format_number }}</span>
+        <span class="stat-label">Layer Runs</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ summary.total_calls | format_number }}</span>
+        <span class="stat-label">LLM Calls</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ summary.total_insights | format_number }}</span>
+        <span class="stat-label">Insights Created</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ summary.avg_cost_per_run | format_cost }}</span>
+        <span class="stat-label">Avg Cost/Run</span>
+    </div>
+</div>
