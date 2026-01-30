@@ -106,6 +106,80 @@ Insights that capture the character and culture of a channel — not topic summa
 
 ---
 
+## nightly-dyad-reflection
+
+Reflects on relationships between pairs of users to build understanding of their interaction dynamics.
+
+**Schedule:** Daily at 3 AM UTC
+
+**What it does:**
+1. Selects up to 10 dyads with salience >= 10
+2. Fetches their last 72 hours of messages
+3. Retrieves prior insights about the relationship
+4. Fetches individual insights about each person (for context)
+5. Fetches cross-reaction patterns between the two members
+6. Generates phenomenological reflection on the relationship
+7. Stores new insight with category `dyad_observation`
+
+**Pipeline:**
+
+```yaml
+nodes:
+  - name: fetch_recent_messages
+    type: fetch_messages
+    params:
+      lookback_hours: 72
+      limit_per_channel: 100
+
+  - name: fetch_prior_understanding
+    type: fetch_insights
+    params:
+      retrieval_profile: recent
+      max_per_topic: 10
+
+  - name: fetch_individual_insights
+    type: fetch_insights
+    params:
+      members_of_topic: true
+      retrieval_profile: recent
+      max_per_topic: 3
+      categories:
+        - user_reflection
+
+  - name: fetch_reactions
+    type: fetch_reactions
+    params:
+      lookback_days: 7
+      min_reactions: 3
+
+  - name: reflect
+    type: llm_call
+    params:
+      prompt_template: user/dyad_reflection.jinja2
+      model: reflection
+      max_tokens: 1000
+      temperature: 0.7
+
+  - name: store
+    type: store_insight
+    params:
+      category: dyad_observation
+```
+
+**Reaction context:**
+
+The `fetch_reactions` node retrieves cross-reactions between the two dyad members — reactions where one person reacted to the other's messages (self-reactions excluded). These are presented directionally (A→B, B→A) so the LLM can observe reciprocity and asymmetry. A lower `min_reactions` threshold (3 vs the default 5) is used because even a few cross-reactions between a specific pair carry meaningful signal about their relationship.
+
+Individual messages also carry their `reactions_aggregate` counts, so the template can show per-message reaction annotations.
+
+**Expected output:**
+
+Insights that capture the relational dynamic — not descriptions of individuals, but what emerges between them. Example:
+
+> "Alice and Bob have a distinctly collaborative rhythm. Alice often shares early ideas, and Bob responds with both encouragement and substantive critique. His consistent heart reactions on her design proposals suggest genuine appreciation, not just politeness — he rarely reacts to other posts that way. Their dynamic creates a space where half-formed thoughts are safe to share."
+
+---
+
 ## weekly-self-reflection
 
 Reflects on Zos's accumulated experience and maintains self-concept.

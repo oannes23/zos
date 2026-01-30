@@ -1064,3 +1064,23 @@ def test_format_messages_no_channel_names() -> None:
     formatted = format_messages_for_prompt(messages)
 
     assert formatted[0]["content"] == "Check out <#456> for updates"
+
+
+def test_format_messages_includes_reactions_aggregate() -> None:
+    """Test that reactions_aggregate field passes through."""
+    messages = [
+        {
+            "author_id": "123",
+            "content": "Great idea!",
+            "reactions_aggregate": {"👍": 3, "❤️": 1},
+        },
+        {
+            "author_id": "456",
+            "content": "Thanks",
+        },
+    ]
+
+    formatted = format_messages_for_prompt(messages)
+
+    assert formatted[0]["reactions_aggregate"] == {"👍": 3, "❤️": 1}
+    assert formatted[1]["reactions_aggregate"] is None

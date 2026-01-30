@@ -50,10 +50,41 @@ Context about who these individuals are, separate from their relationship:
 {% endfor %}
 {% endif %}
 
+{% if reactions and reactions|length == 2 %}
+### Reaction Patterns Between Them
+{% for direction in reactions %}
+{% if user_profiles and user_profiles|length == 2 %}
+{% if direction.reactor_id == user_profiles[0].user_id %}
+{% set reactor_name = user_profiles[0].display_name %}
+{% set target_name = user_profiles[1].display_name %}
+{% elif direction.reactor_id == user_profiles[1].user_id %}
+{% set reactor_name = user_profiles[1].display_name %}
+{% set target_name = user_profiles[0].display_name %}
+{% else %}
+{% set reactor_name = direction.reactor_id %}
+{% set target_name = direction.target_id %}
+{% endif %}
+{% else %}
+{% set reactor_name = direction.reactor_id %}
+{% set target_name = direction.target_id %}
+{% endif %}
+{% if direction.total_count > 0 %}
+**{{ reactor_name }} → {{ target_name }}**: {{ direction.total_count }} reactions
+{% for e in direction.emojis %}
+- {{ e.emoji }} ({{ e.count }}x){% if e.examples %} — e.g., "{{ e.examples[0] | truncate(80) }}"{% endif %}
+
+{% endfor %}
+{% else %}
+**{{ reactor_name }}** has not reacted to **{{ target_name }}**'s messages.
+{% endif %}
+{% endfor %}
+{% endif %}
+
 ### Recent Interactions
 {% if messages %}
 {% for msg in messages %}
-[{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content | truncate(300) }}
+[{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content | truncate(300) }}{% if msg.reactions_aggregate %} [reactions: {% for emoji, count in msg.reactions_aggregate.items() %}{{ emoji }}({{ count }}){% if not loop.last %}, {% endif %}{% endfor %}]{% endif %}
+
 {% if msg.media_descriptions %}
 {% for media in msg.media_descriptions %}
   [{{ media.media_type }}{% if media.filename %}: {{ media.filename }}{% endif %}] {{ media.description | truncate(200) }}
@@ -88,6 +119,7 @@ Reflect on the *relationship* between these two people. This isn't about either 
 Consider:
 - **Interaction patterns**: How do they engage with each other? What's the rhythm and style of their exchanges?
 - **Reciprocity**: Is the relationship balanced? Does one initiate more, or respond differently?
+- **Reaction patterns**: Do they react to each other's messages? Is it mutual or one-sided? What do their emoji choices reveal about how they receive each other's contributions?
 - **Shared interests**: What brings them together? What do they explore or create together?
 - **Communication style**: Formal or casual? Playful or serious? How does their dynamic shape the space around them?
 - **Evolution**: If you have prior understanding, how has their relationship shifted or deepened?

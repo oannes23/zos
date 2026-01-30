@@ -525,8 +525,7 @@ class TestReactionPrivacyGate:
         mock_role = MagicMock()
         mock_role.id = 111222333
 
-        mock_reactor = MagicMock(spec=['id', 'roles'])
-        mock_reactor.id = 777777777
+        mock_reactor = create_mock_author(user_id=777777777, display_name="Reactor", username="reactor")
         mock_reactor.roles = [mock_role]  # Has privacy gate role
 
         mock_reaction = MagicMock()
@@ -679,8 +678,7 @@ class TestReactionSync:
         msg = await setup_test_message(bot, engine, now)
 
         # Create mock user
-        mock_user = MagicMock(spec=['id', 'roles'])
-        mock_user.id = 666666666
+        mock_user = create_mock_author(user_id=666666666, display_name="Reactor", username="reactor")
         mock_user.roles = None  # No privacy gate, so tracked
 
         mock_reaction = MagicMock()
@@ -751,12 +749,10 @@ class TestReactionSync:
         msg = await setup_test_message(bot, engine, now)
 
         # Create mock users
-        mock_user1 = MagicMock(spec=['id', 'roles'])
-        mock_user1.id = 666666666
+        mock_user1 = create_mock_author(user_id=666666666, display_name="Reactor1", username="reactor1")
         mock_user1.roles = None
 
-        mock_user2 = MagicMock(spec=['id', 'roles'])
-        mock_user2.id = 777777777
+        mock_user2 = create_mock_author(user_id=777777777, display_name="Reactor2", username="reactor2")
         mock_user2.roles = None
 
         mock_reaction = MagicMock()
@@ -810,8 +806,7 @@ class TestReactionPollingIntegration:
         # Create mock channel with history
         mock_user = create_mock_author(555555555)
 
-        mock_reactor = MagicMock(spec=['id', 'roles'])
-        mock_reactor.id = 666666666
+        mock_reactor = create_mock_author(user_id=666666666, display_name="Reactor", username="reactor")
         mock_reactor.roles = None
 
         mock_reaction = MagicMock()

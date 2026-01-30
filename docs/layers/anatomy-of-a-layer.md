@@ -175,6 +175,20 @@ Retrieve prior understanding about the topic.
       - social_observation
 ```
 
+### fetch_reactions
+
+Retrieve emoji reaction patterns for a topic. For user topics, fetches reactions made by the user grouped by emoji. For dyad topics, fetches cross-reactions between the two members, grouped directionally (A→B, B→A) to reveal reciprocity patterns.
+
+```yaml
+- name: fetch_reactions
+  type: fetch_reactions
+  params:
+    lookback_days: 7     # How far back to look
+    min_reactions: 5     # Minimum reactions to include data (3 for dyads)
+```
+
+Self-reactions are excluded from dyad reaction data. The directional format shows each member's reaction count toward the other, emoji breakdowns, and example messages — making asymmetry and affinity visible.
+
 ### fetch_layer_runs
 
 Retrieve recent layer run records (typically for self-reflection).

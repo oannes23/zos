@@ -42,6 +42,12 @@ nodes:
       categories:
         - user_reflection
 
+  - name: fetch_reactions
+    type: fetch_reactions
+    params:
+      lookback_days: 7
+      min_reactions: 3  # Lower threshold — even a few cross-reactions are meaningful signal
+
   - name: reflect
     type: llm_call
     params:

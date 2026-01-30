@@ -25,6 +25,7 @@ from zos.database import (
     insights as insights_table,
     layer_runs as layer_runs_table,
     messages as messages_table,
+    reactions as reactions_table,
     servers as servers_table,
     topics as topics_table,
 )
@@ -1554,3 +1555,271 @@ async def test_store_insight_with_identified_subjects(
     # Verify salience was earned for subjects
     rust_balance = await ledger.get_balance(f"server:{sample_server}:subject:rust_lang")
     assert rust_balance > 0
+
+
+# =============================================================================
+# Dyad Reaction Tests
+# =============================================================================
+
+
+@pytest.fixture
+def dyad_topic(engine, sample_server) -> Topic:
+    """Create and insert a dyad topic for testing."""
+    topic = Topic(
+        key="server:123:dyad:456:789",
+        category=TopicCategory.DYAD,
+        is_global=False,
+        provisional=False,
+        created_at=utcnow(),
+    )
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values(
+                key=topic.key,
+                category=topic.category.value,
+                is_global=topic.is_global,
+                provisional=topic.provisional,
+                created_at=topic.created_at,
+            )
+        )
+        conn.commit()
+    return topic
+
+
+@pytest.fixture
+def dyad_messages(engine, sample_channel) -> list[Message]:
+    """Create messages authored by both dyad members."""
+    now = utcnow()
+    msgs = [
+        Message(
+            id="dmsg_1",
+            channel_id=sample_channel,
+            server_id="123",
+            author_id="456",
+            content="Check out this new API design",
+            created_at=now - timedelta(hours=1),
+            visibility_scope=VisibilityScope.PUBLIC,
+        ),
+        Message(
+            id="dmsg_2",
+            channel_id=sample_channel,
+            server_id="123",
+            author_id="789",
+            content="That looks great, nice work!",
+            created_at=now - timedelta(hours=2),
+            visibility_scope=VisibilityScope.PUBLIC,
+        ),
+        Message(
+            id="dmsg_3",
+            channel_id=sample_channel,
+            server_id="123",
+            author_id="456",
+            content="Thanks! Here's the follow-up",
+            created_at=now - timedelta(hours=3),
+            visibility_scope=VisibilityScope.PUBLIC,
+        ),
+    ]
+    with engine.connect() as conn:
+        for msg in msgs:
+            conn.execute(
+                messages_table.insert().values(
+                    id=msg.id,
+                    channel_id=msg.channel_id,
+                    server_id=msg.server_id,
+                    author_id=msg.author_id,
+                    content=msg.content,
+                    created_at=msg.created_at,
+                    visibility_scope=msg.visibility_scope.value,
+                    has_media=False,
+                    has_links=False,
+                    ingested_at=utcnow(),
+                )
+            )
+        conn.commit()
+    return msgs
+
+
+@pytest.fixture
+def dyad_reactions(engine, dyad_messages) -> None:
+    """Insert cross-reactions between dyad members."""
+    now = utcnow()
+    reaction_data = [
+        # 789 reacts to 456's messages (2 reactions)
+        {
+            "id": generate_id(),
+            "message_id": "dmsg_1",  # authored by 456
+            "user_id": "789",
+            "emoji": "❤️",
+            "is_custom": False,
+            "server_id": "123",
+            "created_at": now - timedelta(minutes=30),
+        },
+        {
+            "id": generate_id(),
+            "message_id": "dmsg_3",  # authored by 456
+            "user_id": "789",
+            "emoji": "👍",
+            "is_custom": False,
+            "server_id": "123",
+            "created_at": now - timedelta(minutes=20),
+        },
+        # 456 reacts to 789's message (1 reaction)
+        {
+            "id": generate_id(),
+            "message_id": "dmsg_2",  # authored by 789
+            "user_id": "456",
+            "emoji": "😄",
+            "is_custom": False,
+            "server_id": "123",
+            "created_at": now - timedelta(minutes=10),
+        },
+        # Self-reaction (should be excluded)
+        {
+            "id": generate_id(),
+            "message_id": "dmsg_1",  # authored by 456
+            "user_id": "456",
+            "emoji": "👀",
+            "is_custom": False,
+            "server_id": "123",
+            "created_at": now - timedelta(minutes=5),
+        },
+        # Removed reaction (should be excluded)
+        {
+            "id": generate_id(),
+            "message_id": "dmsg_2",  # authored by 789
+            "user_id": "456",
+            "emoji": "🔥",
+            "is_custom": False,
+            "server_id": "123",
+            "created_at": now - timedelta(minutes=3),
+            "removed_at": now - timedelta(minutes=1),
+        },
+    ]
+    with engine.connect() as conn:
+        for r in reaction_data:
+            conn.execute(reactions_table.insert().values(**r))
+        conn.commit()
+
+
+def test_get_reactions_for_dyad(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+    dyad_messages,
+    dyad_reactions,
+) -> None:
+    """SQL query returns cross-reactions, excludes self-reactions and removed."""
+    results = executor._get_reactions_for_dyad(
+        user_id_1="456",
+        user_id_2="789",
+        server_id="123",
+        lookback_days=7,
+    )
+
+    # Should have 3 cross-reactions (not the self-reaction or removed one)
+    assert len(results) == 3
+
+    # Verify structure
+    for r in results:
+        assert "reactor_id" in r
+        assert "message_author_id" in r
+        assert "emoji" in r
+        assert "message_content" in r
+        # No self-reactions
+        assert r["reactor_id"] != r["message_author_id"]
+
+
+def test_format_dyad_reactions_directional(executor: LayerExecutor) -> None:
+    """Two directional summaries with correct counts."""
+    reactions = [
+        {
+            "reactor_id": "789",
+            "message_author_id": "456",
+            "emoji": "❤️",
+            "is_custom": False,
+            "created_at": utcnow(),
+            "message_content": "Check out this new API design",
+        },
+        {
+            "reactor_id": "789",
+            "message_author_id": "456",
+            "emoji": "❤️",
+            "is_custom": False,
+            "created_at": utcnow(),
+            "message_content": "Thanks! Here's the follow-up",
+        },
+        {
+            "reactor_id": "456",
+            "message_author_id": "789",
+            "emoji": "😄",
+            "is_custom": False,
+            "created_at": utcnow(),
+            "message_content": "That looks great, nice work!",
+        },
+    ]
+
+    result = executor._format_dyad_reactions(reactions, "456", "789")
+
+    assert len(result) == 2
+
+    # Find each direction
+    dir_456_to_789 = next(d for d in result if d["reactor_id"] == "456")
+    dir_789_to_456 = next(d for d in result if d["reactor_id"] == "789")
+
+    assert dir_456_to_789["total_count"] == 1
+    assert dir_456_to_789["target_id"] == "789"
+    assert len(dir_456_to_789["emojis"]) == 1
+    assert dir_456_to_789["emojis"][0]["emoji"] == "😄"
+    assert dir_456_to_789["emojis"][0]["count"] == 1
+
+    assert dir_789_to_456["total_count"] == 2
+    assert dir_789_to_456["target_id"] == "456"
+    assert len(dir_789_to_456["emojis"]) == 1
+    assert dir_789_to_456["emojis"][0]["emoji"] == "❤️"
+    assert dir_789_to_456["emojis"][0]["count"] == 2
+    assert len(dir_789_to_456["emojis"][0]["examples"]) == 2
+
+
+def test_format_dyad_reactions_empty(executor: LayerExecutor) -> None:
+    """Empty input produces two zero-count entries."""
+    result = executor._format_dyad_reactions([], "456", "789")
+
+    assert len(result) == 2
+    for d in result:
+        assert d["total_count"] == 0
+        assert d["emojis"] == []
+
+
+@pytest.mark.asyncio
+async def test_handle_fetch_reactions_dyad_topic(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+    dyad_topic: Topic,
+    dyad_messages,
+    dyad_reactions,
+    sample_layer: Layer,
+) -> None:
+    """Full handler integration for dyad topics."""
+    ctx = ExecutionContext(
+        topic=dyad_topic,
+        layer=sample_layer,
+        run_id=generate_id(),
+    )
+
+    node = Node(
+        type=NodeType.FETCH_REACTIONS,
+        params={"lookback_days": 7, "min_reactions": 2},
+    )
+
+    await executor._handle_fetch_reactions(node, ctx)
+
+    # Should have directional summaries
+    assert ctx.reactions is not None
+    assert len(ctx.reactions) == 2
+
+    # Verify both directions present
+    reactor_ids = {d["reactor_id"] for d in ctx.reactions}
+    assert reactor_ids == {"456", "789"}

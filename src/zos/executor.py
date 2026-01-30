@@ -564,11 +564,11 @@ class LayerExecutor:
     async def _handle_fetch_reactions(
         self, node: Node, ctx: ExecutionContext
     ) -> None:
-        """Fetch emoji reaction patterns for a user topic.
+        """Fetch emoji reaction patterns for a user or dyad topic.
 
-        Retrieves reactions made by the user, grouped by emoji for pattern
-        analysis. This enables reflection on how users express themselves
-        through reactions.
+        For user topics: retrieves reactions made by the user, grouped by emoji.
+        For dyad topics: retrieves cross-reactions between the two members,
+        grouped directionally (A→B, B→A) to reveal reciprocity patterns.
 
         Args:
             node: The node with params.
@@ -577,6 +577,15 @@ class LayerExecutor:
         params = node.params
         lookback_days = params.get("lookback_days", 7)
         min_reactions = params.get("min_reactions", 5)
+
+        # Dyad topics get directional cross-reaction analysis
+        if ctx.topic.category == TopicCategory.DYAD:
+            await self._handle_fetch_reactions_dyad(
+                lookback_days=lookback_days,
+                min_reactions=min_reactions,
+                ctx=ctx,
+            )
+            return
 
         # Extract user_id from topic
         user_id, server_id = self._extract_user_from_topic(ctx.topic.key)
@@ -701,6 +710,217 @@ class LayerExecutor:
                 }
                 for row in rows
             ]
+
+    async def _handle_fetch_reactions_dyad(
+        self,
+        lookback_days: int,
+        min_reactions: int,
+        ctx: ExecutionContext,
+    ) -> None:
+        """Fetch cross-reactions between two dyad members.
+
+        Retrieves reactions where one member reacted to the other's messages,
+        formatted directionally to reveal reciprocity patterns.
+
+        Args:
+            lookback_days: How many days to look back.
+            min_reactions: Minimum total cross-reactions to include.
+            ctx: The execution context.
+        """
+        user_id_1, user_id_2, server_id = self._extract_dyad_from_topic(
+            ctx.topic.key
+        )
+        if not user_id_1 or not user_id_2:
+            log.warning(
+                "fetch_reactions_dyad_no_users",
+                topic=ctx.topic.key,
+            )
+            return
+
+        reactions = self._get_reactions_for_dyad(
+            user_id_1=user_id_1,
+            user_id_2=user_id_2,
+            server_id=server_id,
+            lookback_days=lookback_days,
+        )
+
+        if len(reactions) < min_reactions:
+            log.debug(
+                "fetch_reactions_dyad_insufficient",
+                user_id_1=user_id_1,
+                user_id_2=user_id_2,
+                count=len(reactions),
+                min_required=min_reactions,
+            )
+            ctx.reactions = []
+            return
+
+        ctx.reactions = self._format_dyad_reactions(
+            reactions, user_id_1, user_id_2
+        )
+
+        log.debug(
+            "reactions_fetched_dyad",
+            user_id_1=user_id_1,
+            user_id_2=user_id_2,
+            total_reactions=len(reactions),
+        )
+
+    def _get_reactions_for_dyad(
+        self,
+        user_id_1: str,
+        user_id_2: str,
+        server_id: str | None,
+        lookback_days: int,
+    ) -> list[dict[str, Any]]:
+        """Get cross-reactions between two dyad members.
+
+        Returns reactions where one member reacted to the other's messages,
+        excluding self-reactions.
+
+        Args:
+            user_id_1: First dyad member's Discord user ID.
+            user_id_2: Second dyad member's Discord user ID.
+            server_id: Server ID (None for global lookup).
+            lookback_days: How many days to look back.
+
+        Returns:
+            List of reaction dicts with reactor_id, message_author_id,
+            emoji, is_custom, created_at, message_content.
+        """
+        since = utcnow() - timedelta(days=lookback_days)
+        dyad_ids = [user_id_1, user_id_2]
+
+        with self.engine.connect() as conn:
+            conditions = [
+                # Reactor is one of the dyad members
+                reactions_table.c.user_id.in_(dyad_ids),
+                # Message author is one of the dyad members
+                messages_table.c.author_id.in_(dyad_ids),
+                # Exclude self-reactions
+                reactions_table.c.user_id != messages_table.c.author_id,
+                reactions_table.c.created_at >= since,
+                reactions_table.c.removed_at.is_(None),
+            ]
+
+            if server_id:
+                conditions.append(reactions_table.c.server_id == server_id)
+
+            stmt = (
+                select(
+                    reactions_table.c.user_id.label("reactor_id"),
+                    messages_table.c.author_id.label("message_author_id"),
+                    reactions_table.c.emoji,
+                    reactions_table.c.is_custom,
+                    reactions_table.c.created_at,
+                    messages_table.c.content.label("message_content"),
+                )
+                .select_from(
+                    reactions_table.join(
+                        messages_table,
+                        reactions_table.c.message_id == messages_table.c.id,
+                    )
+                )
+                .where(and_(*conditions))
+                .order_by(reactions_table.c.created_at.desc())
+                .limit(500)
+            )
+
+            rows = conn.execute(stmt).fetchall()
+
+            return [
+                {
+                    "reactor_id": row.reactor_id,
+                    "message_author_id": row.message_author_id,
+                    "emoji": row.emoji,
+                    "is_custom": row.is_custom,
+                    "created_at": row.created_at,
+                    "message_content": row.message_content,
+                }
+                for row in rows
+            ]
+
+    def _format_dyad_reactions(
+        self,
+        reactions: list[dict[str, Any]],
+        user_id_1: str,
+        user_id_2: str,
+    ) -> list[dict[str, Any]]:
+        """Format dyad reactions into directional summaries.
+
+        Groups reactions into two directions (A→B, B→A), each with
+        total count and emoji breakdown with example messages.
+        This makes reciprocity and asymmetry visible to the LLM.
+
+        Args:
+            reactions: Raw reaction dicts from _get_reactions_for_dyad.
+            user_id_1: First dyad member's user ID.
+            user_id_2: Second dyad member's user ID.
+
+        Returns:
+            List of two directional summary dicts, one per direction.
+        """
+        # Initialize both directions
+        directions: dict[str, dict[str, Any]] = {
+            f"{user_id_1}->{user_id_2}": {
+                "reactor_id": user_id_1,
+                "target_id": user_id_2,
+                "total_count": 0,
+                "emojis": {},
+            },
+            f"{user_id_2}->{user_id_1}": {
+                "reactor_id": user_id_2,
+                "target_id": user_id_1,
+                "total_count": 0,
+                "emojis": {},
+            },
+        }
+
+        for reaction in reactions:
+            reactor = reaction["reactor_id"]
+            target = reaction["message_author_id"]
+            key = f"{reactor}->{target}"
+
+            if key not in directions:
+                continue
+
+            d = directions[key]
+            d["total_count"] += 1
+
+            emoji = reaction["emoji"]
+            if emoji not in d["emojis"]:
+                d["emojis"][emoji] = {"count": 0, "examples": []}
+
+            d["emojis"][emoji]["count"] += 1
+            if (
+                len(d["emojis"][emoji]["examples"]) < 3
+                and reaction.get("message_content")
+            ):
+                d["emojis"][emoji]["examples"].append(
+                    reaction["message_content"][:100]
+                )
+
+        # Convert to list format with sorted emoji breakdowns
+        return [
+            {
+                "reactor_id": d["reactor_id"],
+                "target_id": d["target_id"],
+                "total_count": d["total_count"],
+                "emojis": [
+                    {
+                        "emoji": emoji,
+                        "count": info["count"],
+                        "examples": info["examples"],
+                    }
+                    for emoji, info in sorted(
+                        d["emojis"].items(),
+                        key=lambda x: x[1]["count"],
+                        reverse=True,
+                    )
+                ],
+            }
+            for d in directions.values()
+        ]
 
     def _extract_user_from_topic(self, topic_key: str) -> tuple[str | None, str | None]:
         """Extract user_id and server_id from a user topic key.
@@ -1128,6 +1348,7 @@ class LayerExecutor:
                 "created_at": m.created_at,
                 "has_media": m.has_media,
                 "has_links": m.has_links,
+                "reactions_aggregate": m.reactions_aggregate,
             }
             for m in ctx.messages
         ]
