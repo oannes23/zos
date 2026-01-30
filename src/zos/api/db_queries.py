@@ -234,7 +234,14 @@ def _row_to_message(row) -> "Message":
     Returns:
         Message model instance.
     """
+    import json
+
     from zos.models import Message, VisibilityScope
+
+    # reactions_aggregate is stored as a JSON string in SQLite
+    reactions = row.reactions_aggregate
+    if isinstance(reactions, str):
+        reactions = json.loads(reactions)
 
     return Message(
         id=row.id,
@@ -244,7 +251,7 @@ def _row_to_message(row) -> "Message":
         content=row.content,
         created_at=row.created_at,
         visibility_scope=VisibilityScope(row.visibility_scope),
-        reactions_aggregate=row.reactions_aggregate,
+        reactions_aggregate=reactions,
         reply_to_id=row.reply_to_id,
         thread_id=row.thread_id,
         has_media=row.has_media,
