@@ -201,12 +201,12 @@ When an insight is stored:
          │       │        └─────────┬─────────┘
          │       │                  │
          ▼       ▼                  ▼
-• id           • topic balance   • normalized names
-• topic_key      reduced         • topic auto-created
-• category     • retention_rate  • salience earned
-• content        applied           per subject
-• strength     • transaction
-• metrics        logged
+• id           • balance fully   • normalized names
+• topic_key      reset           • topic auto-created
+• category     • retention on    • salience earned
+• content        cost only         per subject
+• strength     • SPEND + RESET
+• metrics        + RETAIN txns
 • valence
 • layer_run_id
 ```

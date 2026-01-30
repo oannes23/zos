@@ -56,6 +56,7 @@ class TransactionType(str, Enum):
 
     EARN = "earn"
     SPEND = "spend"
+    RESET = "reset"
     RETAIN = "retain"
     DECAY = "decay"
     PROPAGATE = "propagate"

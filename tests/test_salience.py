@@ -206,6 +206,91 @@ async def test_spend_applies_retention(ledger: SalienceLedger) -> None:
 
 
 # =============================================================================
+# Test: Reset After Reflection — Basic
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_reset_after_reflection_basic(ledger: SalienceLedger) -> None:
+    """After reflection, balance should be retention on cost only (not full balance)."""
+    topic_key = "server:123:user:456"
+
+    # Earn 100
+    await ledger.earn(topic_key, 100.0)
+
+    # Reflect with cost 2.0 (retention_rate=0.3 → retained = 0.6)
+    spent = await ledger.reset_after_reflection(topic_key, 2.0, reason="test")
+
+    assert spent == pytest.approx(2.0)
+    # Balance: 100 - 2 (SPEND) - 98 (RESET) + 0.6 (RETAIN) = 0.6
+    balance = await ledger.get_balance(topic_key)
+    assert balance == pytest.approx(0.6, rel=0.01)
+
+
+# =============================================================================
+# Test: Reset After Reflection — Cost Exceeds Balance
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_reset_after_reflection_cost_exceeds_balance(ledger: SalienceLedger) -> None:
+    """When cost exceeds balance, spends full balance and retains on that."""
+    topic_key = "server:123:user:456"
+
+    # Earn only 1
+    await ledger.earn(topic_key, 1.0)
+
+    # Reflect with cost 5.0 — can only spend 1.0
+    spent = await ledger.reset_after_reflection(topic_key, 5.0, reason="test")
+
+    assert spent == pytest.approx(1.0)
+    # Balance: 1 - 1 (SPEND) + 0 (no RESET, remaining=0) + 0.3 (RETAIN) = 0.3
+    balance = await ledger.get_balance(topic_key)
+    assert balance == pytest.approx(0.3, rel=0.01)
+
+
+# =============================================================================
+# Test: Reset After Reflection — Zero Balance
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_reset_after_reflection_zero_balance(ledger: SalienceLedger) -> None:
+    """Reflecting on a zero-balance topic returns 0 and creates no transactions."""
+    topic_key = "server:123:user:456"
+    await ledger.ensure_topic(topic_key)
+
+    spent = await ledger.reset_after_reflection(topic_key, 2.0, reason="test")
+
+    assert spent == 0.0
+    balance = await ledger.get_balance(topic_key)
+    assert balance == 0.0
+
+
+# =============================================================================
+# Test: Reset After Reflection — Transaction History
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_reset_after_reflection_transactions(ledger: SalienceLedger) -> None:
+    """Transaction history should show SPEND, RESET, and RETAIN entries."""
+    topic_key = "server:123:user:456"
+
+    await ledger.earn(topic_key, 100.0)
+    await ledger.reset_after_reflection(topic_key, 2.0, reason="test")
+
+    history = await ledger.get_history(topic_key)
+
+    # Filter to just the post-earn transactions
+    types = [e.transaction_type for e in history if e.transaction_type != TransactionType.EARN]
+
+    assert TransactionType.SPEND in types
+    assert TransactionType.RESET in types
+    assert TransactionType.RETAIN in types
+
+
+# =============================================================================
 # Test: Balance is Sum of Transactions
 # =============================================================================
 

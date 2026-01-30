@@ -1530,8 +1530,8 @@ class LayerExecutor:
         # Calculate salience cost (tokens * cost per token)
         salience_cost = ctx.tokens_input * self.config.salience.cost_per_token
 
-        # Spend salience (only on success)
-        salience_spent = await self.ledger.spend(
+        # Spend salience and reset balance (only on success)
+        salience_spent = await self.ledger.reset_after_reflection(
             ctx.topic.key,
             salience_cost,
             reason=f"reflection:{ctx.run_id}",

@@ -1878,7 +1878,7 @@ class TestEnums:
 
     def test_transaction_type_values(self) -> None:
         """Test transaction type enum values."""
-        expected = {"earn", "spend", "retain", "decay", "propagate", "spillover", "warm"}
+        expected = {"earn", "spend", "reset", "retain", "decay", "propagate", "spillover", "warm"}
         actual = {t.value for t in TransactionType}
         assert actual == expected
 

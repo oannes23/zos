@@ -78,11 +78,14 @@ Only topics with salience above the warm threshold (default: 1.0) receive propag
 
 ## Spending Salience
 
-When reflection generates an insight, salience is spent:
+When reflection generates an insight, the topic's salience balance is **fully reset**:
 
-1. Compute insight strength: `salience_spent × strength_adjustment`
-2. Deduct from topic balance
-3. Retain percentage (default: 30%) for continued relevance
+1. Deduct reflection cost (tokens × cost_per_token) from balance
+2. Zero remaining balance via a RESET transaction
+3. Retain percentage (default: 30%) of the **cost only** — not the full balance
+4. Compute insight strength: `salience_spent × strength_adjustment`
+
+This ensures reflected-on topics start nearly fresh, preventing high-salience topics from dominating the reflection queue indefinitely. On reflection failure, no salience is modified.
 
 Higher salience spend = stronger insight = more persistent memory.
 

@@ -412,21 +412,35 @@ def select_topics_for_reflection(budget_group: str, budget: float) -> list[Topic
 
 ## Spending and Retention
 
-After reflection produces insights:
+After reflection produces insights, the topic's salience balance is **fully reset**.
+The reflection cost is deducted first, then any remaining balance is zeroed out.
+Retention is applied only to the cost portion, so reflected-on topics start nearly
+fresh — preventing the same topic from dominating reflection queue indefinitely.
 
 ```python
-def spend_salience(topic: Topic, tokens_used: int):
-    """Spend salience after reflection, with retention."""
+def reset_after_reflection(topic: Topic, tokens_used: int):
+    """Reset salience after successful reflection."""
 
     cost = tokens_used * config.cost_per_token
-    retained = cost * config.retention_rate
+    actual_cost = min(cost, topic.salience)
+    remaining = topic.salience - actual_cost
 
-    topic.salience = max(0, topic.salience - cost + retained)
+    # Deduct reflection cost
+    record_transaction(topic, "spend", -actual_cost)
 
-    # Record transaction
-    record_transaction(topic, "spend", -cost)
+    # Zero remaining balance
+    if remaining > 0:
+        record_transaction(topic, "reset", -remaining)
+
+    # Retain fraction of cost only
+    retained = actual_cost * config.retention_rate
     record_transaction(topic, "retain", retained)
+
+    # Final balance ≈ retained (e.g., 2.0 * 0.3 = 0.6)
 ```
+
+On reflection **failure**, no salience is modified — the topic keeps its full balance
+for the next reflection attempt.
 
 ---
 

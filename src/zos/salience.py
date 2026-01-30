@@ -187,6 +187,70 @@ class SalienceLedger:
 
         return actual_spend
 
+    async def reset_after_reflection(
+        self,
+        topic_key: str,
+        cost: float,
+        reason: str | None = None,
+    ) -> float:
+        """Spend salience and zero remaining balance after successful reflection.
+
+        Unlike spend(), this resets the entire topic balance after deducting the
+        reflection cost. Retention is applied only to the cost portion, so the
+        topic starts nearly fresh after reflection.
+
+        Args:
+            topic_key: The topic that was reflected on.
+            cost: Token-based reflection cost.
+            reason: What caused this (layer_run_id, etc).
+
+        Returns:
+            Amount actually spent as cost (not including the reset).
+        """
+        balance = await self.get_balance(topic_key)
+        actual_cost = min(cost, balance)
+
+        if actual_cost <= 0:
+            return 0.0
+
+        # Record the reflection cost
+        await self.record_transaction(
+            topic_key=topic_key,
+            transaction_type=TransactionType.SPEND,
+            amount=-actual_cost,
+            reason=reason,
+        )
+
+        # Zero remaining balance
+        remaining = balance - actual_cost
+        if remaining > 0:
+            await self.record_transaction(
+                topic_key=topic_key,
+                transaction_type=TransactionType.RESET,
+                amount=-remaining,
+                reason=reason,
+            )
+
+        # Apply retention on cost only
+        retained = actual_cost * self.config.salience.retention_rate
+        if retained > 0:
+            await self.record_transaction(
+                topic_key=topic_key,
+                transaction_type=TransactionType.RETAIN,
+                amount=retained,
+                reason=f"retention from {reason}" if reason else "retention",
+            )
+
+        log.debug(
+            "salience_reset_after_reflection",
+            topic=topic_key,
+            cost=actual_cost,
+            reset=remaining if remaining > 0 else 0,
+            retained=retained if actual_cost > 0 else 0,
+        )
+
+        return actual_cost
+
     async def decay(
         self,
         topic_key: str,

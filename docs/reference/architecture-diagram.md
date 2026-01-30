@@ -289,7 +289,7 @@ Salience ledger entries.
 |--------|------|-------------|
 | id | TEXT | ULID |
 | topic_key | TEXT | Topic |
-| transaction_type | TEXT | earn/spend/decay |
+| transaction_type | TEXT | earn/spend/reset/retain/decay/propagate/spillover/warm |
 | amount | REAL | Amount changed |
 
 ### layer_runs
