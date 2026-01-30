@@ -137,6 +137,11 @@ class SalienceLedger:
 
         return new_balance, overflow
 
+    # NOTE: spend() is not used in production. All reflection spending goes
+    # through reset_after_reflection(), which zeroes the balance and retains a
+    # seed from the cost only. This method predates the zero-reset design and
+    # applies retention on top of the remaining balance, which behaves oddly at
+    # high retention rates. Consider removing if no use case emerges.
     async def spend(
         self,
         topic_key: str,

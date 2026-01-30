@@ -25,7 +25,7 @@ A simple "importance score" would rank topics but not track investment. The ledg
 
 1. **Accumulates** — Active topics build up attention debt
 2. **Invests** — Reflection spends that debt, producing understanding
-3. **Retains** — Some salience remains after spending (default: 30%)
+3. **Retains** — A seed balance is retained after reflection (default: 150% of reflection cost)
 4. **Decays** — Inactive topics fade from attention over time
 
 This models how attention actually works: things that keep coming up demand thinking about, thinking uses up that demand, but continued activity rebuilds it.
@@ -82,7 +82,7 @@ When reflection generates an insight, the topic's salience balance is **fully re
 
 1. Deduct reflection cost (tokens × cost_per_token) from balance
 2. Zero remaining balance via a RESET transaction
-3. Retain percentage (default: 30%) of the **cost only** — not the full balance
+3. Retain a multiple (default: 150%) of the **cost only** as a seed balance
 4. Compute insight strength: `salience_spent × strength_adjustment`
 
 This ensures reflected-on topics start nearly fresh, preventing high-salience topics from dominating the reflection queue indefinitely. On reflection failure, no salience is modified.
@@ -209,7 +209,7 @@ salience:
 
   # Adjust propagation
   propagation_factor: 0.3
-  retention_rate: 0.3
+  retention_rate: 1.5
 
   # Adjust decay
   decay_threshold_days: 7

@@ -163,7 +163,7 @@ salience:
   global_propagation_factor: 0.3
   spillover_factor: 0.5
   initial_global_warmth: 5.0
-  retention_rate: 0.3
+  retention_rate: 1.5
   decay_threshold_days: 7
   decay_rate_per_day: 0.01
   warm_threshold: 1.0
@@ -198,7 +198,7 @@ How reflection budget is allocated across topic groups. Should sum to ~1.0.
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `propagation_factor` | 0.3 | How much salience spreads to related topics |
-| `retention_rate` | 0.3 | Fraction of reflection cost retained after reset (0-1) |
+| `retention_rate` | 1.5 | Multiple of reflection cost retained as seed balance after reset |
 | `decay_threshold_days` | 7 | Days of inactivity before decay starts |
 | `decay_rate_per_day` | 0.01 | Daily decay rate after threshold |
 | `warm_threshold` | 1.0 | Minimum salience to receive propagation |

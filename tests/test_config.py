@@ -416,8 +416,8 @@ def test_salience_retention_rate_boundary() -> None:
     config = SalienceConfig(retention_rate=0.0)
     assert config.retention_rate == 0.0
 
-    config = SalienceConfig(retention_rate=1.0)
-    assert config.retention_rate == 1.0
+    config = SalienceConfig(retention_rate=1.5)
+    assert config.retention_rate == 1.5
 
 
 def test_discord_polling_interval_zero() -> None:

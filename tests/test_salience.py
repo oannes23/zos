@@ -197,12 +197,12 @@ async def test_spend_applies_retention(ledger: SalienceLedger) -> None:
     # Earn 100
     await ledger.earn(topic_key, 100.0)
 
-    # Spend 10 (with default 30% retention = 3 retained)
+    # Spend 10 (with default 150% retention = 15 retained)
     await ledger.spend(topic_key, 10.0)
 
-    # Balance should be: 100 - 10 + 3 = 93
+    # Balance should be: 100 - 10 + 15 = 105
     balance = await ledger.get_balance(topic_key)
-    assert balance == pytest.approx(93.0, rel=0.01)
+    assert balance == pytest.approx(105.0, rel=0.01)
 
 
 # =============================================================================
@@ -218,13 +218,13 @@ async def test_reset_after_reflection_basic(ledger: SalienceLedger) -> None:
     # Earn 100
     await ledger.earn(topic_key, 100.0)
 
-    # Reflect with cost 2.0 (retention_rate=0.3 → retained = 0.6)
+    # Reflect with cost 2.0 (retention_rate=1.5 → retained = 3.0)
     spent = await ledger.reset_after_reflection(topic_key, 2.0, reason="test")
 
     assert spent == pytest.approx(2.0)
-    # Balance: 100 - 2 (SPEND) - 98 (RESET) + 0.6 (RETAIN) = 0.6
+    # Balance: 100 - 2 (SPEND) - 98 (RESET) + 3.0 (RETAIN) = 3.0
     balance = await ledger.get_balance(topic_key)
-    assert balance == pytest.approx(0.6, rel=0.01)
+    assert balance == pytest.approx(3.0, rel=0.01)
 
 
 # =============================================================================
@@ -244,9 +244,9 @@ async def test_reset_after_reflection_cost_exceeds_balance(ledger: SalienceLedge
     spent = await ledger.reset_after_reflection(topic_key, 5.0, reason="test")
 
     assert spent == pytest.approx(1.0)
-    # Balance: 1 - 1 (SPEND) + 0 (no RESET, remaining=0) + 0.3 (RETAIN) = 0.3
+    # Balance: 1 - 1 (SPEND) + 0 (no RESET, remaining=0) + 1.5 (RETAIN) = 1.5
     balance = await ledger.get_balance(topic_key)
-    assert balance == pytest.approx(0.3, rel=0.01)
+    assert balance == pytest.approx(1.5, rel=0.01)
 
 
 # =============================================================================
@@ -303,11 +303,11 @@ async def test_balance_is_sum_of_transactions(ledger: SalienceLedger) -> None:
     # Multiple operations
     await ledger.earn(topic_key, 50.0)
     await ledger.earn(topic_key, 30.0)
-    await ledger.spend(topic_key, 20.0)  # -20 + 6 retention = -14
+    await ledger.spend(topic_key, 20.0)  # -20 + 30 retention = +10
 
-    # Calculate expected: 50 + 30 - 20 + 6 = 66
+    # Calculate expected: 50 + 30 - 20 + 30 = 90
     balance = await ledger.get_balance(topic_key)
-    assert balance == pytest.approx(66.0, rel=0.01)
+    assert balance == pytest.approx(90.0, rel=0.01)
 
 
 @pytest.mark.asyncio

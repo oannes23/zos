@@ -131,7 +131,7 @@ class SalienceConfig(BaseModel):
     global_propagation_factor: float = 0.3
     spillover_factor: float = 0.5
     initial_global_warmth: float = 5.0
-    retention_rate: float = 0.3
+    retention_rate: float = 1.5
     decay_threshold_days: int = 7
     decay_rate_per_day: float = 0.01
     warm_threshold: float = 1.0
