@@ -1774,8 +1774,17 @@ class EarningCoordinator:
             server_config = self.ledger.config.get_server_config(server_id)
             base_amount *= server_config.focus
 
-        # Skip if reactor is anonymous
+        # Anonymous reactors: skip user/dyad salience, earn emoji topic only
         if reaction.user_id.startswith("<chat"):
+            if reaction.is_custom and server_id:
+                emoji_topic = f"server:{server_id}:emoji:{reaction.emoji}"
+                await self.ledger.earn_with_propagation(
+                    emoji_topic,
+                    base_amount,
+                    reason=f"reaction:{reaction.id}",
+                    propagate=propagate,
+                )
+                topics_earned.append(emoji_topic)
             return topics_earned
 
         # 1. Message author earns (attention received)

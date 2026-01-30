@@ -41,7 +41,7 @@ I don't have prior understanding of this subject yet.
 {% elif msg.has_media %}[contains unanalyzed media]{% endif %}
 {% if msg.link_summaries %}
 {% for link in msg.link_summaries %}
-  [{{ link.domain }}{% if link.is_youtube %} video{% endif %}{% if link.title %}: "{{ link.title | truncate(60) }}"{% endif %}] {{ link.summary | truncate(200) }}
+  [{{ link.domain }}{% if link.is_youtube %} video{% endif %}{% if link.title %}: "{{ link.title | truncate(60) }}"{% endif %}] {{ link.summary | default('') | truncate(200) }}
 {% endfor %}
 {% elif msg.has_links %}[contains unanalyzed links]{% endif %}
 {% endfor %}

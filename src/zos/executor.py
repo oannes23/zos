@@ -1379,8 +1379,8 @@ class LayerExecutor:
                 if not la.fetch_failed:
                     link_summaries.append({
                         "domain": la.domain,
-                        "title": la.title,
-                        "summary": la.summary,
+                        "title": la.title or "",
+                        "summary": la.summary or "",
                         "is_youtube": la.is_youtube,
                     })
             messages_data[i]["link_summaries"] = link_summaries
@@ -1389,8 +1389,8 @@ class LayerExecutor:
             for ma in media_analyses_map.get(m.id, []):
                 media_descriptions.append({
                     "media_type": ma.get("media_type", "image"),
-                    "filename": ma.get("filename"),
-                    "description": ma.get("description"),
+                    "filename": ma.get("filename") or "",
+                    "description": ma.get("description") or "",
                 })
             messages_data[i]["media_descriptions"] = media_descriptions
 

@@ -1280,6 +1280,25 @@ class ZosBot(commands.Bot):
                     # Skip anonymous users for individual tracking
                     # Per spec: only opted-in users' reactions tracked individually
                     if user_id.startswith("<chat"):
+                        # Custom emoji usage is community cultural data —
+                        # track emoji salience without tracking the user
+                        if is_custom:
+                            current_reactions.add((user_id, emoji_str))
+                            is_new = await self._store_reaction(
+                                message_id=message_id,
+                                user_id=user_id,
+                                emoji=emoji_str,
+                                is_custom=is_custom,
+                                server_id=server_id,
+                            )
+                            if is_new:
+                                await self._earn_reaction_salience(
+                                    discord_message=message,
+                                    user_id=user_id,
+                                    emoji=emoji_str,
+                                    is_custom=is_custom,
+                                    server_id=server_id,
+                                )
                         continue
 
                     current_reactions.add((user_id, emoji_str))

@@ -152,7 +152,7 @@ def serve(
                 data_dir=config.data_dir,
                 self_concept_max_chars=config.self_concept_max_chars,
             )
-            llm = ModelClient(config)
+            llm = ModelClient(config, engine=engine)
 
             executor = LayerExecutor(
                 engine=engine,
@@ -659,7 +659,7 @@ def reflect_trigger(ctx: click.Context, layer_name: str, layers_dir: Path) -> No
         )
 
         # Set up LLM client
-        llm = ModelClient(cfg)
+        llm = ModelClient(cfg, engine=engine)
 
         try:
             # Set up executor
