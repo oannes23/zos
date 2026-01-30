@@ -430,6 +430,60 @@ Disallow: /secret/
         assert len(analyses) == 1
         assert analyses[0].fetch_failed is True
 
+    @pytest.mark.asyncio
+    async def test_summary_error_stored_when_llm_fails(self, config, engine) -> None:
+        """Should store summary_error when LLM summarization fails.
+
+        When page fetch succeeds but LLM call fails, the error should be
+        captured in summary_error rather than silently producing NULL summary.
+        """
+        # Create parent records for foreign key constraint
+        create_test_message(engine, "msg-llm-fail")
+
+        # Create analyzer with LLM client that raises
+        mock_llm = MagicMock()
+        mock_llm.complete = AsyncMock(side_effect=Exception("LLM connection timeout"))
+
+        from zos.llm import RateLimiter
+
+        analyzer = LinkAnalyzer(
+            config=config,
+            engine=engine,
+            llm_client=mock_llm,
+            link_rate_limiter=RateLimiter(calls_per_minute=100),
+        )
+
+        html_content = """
+        <html>
+            <head><title>Good Page</title></head>
+            <body><p>Content fetched successfully.</p></body>
+        </html>
+        """
+
+        with patch("zos.links.httpx.AsyncClient") as mock_client:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.text = html_content
+            mock_response.headers = {"content-type": "text/html"}
+            mock_response.raise_for_status = MagicMock()
+
+            mock_client_instance = AsyncMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+            mock_client_instance.__aexit__ = AsyncMock()
+            mock_client.return_value = mock_client_instance
+
+            with patch.object(analyzer, "_can_fetch", return_value=True):
+                await analyzer._process_webpage("msg-llm-fail", "https://example.com/page")
+
+        # Verify: page fetched OK, but summary failed with error captured
+        analyses = get_link_analysis_for_message(engine, "msg-llm-fail")
+        assert len(analyses) == 1
+        assert analyses[0].fetch_failed is False  # Page was fetched successfully
+        assert analyses[0].summary is None  # LLM failed, no summary
+        assert analyses[0].summary_error == "LLM connection timeout"
+        assert analyses[0].title == "Good Page"
+
 
 class TestDatabaseOperations:
     """Tests for database operations."""

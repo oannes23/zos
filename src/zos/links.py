@@ -267,6 +267,8 @@ class LinkAnalyzer:
             return
 
         # Summarize with LLM
+        summary = None
+        summary_error = None
         try:
             prompt = LINK_SUMMARY_PROMPT.format(content=content[:10000])
             result = await self.llm_client.complete(
@@ -276,8 +278,8 @@ class LinkAnalyzer:
             )
             summary = result.text
         except Exception as e:
-            log.warning("link_summarization_failed", url=url, error=str(e))
-            summary = None
+            summary_error = str(e)
+            log.warning("link_summarization_failed", url=url, error=summary_error)
 
         # Determine content type based on domain/content
         content_type = self._infer_content_type(url, content)
@@ -292,6 +294,7 @@ class LinkAnalyzer:
                 content_type=content_type,
                 title=title,
                 summary=summary,
+                summary_error=summary_error,
                 is_youtube=False,
                 fetched_at=datetime.now(timezone.utc),
                 fetch_failed=False,
@@ -331,6 +334,7 @@ class LinkAnalyzer:
 
         # Check duration threshold
         threshold = self.config.observation.video_duration_threshold_minutes
+        summary_error = None
         if duration_minutes > threshold:
             # TLDW: Too Long, Didn't Watch
             summary = (
@@ -360,12 +364,13 @@ class LinkAnalyzer:
                     summary = result.text
                     transcript_available = True
                 except Exception as e:
+                    summary_error = str(e)
                     log.warning(
                         "transcript_summarization_failed",
                         video_id=video_id,
-                        error=str(e),
+                        error=summary_error,
                     )
-                    summary = "Transcript available but summarization failed."
+                    summary = None
                     transcript_available = True
             else:
                 summary = "Transcript unavailable for this video."
@@ -381,6 +386,7 @@ class LinkAnalyzer:
                 content_type=ContentType.VIDEO,
                 title=title,
                 summary=summary,
+                summary_error=summary_error,
                 is_youtube=True,
                 duration_seconds=duration_seconds if duration_seconds > 0 else None,
                 transcript_available=transcript_available,
@@ -638,6 +644,7 @@ class LinkAnalyzer:
                 index_elements=["id"],
                 set_={
                     "summary": data.get("summary"),
+                    "summary_error": data.get("summary_error"),
                     "fetch_failed": data.get("fetch_failed"),
                     "fetch_error": data.get("fetch_error"),
                     "fetched_at": data.get("fetched_at"),
@@ -683,6 +690,7 @@ def get_link_analysis_for_message(engine: Engine, message_id: str) -> list[LinkA
                 fetched_at=row.fetched_at,
                 fetch_failed=row.fetch_failed,
                 fetch_error=row.fetch_error,
+                summary_error=row.summary_error,
             )
             for row in rows
         ]
@@ -726,6 +734,7 @@ def get_link_analyses_for_messages(
                 fetched_at=row.fetched_at,
                 fetch_failed=row.fetch_failed,
                 fetch_error=row.fetch_error,
+                summary_error=row.summary_error,
             )
             if row.message_id not in result_map:
                 result_map[row.message_id] = []

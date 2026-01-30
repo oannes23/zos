@@ -33,7 +33,9 @@
             <td>{{ link.fetched_at | relative_time if link.fetched_at else "—" }}</td>
             <td>
                 {% if link.fetch_failed %}
-                <span class="badge badge-error" title="{{ link.fetch_error or '' }}">Failed</span>
+                <span class="badge badge-error" title="{{ link.fetch_error or '' }}">Fetch Failed</span>
+                {% elif link.summary_error %}
+                <span class="badge badge-warning" title="{{ link.summary_error }}">Summary Failed</span>
                 {% else %}
                 <span class="badge badge-success">OK</span>
                 {% endif %}

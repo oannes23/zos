@@ -718,3 +718,81 @@ class TestLLMCallAuditing:
             rows = list(conn.execute(select(llm_calls)))
             assert len(rows) == 1
             assert rows[0].estimated_cost_usd == pytest.approx(1.50, rel=0.01)
+
+    @pytest.mark.asyncio
+    async def test_complete_returns_result_when_recording_fails(
+        self, db_engine, config_with_models
+    ) -> None:
+        """complete() returns result even when _record_llm_call raises an exception.
+
+        This is the primary fix for the link summaries NULL bug: if audit recording
+        fails, the LLM result should still be returned to the caller.
+        """
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Important result")]
+                mock_response.usage.input_tokens = 100
+                mock_response.usage.output_tokens = 50
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                # Make _record_llm_call raise an exception
+                with patch.object(
+                    client, "_record_llm_call", side_effect=Exception("DB insert failed")
+                ):
+                    result = await client.complete(
+                        prompt="Summarize this",
+                        model_profile="simple",
+                    )
+
+        # Result should still be returned despite recording failure
+        assert result.text == "Important result"
+        assert result.usage.input_tokens == 100
+        assert result.usage.output_tokens == 50
+
+    @pytest.mark.asyncio
+    async def test_analyze_image_returns_result_when_recording_fails(
+        self, db_engine, config_with_models
+    ) -> None:
+        """analyze_image() returns result even when _record_llm_call raises."""
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock the Anthropic client
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(client, "_get_anthropic") as mock_get_anthropic:
+                mock_anthropic = MagicMock()
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="A photo of a cat")]
+                mock_response.usage.input_tokens = 200
+                mock_response.usage.output_tokens = 30
+                mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
+                mock_get_anthropic.return_value = mock_anthropic
+
+                # Make _record_llm_call raise an exception
+                with patch.object(
+                    client, "_record_llm_call", side_effect=Exception("DB insert failed")
+                ):
+                    result = await client.analyze_image(
+                        image_base64="abc123",
+                        media_type="image/png",
+                        prompt="Describe this",
+                        model_profile="vision",
+                    )
+
+        # Result should still be returned despite recording failure
+        assert result.text == "A photo of a cat"

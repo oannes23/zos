@@ -270,20 +270,23 @@ class ModelClient:
 
         # Record LLM call if database engine is available
         if self.engine is not None:
-            await self._record_llm_call(
-                layer_run_id=layer_run_id,
-                topic_key=topic_key,
-                call_type=call_type,
-                model_profile=model_profile,
-                provider=provider,
-                model=model,
-                prompt=prompt,
-                response=result.text,
-                usage=result.usage,
-                latency_ms=latency_ms,
-                success=True,
-                error_message=None,
-            )
+            try:
+                await self._record_llm_call(
+                    layer_run_id=layer_run_id,
+                    topic_key=topic_key,
+                    call_type=call_type,
+                    model_profile=model_profile,
+                    provider=provider,
+                    model=model,
+                    prompt=prompt,
+                    response=result.text,
+                    usage=result.usage,
+                    latency_ms=latency_ms,
+                    success=True,
+                    error_message=None,
+                )
+            except Exception:
+                log.warning("llm_call_recording_failed", call_type=call_type.value, exc_info=True)
 
         return result
 
@@ -417,20 +420,23 @@ class ModelClient:
 
         # Record LLM call if database engine is available
         if self.engine is not None:
-            await self._record_llm_call(
-                layer_run_id=layer_run_id,
-                topic_key=topic_key,
-                call_type=call_type,
-                model_profile=model_profile,
-                provider=provider,
-                model=model,
-                prompt=full_prompt,
-                response=result.text,
-                usage=result.usage,
-                latency_ms=latency_ms,
-                success=True,
-                error_message=None,
-            )
+            try:
+                await self._record_llm_call(
+                    layer_run_id=layer_run_id,
+                    topic_key=topic_key,
+                    call_type=call_type,
+                    model_profile=model_profile,
+                    provider=provider,
+                    model=model,
+                    prompt=full_prompt,
+                    response=result.text,
+                    usage=result.usage,
+                    latency_ms=latency_ms,
+                    success=True,
+                    error_message=None,
+                )
+            except Exception:
+                log.warning("llm_call_recording_failed", call_type=call_type.value, exc_info=True)
 
         return result
 

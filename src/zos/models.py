@@ -303,6 +303,7 @@ class LinkAnalysis(BaseModel):
     fetched_at: datetime | None = None
     fetch_failed: bool = False
     fetch_error: str | None = None
+    summary_error: str | None = None
 
 
 # =============================================================================

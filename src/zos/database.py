@@ -180,6 +180,7 @@ link_analysis = Table(
     Column("fetched_at", DateTime, nullable=True),
     Column("fetch_failed", Boolean, nullable=False, default=False),
     Column("fetch_error", String, nullable=True),
+    Column("summary_error", String, nullable=True),
     Index("ix_link_analysis_message", "message_id"),
     Index("ix_link_analysis_domain_created", "domain", "fetched_at"),
 )
