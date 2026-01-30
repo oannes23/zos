@@ -1,0 +1,44 @@
+{% for subject in subjects %}
+<div class="card subject-card"
+     hx-get="/ui/subjects/{{ subject.topic_key }}"
+     hx-target="#subject-modal"
+     hx-swap="innerHTML">
+    <div class="card-header">
+        <span class="card-title">{{ subject.subject_name }}</span>
+        {% if subject.server_name %}
+        <span class="text-muted">{{ subject.server_name }}</span>
+        {% endif %}
+    </div>
+    <div class="card-meta">
+        <span class="badge badge-salience" title="Salience balance">{{ subject.salience_balance | round(1) }}</span>
+        <span class="badge badge-info">{{ subject.insight_count }} insight{% if subject.insight_count != 1 %}s{% endif %}</span>
+        {% if subject.last_activity_at %}
+        <span class="text-muted">{{ subject.last_activity_at | relative_time }}</span>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+{% if subjects %}
+<div class="pagination">
+    {% if offset > 0 %}
+    <button hx-get="/ui/subjects/list?offset={{ offset - limit }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            hx-target="#subjects-list">
+        Previous
+    </button>
+    {% endif %}
+
+    <span class="page-info">{{ offset + 1 }}-{{ offset + subjects|length }} of {{ total }}</span>
+
+    {% if offset + limit < total %}
+    <button hx-get="/ui/subjects/list?offset={{ offset + limit }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            hx-target="#subjects-list">
+        Next
+    </button>
+    {% endif %}
+</div>
+{% else %}
+<p class="empty-state">No subjects found.</p>
+{% endif %}
+
+<div id="subject-modal" class="modal"></div>

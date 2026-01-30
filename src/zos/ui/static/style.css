@@ -1082,17 +1082,35 @@ a:hover {
     letter-spacing: 0.05em;
 }
 
-/* User and channel cards */
+/* User, channel, and subject cards */
 .user-card,
-.channel-card {
+.channel-card,
+.subject-card {
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .user-card:hover,
-.channel-card:hover {
+.channel-card:hover,
+.subject-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.badge-salience {
+    background: var(--accent);
+    color: white;
+}
+
+.subject-dates {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.875rem;
+}
+
+.subject-insights-list {
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 /* Back link */

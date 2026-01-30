@@ -165,6 +165,8 @@ def _entity_link_for_topic(topic_key: str) -> str | None:
         elif entity_type == "dyad":
             # No dyad page — link to salience topic
             return f"/ui/salience/topic/{topic_key}"
+        elif entity_type == "subject":
+            return f"/ui/subjects/{topic_key}"
         elif entity_type == "emoji":
             return None
         elif entity_type == "thread":
@@ -288,8 +290,14 @@ def _format_topic_display(resolved_key: str) -> str:
                 return f"{server_name} - {thread_name}"
 
             elif entity_type == "emoji":
-                emoji = parts[3]
+                emoji = ":".join(parts[3:])
+                if not emoji or emoji == "::":
+                    return f"{server_name} - emoji"
                 return f"{server_name} - {emoji}"
+
+            elif entity_type == "subject":
+                subject_name = parts[3].replace("_", " ").title()
+                return f"{server_name} - {subject_name}"
 
         # Just server
         return server_name
@@ -1248,6 +1256,139 @@ async def channel_detail(
         request=request,
         name="channels/detail.html",
         context={"channel": channel, "active": "channels", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+# =============================================================================
+# Subjects Browser
+# =============================================================================
+
+
+@router.get("/subjects", response_class=HTMLResponse)
+async def subjects_page(request: Request) -> HTMLResponse:
+    """Subjects browser page.
+
+    Main page for browsing semantic reflection subjects.
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="subjects/list.html",
+        context={"active": "subjects", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+@router.get("/subjects/list", response_class=HTMLResponse)
+async def subjects_list_partial(
+    request: Request,
+    q: Optional[str] = Query(None, description="Search query"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(20, ge=1, le=100, description="Page size"),
+    db: "Engine" = Depends(get_db),
+    ledger: "SalienceLedger" = Depends(get_ledger),
+) -> HTMLResponse:
+    """Partial for subjects list (htmx).
+
+    Returns HTML partial with paginated list of subjects,
+    optionally filtered by search query.
+    """
+    from zos.api.db_queries import list_subjects_with_stats
+
+    subjects, total = await list_subjects_with_stats(
+        db,
+        offset=offset,
+        limit=limit,
+    )
+
+    # Get salience balances for all subjects
+    topic_keys = [s["topic_key"] for s in subjects]
+    balances = await ledger.get_balances(topic_keys) if topic_keys else {}
+
+    for s in subjects:
+        s["salience_balance"] = balances.get(s["topic_key"], 0.0)
+
+    # Sort by salience balance descending
+    subjects.sort(key=lambda s: s["salience_balance"], reverse=True)
+
+    # Filter by search query if provided
+    if q:
+        q_lower = q.lower()
+        subjects = [
+            s for s in subjects
+            if q_lower in (s.get("subject_name") or "").lower()
+            or q_lower in (s.get("server_name") or "").lower()
+        ]
+        total = len(subjects)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="subjects/_list.html",
+        context={
+            "subjects": subjects,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "q": q,
+        },
+    )
+
+
+@router.get("/subjects/{topic_key:path}", response_class=HTMLResponse)
+async def subject_detail_partial(
+    request: Request,
+    topic_key: str,
+    ledger: "SalienceLedger" = Depends(get_ledger),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Subject detail partial (htmx modal).
+
+    Returns HTML partial for the subject detail modal showing salience,
+    related insights, and recent transactions.
+    """
+    from zos.api.db_queries import get_subject_insights
+
+    balance = await ledger.get_balance(topic_key)
+    cap = ledger.get_cap(topic_key)
+    topic = await ledger.get_topic(topic_key)
+    transactions = await ledger.get_history(topic_key, limit=20)
+    insights = await get_subject_insights(db, topic_key, limit=10)
+
+    # Resolve topic key to human-readable name
+    readable_topic_key = await _resolve_topic_key_for_ui(db, topic_key)
+
+    # Format insights for display
+    resolved_names = await _resolve_topic_keys_for_ui(
+        db, [i.topic_key for i in insights]
+    )
+    formatted_insights = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
+
+    subject_data = {
+        "topic_key": topic_key,
+        "readable_topic_key": readable_topic_key,
+        "balance": balance,
+        "cap": cap,
+        "utilization": balance / cap if cap > 0 else 0,
+        "created_at": topic.created_at if topic else None,
+        "last_activity": topic.last_activity_at if topic else None,
+        "insights": formatted_insights,
+        "insight_count": len(insights),
+        "recent_transactions": [
+            {
+                "created_at": t.created_at,
+                "transaction_type": t.transaction_type.value,
+                "amount": t.amount,
+                "reason": t.reason,
+            }
+            for t in transactions
+        ],
+    }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="subjects/_detail.html",
+        context={"subject": subject_data},
     )
 
 

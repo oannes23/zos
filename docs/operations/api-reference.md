@@ -12,7 +12,7 @@ http://localhost:8000
 
 Start the API with `zos api`. Interactive documentation is available at `/docs` (Swagger UI) and `/redoc`.
 
-A web UI is also available at `/ui/` for browsing messages, insights, users, channels, salience, and layer runs.
+A web UI is also available at `/ui/` for browsing messages, insights, users, channels, subjects, salience, and layer runs.
 
 ---
 
@@ -538,6 +538,7 @@ The web UI provides a browser-based interface for exploring Zos data at `/ui/`.
 | `/ui/insights` | Browse and search insights by category |
 | `/ui/users` | Browse users sorted by insight count |
 | `/ui/channels` | Browse channels sorted by message count |
+| `/ui/subjects` | Browse semantic reflection subjects with salience and insight counts |
 | `/ui/media` | Browse link analyses, image descriptions, and YouTube summaries |
 | `/ui/salience` | View salience balances by budget group |
 | `/ui/budget` | Track API costs, token usage, and spending over time |
@@ -571,6 +572,30 @@ The channels browser (`/ui/channels`) displays all tracked channels sorted by me
   - Top users by message count
 - Links to filtered message views
 
+### Subjects Browser
+
+The subjects browser (`/ui/subjects`) displays all semantic reflection subjects sorted by salience balance.
+
+**Features:**
+- Search subjects by name or server
+- Card grid showing subject name (Title Case), server name, salience badge, insight count, and last activity
+- Click a subject card to open a detail modal with:
+  - Salience overview (balance, cap, utilization bar)
+  - Created date and last activity
+  - Related insights list with links to insight detail pages
+  - Recent salience transactions table
+  - Link to filtered insights view
+
+**Display Names:**
+
+Subject topic keys (e.g., `server:123:subject:community_values`) are displayed in human-readable Title Case (`Community Values`). This formatting also applies in the salience dashboard and budget group cards.
+
+**htmx Partials:**
+| Path | Description |
+|------|-------------|
+| `/ui/subjects/list` | Paginated subject cards (search, sort by salience) |
+| `/ui/subjects/{topic_key}` | Subject detail modal |
+
 ### Layers Browser
 
 The layers browser (`/ui/layers`) displays all configured reflection layers as a card grid.
@@ -595,7 +620,8 @@ Run detail modals (`/ui/runs/{id}`) now show:
 
 Entities are cross-linked throughout the UI for easy navigation:
 - **Layer names** in run tables and budget breakdowns link to layer detail pages
-- **Topic headings** in insight cards and detail pages link to user/channel/salience pages
+- **Topic headings** in insight cards and detail pages link to user/channel/subject/salience pages
+- **Subject names** in salience tables and budget group cards display as human-readable Title Case
 - **Layer run IDs** in insight detail pages open the run detail modal
 - Entity links use `stopPropagation` inside clickable cards to avoid navigation conflicts
 

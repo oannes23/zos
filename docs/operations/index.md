@@ -62,6 +62,7 @@ Pages available:
 - `/ui/insights` — Browse and filter insights
 - `/ui/users` — Browse users sorted by insight count
 - `/ui/channels` — Browse channels sorted by message count
+- `/ui/subjects` — Browse semantic reflection subjects with salience and insight counts
 - `/ui/media` — Browse link analyses, image descriptions, and YouTube summaries
 - `/ui/salience` — Salience dashboard with budget groups
 - `/ui/budget` — Track API costs, token usage, and spending over time

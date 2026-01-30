@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Subjects — Zos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Subjects</h1>
+    <div class="page-actions">
+        <input type="search"
+               name="q"
+               placeholder="Search subjects..."
+               hx-get="/ui/subjects/list"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#subjects-list"
+               class="search-input">
+    </div>
+</div>
+
+<div id="subjects-list" hx-get="/ui/subjects/list" hx-trigger="load">
+    Loading...
+</div>
+{% endblock %}

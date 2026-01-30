@@ -1456,6 +1456,124 @@ async def get_cost_by_call_type(
         return results
 
 
+# =============================================================================
+# Subject Queries
+# =============================================================================
+
+
+async def list_subjects_with_stats(
+    engine: "Engine",
+    offset: int = 0,
+    limit: int = 50,
+) -> tuple[list[dict], int]:
+    """List subject topics with insight counts.
+
+    Returns subjects sorted by key, with insight counts for each.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        offset: Pagination offset.
+        limit: Maximum results.
+
+    Returns:
+        Tuple of (list of subject dicts, total count).
+    """
+    from zos.database import topics
+
+    with engine.connect() as conn:
+        # Count total subjects
+        count_stmt = (
+            select(func.count())
+            .select_from(topics)
+            .where(topics.c.category == "subject")
+        )
+        total = conn.execute(count_stmt).scalar() or 0
+
+        # Get subjects with insight counts
+        insight_counts = (
+            select(
+                insights_table.c.topic_key,
+                func.count().label("insight_count"),
+            )
+            .where(insights_table.c.quarantined == False)
+            .group_by(insights_table.c.topic_key)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                topics.c.key,
+                topics.c.category,
+                topics.c.created_at,
+                topics.c.last_activity_at,
+                func.coalesce(insight_counts.c.insight_count, 0).label("insight_count"),
+            )
+            .select_from(
+                topics.outerjoin(
+                    insight_counts,
+                    topics.c.key == insight_counts.c.topic_key,
+                )
+            )
+            .where(topics.c.category == "subject")
+            .order_by(topics.c.last_activity_at.desc().nullslast())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            # Parse topic key to extract subject name and server name
+            parts = row.key.split(":")
+            if len(parts) >= 4 and parts[0] == "server":
+                server_name = parts[1]
+                subject_slug = parts[3]
+            else:
+                server_name = None
+                subject_slug = row.key
+
+            subject_name = subject_slug.replace("_", " ").title()
+
+            results.append({
+                "topic_key": row.key,
+                "subject_name": subject_name,
+                "server_name": server_name,
+                "created_at": row.created_at,
+                "last_activity_at": row.last_activity_at,
+                "insight_count": row.insight_count,
+            })
+
+        return results, total
+
+
+async def get_subject_insights(
+    engine: "Engine",
+    topic_key: str,
+    limit: int = 50,
+) -> list[Insight]:
+    """Get insights for a specific subject topic.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        topic_key: The subject's topic key.
+        limit: Maximum results.
+
+    Returns:
+        List of Insight models.
+    """
+    with engine.connect() as conn:
+        stmt = (
+            select(insights_table)
+            .where(
+                insights_table.c.topic_key == topic_key,
+                insights_table.c.quarantined == False,
+            )
+            .order_by(insights_table.c.created_at.desc())
+            .limit(limit)
+        )
+        rows = conn.execute(stmt).fetchall()
+        return [_row_to_insight_static(r) for r in rows]
+
+
 async def get_insights_by_run(
     engine: "Engine",
     layer_run_id: str,
