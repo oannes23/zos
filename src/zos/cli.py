@@ -150,6 +150,7 @@ def serve(
             templates = TemplateEngine(
                 templates_dir=prompts_dir,
                 data_dir=config.data_dir,
+                self_concept_max_chars=config.self_concept_max_chars,
             )
             llm = ModelClient(config)
 
@@ -654,6 +655,7 @@ def reflect_trigger(ctx: click.Context, layer_name: str, layers_dir: Path) -> No
         templates = TemplateEngine(
             templates_dir=Path("prompts"),
             data_dir=cfg.data_dir,
+            self_concept_max_chars=cfg.self_concept_max_chars,
         )
 
         # Set up LLM client

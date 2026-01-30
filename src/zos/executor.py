@@ -1771,6 +1771,15 @@ class LayerExecutor:
 
         new_concept = result.text
 
+        # Warn if LLM produced an oversized document (render-time safeguard catches overflow)
+        max_chars = self.config.self_concept_max_chars
+        if max_chars > 0 and len(new_concept) > max_chars:
+            log.warning(
+                "self_concept_update_oversized",
+                content_length=len(new_concept),
+                max_chars=max_chars,
+            )
+
         # Write the update
         document_path.write_text(new_concept)
 
@@ -1798,6 +1807,13 @@ class LayerExecutor:
         decision = self._parse_json_from_response(ctx.llm_response) or {}
         suggested_changes = decision.get("suggested_changes", "")
 
+        max_chars = self.config.self_concept_max_chars
+        size_guidance = ""
+        if max_chars > 0:
+            size_guidance = f"""
+The document must stay under {max_chars} characters. If integrating new understanding would exceed this, condense earlier sections — prioritize current understanding over historical detail.
+"""
+
         return f"""You are updating your self-concept document based on recent reflection.
 
 Current document:
@@ -1807,7 +1823,7 @@ Suggested changes:
 {suggested_changes}
 
 Write the updated self-concept document. Preserve the overall structure but integrate new understanding. Keep what's still true, evolve what has changed, acknowledge new uncertainties.
-
+{size_guidance}
 The document should feel like *you* - not a clinical report, but a living expression of identity.
 
 Begin the document with "# Self-Concept" and maintain the existing sections where appropriate. You may add new sections if your understanding has expanded in new directions."""

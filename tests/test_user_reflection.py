@@ -435,7 +435,7 @@ def test_user_reflection_template_with_no_insights() -> None:
 
 
 def test_user_reflection_template_includes_self_concept() -> None:
-    """Test that self-concept is included (truncated to 1000 chars)."""
+    """Test that self-concept is included in rendered template."""
     prompts_path = Path("prompts")
     data_path = Path("data")
 

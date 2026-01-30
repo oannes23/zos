@@ -77,15 +77,20 @@ class TemplateEngine:
         self,
         templates_dir: Path = Path("prompts"),
         data_dir: Path = Path("data"),
+        self_concept_max_chars: int = 15000,
     ) -> None:
         """Initialize the template engine.
 
         Args:
             templates_dir: Path to the prompts directory containing templates.
             data_dir: Path to the data directory containing self-concept.md.
+            self_concept_max_chars: Maximum characters for self-concept document.
+                If the document exceeds this, it is truncated at the last
+                paragraph boundary before the limit. Set to 0 to disable.
         """
         self.templates_dir = templates_dir
         self.data_dir = data_dir
+        self.self_concept_max_chars = self_concept_max_chars
 
         self.env = Environment(
             loader=FileSystemLoader(templates_dir),
@@ -228,6 +233,9 @@ class TemplateEngine:
         Reads fresh from disk each time to ensure the most current
         self-concept is used, even if it changed during a layer run.
 
+        If the document exceeds self_concept_max_chars, it is truncated
+        at the last paragraph boundary (double newline) before the limit.
+
         Returns:
             The self-concept document content, or a placeholder if not found.
         """
@@ -236,10 +244,49 @@ class TemplateEngine:
         if self_concept_path.exists():
             content = self_concept_path.read_text()
             log.debug("self_concept_loaded", length=len(content))
+
+            if self.self_concept_max_chars > 0 and len(content) > self.self_concept_max_chars:
+                log.warning(
+                    "self_concept_truncated",
+                    original_length=len(content),
+                    max_chars=self.self_concept_max_chars,
+                )
+                content = self._truncate_at_boundary(content, self.self_concept_max_chars)
+
             return content
 
         log.debug("self_concept_not_found")
         return "Self-concept not yet established."
+
+    @staticmethod
+    def _truncate_at_boundary(text: str, max_chars: int) -> str:
+        """Truncate text at the last paragraph boundary before max_chars.
+
+        Looks for a double-newline (paragraph break) or markdown heading
+        boundary before the limit. Falls back to hard truncation if no
+        boundary is found.
+
+        Args:
+            text: The text to truncate.
+            max_chars: Maximum character count.
+
+        Returns:
+            Truncated text.
+        """
+        truncated = text[:max_chars]
+
+        # Try to find last paragraph break (double newline)
+        last_para = truncated.rfind("\n\n")
+        if last_para > max_chars // 2:
+            return truncated[:last_para].rstrip()
+
+        # Try to find last single newline
+        last_nl = truncated.rfind("\n")
+        if last_nl > max_chars // 2:
+            return truncated[:last_nl].rstrip()
+
+        # Hard truncation as last resort
+        return truncated.rstrip()
 
     @staticmethod
     def relative_time(dt: datetime | None) -> str:

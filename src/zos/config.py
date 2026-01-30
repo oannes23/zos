@@ -234,6 +234,7 @@ class Config(BaseModel):
     data_dir: Path = Path("./data")
     log_level: str = "INFO"
     log_json: bool = True
+    self_concept_max_chars: int = 15000
 
     discord: DiscordConfig = Field(default_factory=DiscordConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)

@@ -1823,3 +1823,114 @@ async def test_handle_fetch_reactions_dyad_topic(
     # Verify both directions present
     reactor_ids = {d["reactor_id"] for d in ctx.reactions}
     assert reactor_ids == {"456", "789"}
+
+
+# =============================================================================
+# Self-Concept Size Limit Tests
+# =============================================================================
+
+
+def test_render_concept_update_prompt_includes_size_constraint(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+    sample_layer: Layer,
+    tmp_path: Path,
+) -> None:
+    """Test that _render_concept_update_prompt includes the size constraint."""
+    document_path = tmp_path / "self-concept.md"
+    document_path.write_text("# Self-Concept\n\nI am Zos.")
+
+    ctx = ExecutionContext(
+        topic=sample_topic,
+        layer=sample_layer,
+        run_id=generate_id(),
+    )
+    ctx.llm_response = '{"should_update": true, "suggested_changes": "Add growth"}'
+
+    prompt = executor._render_concept_update_prompt(ctx, document_path)
+
+    assert "must stay under 15000 characters" in prompt
+    assert "condense earlier sections" in prompt
+
+
+def test_render_concept_update_prompt_no_size_constraint_when_zero(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+    sample_layer: Layer,
+    tmp_path: Path,
+) -> None:
+    """Test that size constraint is omitted when max_chars is 0 (disabled)."""
+    document_path = tmp_path / "self-concept.md"
+    document_path.write_text("# Self-Concept\n\nI am Zos.")
+
+    # Temporarily set max_chars to 0
+    original = executor.config.self_concept_max_chars
+    executor.config.self_concept_max_chars = 0
+
+    ctx = ExecutionContext(
+        topic=sample_topic,
+        layer=sample_layer,
+        run_id=generate_id(),
+    )
+    ctx.llm_response = '{"should_update": true, "suggested_changes": "Add growth"}'
+
+    prompt = executor._render_concept_update_prompt(ctx, document_path)
+
+    assert "must stay under" not in prompt
+
+    # Restore
+    executor.config.self_concept_max_chars = original
+
+
+@pytest.mark.asyncio
+async def test_handle_update_self_concept_warns_on_oversized(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+    sample_layer: Layer,
+    tmp_path: Path,
+) -> None:
+    """Test that _handle_update_self_concept logs a warning for oversized output."""
+    document_path = tmp_path / "self-concept.md"
+    document_path.write_text("# Self-Concept\n\nI am Zos.")
+
+    # Set a low limit so the LLM "output" exceeds it
+    executor.config.self_concept_max_chars = 50
+
+    oversized_text = "x" * 200
+
+    ctx = ExecutionContext(
+        topic=sample_topic,
+        layer=sample_layer,
+        run_id=generate_id(),
+    )
+    ctx.llm_response = '{"should_update": true, "suggested_changes": "Expand"}'
+
+    node = Node(
+        type=NodeType.UPDATE_SELF_CONCEPT,
+        params={"document_path": str(document_path), "conditional": True},
+    )
+
+    # Mock the LLM to return oversized content
+    mock_result = CompletionResult(
+        text=oversized_text,
+        usage=Usage(input_tokens=100, output_tokens=50),
+        provider="anthropic",
+        model="test-model",
+    )
+    executor.llm.complete = AsyncMock(return_value=mock_result)
+
+    with patch("zos.executor.log") as mock_log:
+        await executor._handle_update_self_concept(node, ctx)
+
+        # Verify warning was logged
+        mock_log.warning.assert_any_call(
+            "self_concept_update_oversized",
+            content_length=200,
+            max_chars=50,
+        )
+
+    # File should still be written (render-time safeguard catches overflow)
+    assert document_path.read_text() == oversized_text
+
+    # Restore
+    executor.config.self_concept_max_chars = 15000

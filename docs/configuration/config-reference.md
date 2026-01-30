@@ -10,6 +10,7 @@ Complete reference for `config.yaml`.
 data_dir: ./data           # Directory for database and files
 log_level: INFO            # DEBUG, INFO, WARNING, ERROR
 log_json: true             # true for JSON, false for console format
+self_concept_max_chars: 15000  # Max size of self-concept in prompts (0 to disable)
 ```
 
 | Setting | Type | Default | Description |
@@ -17,6 +18,7 @@ log_json: true             # true for JSON, false for console format
 | `data_dir` | path | `./data` | Where database and files are stored |
 | `log_level` | string | `INFO` | Logging verbosity |
 | `log_json` | bool | `true` | Output format |
+| `self_concept_max_chars` | int | `15000` | Maximum characters for the self-concept document. Enforced at render time (truncated at paragraph boundary) and communicated as a constraint during self-concept updates. Set to `0` to disable. |
 
 ---
 

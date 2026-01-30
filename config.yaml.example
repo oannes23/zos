@@ -6,6 +6,10 @@ data_dir: ./data
 log_level: INFO
 log_json: true
 
+# Self-concept size limit (characters). Prevents unbounded growth.
+# Current document is ~10,000 chars. Set to 0 to disable.
+self_concept_max_chars: 15000
+
 # Discord settings
 discord:
   polling_interval_seconds: 60

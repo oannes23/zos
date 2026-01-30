@@ -480,6 +480,80 @@ def test_get_self_concept_fresh_per_read(template_engine: TemplateEngine, data_d
     assert "I am Zos" not in concept2
 
 
+def test_get_self_concept_no_truncation_under_limit(
+    templates_dir: Path, data_dir: Path
+) -> None:
+    """Test that self-concept is not truncated when under the limit."""
+    content = "# Self-Concept\n\nI am Zos." * 10  # ~260 chars
+    (data_dir / "self-concept.md").write_text(content)
+
+    engine = TemplateEngine(
+        templates_dir=templates_dir,
+        data_dir=data_dir,
+        self_concept_max_chars=15000,
+    )
+    result = engine.get_self_concept()
+    assert result == content
+
+
+def test_get_self_concept_truncates_at_paragraph_boundary(
+    templates_dir: Path, data_dir: Path
+) -> None:
+    """Test that self-concept truncates at paragraph boundary when over limit."""
+    # Build content with clear paragraph breaks
+    paragraphs = [f"Paragraph {i}.\n\nThis is section {i} content." for i in range(20)]
+    content = "\n\n".join(paragraphs)
+
+    (data_dir / "self-concept.md").write_text(content)
+
+    engine = TemplateEngine(
+        templates_dir=templates_dir,
+        data_dir=data_dir,
+        self_concept_max_chars=200,
+    )
+    result = engine.get_self_concept()
+
+    # Should be under the limit
+    assert len(result) <= 200
+    # Should be shorter than the original
+    assert len(result) < len(content)
+    # Should end cleanly at a paragraph boundary (double newline split)
+    # The result should not have a partial line cut mid-word
+    assert not result.endswith(" ")
+
+
+def test_get_self_concept_truncation_disabled_when_zero(
+    templates_dir: Path, data_dir: Path
+) -> None:
+    """Test that truncation is disabled when max_chars is 0."""
+    content = "x" * 20000
+    (data_dir / "self-concept.md").write_text(content)
+
+    engine = TemplateEngine(
+        templates_dir=templates_dir,
+        data_dir=data_dir,
+        self_concept_max_chars=0,
+    )
+    result = engine.get_self_concept()
+    assert len(result) == 20000
+
+
+def test_truncate_at_boundary_hard_truncation() -> None:
+    """Test _truncate_at_boundary falls back to hard truncation."""
+    # No newlines at all — must hard-truncate
+    text = "a" * 500
+    result = TemplateEngine._truncate_at_boundary(text, 200)
+    assert len(result) == 200
+
+
+def test_truncate_at_boundary_prefers_paragraph_break() -> None:
+    """Test _truncate_at_boundary prefers paragraph breaks over line breaks."""
+    text = "first paragraph\n\nsecond paragraph\n\nthird paragraph which is longer"
+    result = TemplateEngine._truncate_at_boundary(text, 40)
+    # Should cut at the paragraph break before position 40
+    assert result == "first paragraph\n\nsecond paragraph"
+
+
 # =============================================================================
 # Context Formatting Helper Tests
 # =============================================================================
