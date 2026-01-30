@@ -788,6 +788,29 @@ class LayerExecutor:
 
         return (None, None)
 
+    def _extract_subject_from_topic(
+        self, topic_key: str
+    ) -> tuple[str | None, str | None]:
+        """Extract subject_name and server_id from a subject topic key.
+
+        Args:
+            topic_key: Topic key (e.g., "server:<sid>:subject:<name>").
+
+        Returns:
+            (subject_name, server_id) tuple.
+        """
+        if ":subject:" in topic_key:
+            parts = topic_key.split(":")
+            server_id = None
+            if parts[0] == "server" and len(parts) >= 2:
+                server_id = parts[1]
+            subject_idx = parts.index("subject") if "subject" in parts else -1
+            if subject_idx >= 0 and subject_idx + 1 < len(parts):
+                subject_name = ":".join(parts[subject_idx + 1 :])
+                return (subject_name, server_id)
+
+        return (None, None)
+
     async def _get_channel_info(
         self,
         channel_id: str,
@@ -1098,6 +1121,17 @@ class LayerExecutor:
             if channel_id:
                 channel_info = await self._get_channel_info(channel_id)
 
+        # Fetch subject info for subject reflections
+        subject_info = None
+        if ctx.topic.category == TopicCategory.SUBJECT:
+            subject_name, server_id = self._extract_subject_from_topic(ctx.topic.key)
+            if subject_name:
+                subject_info = {
+                    "name": subject_name,
+                    "display_name": subject_name.replace("_", " ").title(),
+                    "server_id": server_id,
+                }
+
         # Render template
         prompt = self.templates.render(
             template_path,
@@ -1106,6 +1140,7 @@ class LayerExecutor:
                 "user_profile": user_profile,
                 "user_profiles": user_profiles,
                 "channel_info": channel_info,
+                "subject_info": subject_info,
                 "messages": format_messages_for_prompt(
                     messages_data, {}, mention_names=mention_names,
                     channel_names=channel_names,
@@ -1654,6 +1689,33 @@ Begin the document with "# Self-Concept" and maintain the existing sections wher
                             messages_table.c.author_id.in_([user_a, user_b]),
                             messages_table.c.created_at >= since,
                             messages_table.c.deleted_at.is_(None),
+                        )
+                    )
+                    .order_by(messages_table.c.created_at.desc())
+                    .limit(limit)
+                )
+            elif category == "subject" and len(parts) >= 4:
+                # server:X:subject:name -> messages containing subject keywords
+                server_id = parts[1]
+                subject_name = ":".join(parts[3:])
+
+                # Convert underscore-separated name to search terms
+                search_terms = subject_name.lower().replace("_", " ").split()
+
+                # Message must contain ALL terms (case-insensitive)
+                content_filters = [
+                    messages_table.c.content.ilike(f"%{term}%")
+                    for term in search_terms
+                ]
+
+                stmt = (
+                    select(messages_table)
+                    .where(
+                        and_(
+                            messages_table.c.server_id == server_id,
+                            messages_table.c.created_at >= since,
+                            messages_table.c.deleted_at.is_(None),
+                            *content_filters,
                         )
                     )
                     .order_by(messages_table.c.created_at.desc())

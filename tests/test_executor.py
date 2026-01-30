@@ -1057,3 +1057,218 @@ async def test_layer_with_single_node(
     assert run.targets_processed == 1
     # But no insights created
     assert run.status == LayerRunStatus.DRY
+
+
+# =============================================================================
+# Subject Reflection Tests
+# =============================================================================
+
+
+def test_extract_subject_from_topic(executor: LayerExecutor) -> None:
+    """Test extracting subject name and server_id from a subject topic key."""
+    subject_name, server_id = executor._extract_subject_from_topic(
+        "server:123:subject:api_redesign"
+    )
+    assert subject_name == "api_redesign"
+    assert server_id == "123"
+
+
+def test_extract_subject_from_topic_multi_word(executor: LayerExecutor) -> None:
+    """Test extracting subject with colons in name."""
+    subject_name, server_id = executor._extract_subject_from_topic(
+        "server:123:subject:rust:vs:go"
+    )
+    assert subject_name == "rust:vs:go"
+    assert server_id == "123"
+
+
+def test_extract_subject_from_topic_invalid(executor: LayerExecutor) -> None:
+    """Test that non-subject keys return (None, None)."""
+    subject_name, server_id = executor._extract_subject_from_topic(
+        "server:123:user:456"
+    )
+    assert subject_name is None
+    assert server_id is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_messages_for_subject_topic(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+) -> None:
+    """Test fetching messages for a subject topic using content search."""
+    now = utcnow()
+
+    # Insert messages with varying content
+    with engine.connect() as conn:
+        conn.execute(
+            messages_table.insert().values(
+                id="subj_msg_1",
+                channel_id=sample_channel,
+                server_id=sample_server,
+                author_id="user_a",
+                content="The api redesign is looking great",
+                created_at=now - timedelta(hours=1),
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.execute(
+            messages_table.insert().values(
+                id="subj_msg_2",
+                channel_id=sample_channel,
+                server_id=sample_server,
+                author_id="user_b",
+                content="I think the redesign of our API needs work",
+                created_at=now - timedelta(hours=2),
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        # This message only contains "api" but NOT "redesign"
+        conn.execute(
+            messages_table.insert().values(
+                id="subj_msg_3",
+                channel_id=sample_channel,
+                server_id=sample_server,
+                author_id="user_c",
+                content="The api is slow today",
+                created_at=now - timedelta(hours=3),
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.commit()
+
+    topic_key = f"server:{sample_server}:subject:api_redesign"
+    messages = await executor._get_messages_for_topic(
+        topic_key,
+        since=now - timedelta(hours=48),
+        limit=50,
+    )
+
+    # Should match messages containing BOTH "api" AND "redesign"
+    assert len(messages) == 2
+    msg_ids = {m.id for m in messages}
+    assert "subj_msg_1" in msg_ids
+    assert "subj_msg_2" in msg_ids
+    # "subj_msg_3" only has "api", not "redesign"
+    assert "subj_msg_3" not in msg_ids
+
+
+@pytest.mark.asyncio
+async def test_fetch_messages_for_subject_case_insensitive(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+) -> None:
+    """Test that subject content search is case-insensitive."""
+    now = utcnow()
+
+    with engine.connect() as conn:
+        conn.execute(
+            messages_table.insert().values(
+                id="subj_case_1",
+                channel_id=sample_channel,
+                server_id=sample_server,
+                author_id="user_a",
+                content="RUST is amazing for systems programming",
+                created_at=now - timedelta(hours=1),
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.commit()
+
+    topic_key = f"server:{sample_server}:subject:rust"
+    messages = await executor._get_messages_for_topic(
+        topic_key,
+        since=now - timedelta(hours=48),
+        limit=50,
+    )
+
+    assert len(messages) == 1
+    assert messages[0].id == "subj_case_1"
+
+
+@pytest.mark.asyncio
+async def test_fetch_messages_for_subject_excludes_other_servers(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+) -> None:
+    """Test that subject message fetch is scoped to the correct server."""
+    now = utcnow()
+
+    with engine.connect() as conn:
+        # Create another server
+        conn.execute(
+            servers_table.insert().values(
+                id="other_server",
+                name="Other Server",
+                threads_as_topics=True,
+                created_at=utcnow(),
+            )
+        )
+        conn.execute(
+            channels_table.insert().values(
+                id="other_channel",
+                server_id="other_server",
+                name="general",
+                type="text",
+                created_at=utcnow(),
+            )
+        )
+        # Message in the target server
+        conn.execute(
+            messages_table.insert().values(
+                id="subj_srv_1",
+                channel_id=sample_channel,
+                server_id=sample_server,
+                author_id="user_a",
+                content="Let's talk about rust",
+                created_at=now - timedelta(hours=1),
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        # Message in a DIFFERENT server (should be excluded)
+        conn.execute(
+            messages_table.insert().values(
+                id="subj_srv_2",
+                channel_id="other_channel",
+                server_id="other_server",
+                author_id="user_b",
+                content="Rust is great",
+                created_at=now - timedelta(hours=1),
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.commit()
+
+    topic_key = f"server:{sample_server}:subject:rust"
+    messages = await executor._get_messages_for_topic(
+        topic_key,
+        since=now - timedelta(hours=48),
+        limit=50,
+    )
+
+    assert len(messages) == 1
+    assert messages[0].id == "subj_srv_1"

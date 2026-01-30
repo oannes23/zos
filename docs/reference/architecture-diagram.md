@@ -222,9 +222,15 @@ zos/
 ├── layers/
 │   └── reflection/         # Layer definitions
 │       ├── nightly-user.yaml
+│       ├── nightly-channel.yaml
+│       ├── nightly-dyad.yaml
+│       ├── nightly-subject.yaml
+│       ├── weekly-emoji-patterns.yaml
 │       └── weekly-self.yaml
 ├── prompts/                # Prompt templates
 │   ├── user/
+│   ├── channel/
+│   ├── subject/
 │   └── self/
 ├── data/                   # Runtime data
 │   ├── zos.db             # SQLite database

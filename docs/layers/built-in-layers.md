@@ -184,9 +184,69 @@ Self-insights capture the texture of Zos's experience across communities. Exampl
 
 ---
 
+## nightly-subject-reflection
+
+Reflects on emergent semantic topics to build understanding of community themes.
+
+**Schedule:** Daily at 3 AM UTC
+
+**What it does:**
+1. Selects up to 10 subjects with salience >= 10
+2. Fetches the last 72 hours of messages mentioning the subject (content search)
+3. Retrieves prior insights about each subject
+4. Generates phenomenological reflection on the theme's place in the community
+5. Stores new insight with category `subject_reflection`
+
+**Pipeline:**
+
+```yaml
+nodes:
+  - name: fetch_recent_messages
+    type: fetch_messages
+    params:
+      lookback_hours: 72
+      limit_per_channel: 100
+
+  - name: fetch_prior_understanding
+    type: fetch_insights
+    params:
+      retrieval_profile: recent
+      max_per_topic: 10
+
+  - name: reflect
+    type: llm_call
+    params:
+      prompt_template: subject/reflection.jinja2
+      model: reflection
+      max_tokens: 1000
+      temperature: 0.7
+
+  - name: store
+    type: store_insight
+    params:
+      category: subject_reflection
+```
+
+**How message fetching works:**
+
+Subject topics use content search rather than author or channel filtering. The topic key `server:123:subject:api_redesign` is split into search terms (`api`, `redesign`), and messages must contain **all** terms (case-insensitive). This means:
+- `"The API redesign looks great"` — matches
+- `"I think the redesign of our API needs work"` — matches
+- `"The API is slow today"` — does not match (missing "redesign")
+
+Messages are scoped to the subject's server — no cross-server leakage.
+
+**Expected output:**
+
+Insights that capture a theme's significance and evolution within the community — not keyword summaries, but understanding of why this subject matters. Example:
+
+> "API Redesign has become a rallying point in the community over the past week. The discussion started as a technical concern but has evolved into something more — it's now about the project's identity and what kind of developer experience the community wants to offer. There's a productive tension between those who want backwards compatibility and those pushing for a clean break. The energy is high; this is something people genuinely care about."
+
+---
+
 ## Layer Categories
 
-The built-in layers cover four of the six possible categories:
+The built-in layers cover five of the six possible categories:
 
 | Category | Built-in Layer | Description |
 |----------|----------------|-------------|
@@ -194,7 +254,7 @@ The built-in layers cover four of the six possible categories:
 | `self` | weekly-self-reflection | Self-understanding |
 | `dyad` | nightly-dyad-reflection | Relationship understanding |
 | `channel` | nightly-channel-reflection | Space understanding |
-| `subject` | — | Semantic topic understanding |
+| `subject` | nightly-subject-reflection | Semantic topic understanding |
 | `synthesis` | — | Cross-scope consolidation |
 
 Additional layers for other categories can be added as YAML files in the `layers/reflection/` directory.
