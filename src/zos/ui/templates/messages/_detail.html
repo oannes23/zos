@@ -1,0 +1,118 @@
+<div class="modal-content">
+    <div class="modal-header">
+        <h2>{{ message.author_name or message.author_id }}</h2>
+        <div>
+            <span class="badge badge-channel">#{{ message.channel_name or message.channel_id }}</span>
+            <button class="close-btn" onclick="this.closest('.modal').innerHTML = ''">&times;</button>
+        </div>
+    </div>
+
+    <div class="text-muted mb-1">
+        {{ message.created_at.strftime('%Y-%m-%d %H:%M') }} ({{ message.temporal_marker }})
+    </div>
+
+    <div class="message-content-full">
+        {{ message.content }}
+    </div>
+
+    {% if message.reactions_aggregate %}
+    <h3 class="mt-2">Reactions</h3>
+    <div class="reactions-grid">
+        {% for emoji, count in message.reactions_aggregate.items() %}
+        <div class="reaction-item">
+            <span class="reaction-emoji">{{ emoji }}</span>
+            <span class="reaction-count">{{ count }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if media %}
+    <h3 class="mt-2">Media</h3>
+    {% for item in media %}
+    <div class="run-metrics mb-1">
+        <div class="metric-row">
+            <span class="metric-label">Type</span>
+            <span>{{ item.media_type }}</span>
+        </div>
+        {% if item.filename %}
+        <div class="metric-row">
+            <span class="metric-label">File</span>
+            <span>{{ item.filename }}</span>
+        </div>
+        {% endif %}
+        {% if item.width and item.height %}
+        <div class="metric-row">
+            <span class="metric-label">Size</span>
+            <span>{{ item.width }}&times;{{ item.height }}</span>
+        </div>
+        {% endif %}
+        {% if item.description %}
+        <div class="metric-row">
+            <span class="metric-label">Description</span>
+            <span>{{ item.description | truncate(200) }}</span>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if links %}
+    <h3 class="mt-2">Links</h3>
+    {% for link in links %}
+    <div class="run-metrics mb-1">
+        <div class="metric-row">
+            <span class="metric-label">URL</span>
+            <span><a href="{{ link.url }}" target="_blank" onclick="event.stopPropagation()">{{ link.domain }}</a></span>
+        </div>
+        {% if link.title %}
+        <div class="metric-row">
+            <span class="metric-label">Title</span>
+            <span>{{ link.title }}</span>
+        </div>
+        {% endif %}
+        {% if link.summary %}
+        <div class="metric-row">
+            <span class="metric-label">Summary</span>
+            <span>{{ link.summary | truncate(200) }}</span>
+        </div>
+        {% endif %}
+        {% if link.is_youtube %}
+        <div class="metric-row">
+            <span class="metric-label">Type</span>
+            <span class="badge badge-links">YouTube</span>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="run-metrics mt-2">
+        {% if message.server_name or message.server_id %}
+        <div class="metric-row">
+            <span class="metric-label">Server</span>
+            <span>{{ message.server_name or message.server_id }}</span>
+        </div>
+        {% endif %}
+        <div class="metric-row">
+            <span class="metric-label">Visibility</span>
+            <span>{{ message.visibility_scope }}</span>
+        </div>
+        {% if message.reply_to_id %}
+        <div class="metric-row">
+            <span class="metric-label">Reply to</span>
+            <span><a href="/ui/messages/{{ message.reply_to_id }}" onclick="event.stopPropagation()">{{ message.reply_to_id }}</a></span>
+        </div>
+        {% endif %}
+        {% if message.thread_id %}
+        <div class="metric-row">
+            <span class="metric-label">Thread</span>
+            <span>{{ message.thread_id }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="modal-footer">
+        <a href="/ui/messages/{{ message.id }}" class="btn" onclick="event.stopPropagation()">Full page</a>
+    </div>
+</div>

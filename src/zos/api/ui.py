@@ -647,12 +647,22 @@ async def messages_page(
     """Messages browser page.
 
     Main page for browsing and searching messages with filtering
-    by channel and author.
+    by channel and author. Preloads first page of messages server-side
+    to avoid the blank "Loading..." state.
     """
-    from zos.api.db_queries import get_authors_for_filter, get_channels_for_filter
+    from zos.api.db_queries import (
+        get_authors_for_filter,
+        get_channels_for_filter,
+        list_messages as db_list,
+    )
 
     channels = await get_channels_for_filter(db)
     authors = await get_authors_for_filter(db)
+
+    # Preload first page of messages server-side
+    limit = 20
+    messages, total = await db_list(db, offset=0, limit=limit)
+    formatted = _format_messages_batch_for_ui(messages, db)
 
     return templates.TemplateResponse(
         request=request,
@@ -662,6 +672,10 @@ async def messages_page(
             "dev_mode": _get_dev_mode(request),
             "channels": channels,
             "authors": authors,
+            "messages": formatted,
+            "total": total,
+            "offset": 0,
+            "limit": limit,
         },
     )
 
@@ -705,7 +719,7 @@ async def messages_list_partial(
             limit=limit,
         )
 
-    formatted = [_format_message_for_ui(m, db) for m in messages]
+    formatted = _format_messages_batch_for_ui(messages, db)
 
     return templates.TemplateResponse(
         request=request,
@@ -752,7 +766,7 @@ async def messages_search_partial(
         limit=limit,
     )
 
-    formatted = [_format_message_for_ui(m, db) for m in messages]
+    formatted = _format_messages_batch_for_ui(messages, db)
 
     return templates.TemplateResponse(
         request=request,
@@ -785,7 +799,7 @@ async def messages_recent(
     if not messages:
         return HTMLResponse('<p class="text-muted">No messages yet</p>')
 
-    formatted = [_format_message_for_ui(m, db) for m in messages]
+    formatted = _format_messages_batch_for_ui(messages, db)
 
     # Simple list for dashboard
     html_parts = []
@@ -838,7 +852,7 @@ async def messages_by_channel_partial(
     from zos.api.db_queries import _row_to_message
 
     messages = [_row_to_message(r) for r in rows]
-    formatted = [_format_message_for_ui(m, db) for m in messages]
+    formatted = _format_messages_batch_for_ui(messages, db)
 
     return templates.TemplateResponse(
         request=request,
@@ -851,6 +865,40 @@ async def messages_by_channel_partial(
             "channel_id": None,
             "author_id": None,
             "q": None,
+        },
+    )
+
+
+@router.get("/messages/{message_id}/modal", response_class=HTMLResponse)
+async def message_detail_modal(
+    request: Request,
+    message_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Message detail modal partial (htmx).
+
+    Returns modal content for a message, including full content,
+    reactions breakdown, media attachments, and links.
+    """
+    from zos.api.db_queries import get_links_for_message, get_media_for_message, get_message
+
+    message = await get_message(db, message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    formatted = _format_message_for_ui(message, db)
+
+    # Fetch media and links if flagged
+    media = await get_media_for_message(db, message_id) if message.has_media else []
+    links = await get_links_for_message(db, message_id) if message.has_links else []
+
+    return templates.TemplateResponse(
+        request=request,
+        name="messages/_detail.html",
+        context={
+            "message": formatted,
+            "media": media,
+            "links": links,
         },
     )
 
@@ -1036,7 +1084,7 @@ async def user_messages_partial(
     if not messages:
         return HTMLResponse('<p class="text-muted">No messages</p>')
 
-    formatted = [_format_message_for_ui(m, db) for m in messages]
+    formatted = _format_messages_batch_for_ui(messages, db)
 
     html_parts = []
     for m in formatted:
@@ -1193,7 +1241,7 @@ async def channel_messages_partial(
     if not messages:
         return HTMLResponse('<p class="text-muted">No messages</p>')
 
-    formatted = [_format_message_for_ui(m, db) for m in messages]
+    formatted = _format_messages_batch_for_ui(messages, db)
 
     html_parts = []
     for m in formatted:
@@ -2436,3 +2484,109 @@ def _format_message_for_ui(message, db: "Engine") -> dict:
         "has_media": message.has_media,
         "has_links": message.has_links,
     }
+
+
+def _format_messages_batch_for_ui(messages, db: "Engine") -> list[dict]:
+    """Format multiple messages for UI templates with batched name resolution.
+
+    Instead of 3 queries per message (channel, server, author), this collects
+    all unique IDs and runs 3 bulk queries total, then maps results back.
+
+    Args:
+        messages: List of Message model instances.
+        db: Database engine for name resolution.
+
+    Returns:
+        List of dictionaries with all fields needed for UI rendering.
+    """
+    if not messages:
+        return []
+
+    from sqlalchemy import func, select
+
+    from zos.database import channels, servers, user_profiles
+
+    # Collect unique IDs
+    channel_ids = {m.channel_id for m in messages}
+    server_ids = {m.server_id for m in messages if m.server_id}
+    author_ids = {m.author_id for m in messages}
+
+    channel_names: dict[str, str] = {}
+    server_names: dict[str, str] = {}
+    author_names: dict[str, str] = {}
+
+    with db.connect() as conn:
+        # Batch: channel names
+        if channel_ids:
+            stmt = select(channels.c.id, channels.c.name).where(
+                channels.c.id.in_(channel_ids)
+            )
+            for row in conn.execute(stmt).fetchall():
+                if row.name:
+                    channel_names[row.id] = row.name
+
+        # Batch: server names
+        if server_ids:
+            stmt = select(servers.c.id, servers.c.name).where(
+                servers.c.id.in_(server_ids)
+            )
+            for row in conn.execute(stmt).fetchall():
+                if row.name:
+                    server_names[row.id] = row.name
+
+        # Batch: author names (most recent profile per user)
+        if author_ids:
+            subq = (
+                select(
+                    user_profiles.c.user_id,
+                    func.max(user_profiles.c.captured_at).label("max_captured"),
+                )
+                .where(user_profiles.c.user_id.in_(author_ids))
+                .group_by(user_profiles.c.user_id)
+                .subquery()
+            )
+
+            stmt = (
+                select(
+                    user_profiles.c.user_id,
+                    user_profiles.c.display_name,
+                    user_profiles.c.username,
+                    user_profiles.c.discriminator,
+                )
+                .join(
+                    subq,
+                    (user_profiles.c.user_id == subq.c.user_id)
+                    & (user_profiles.c.captured_at == subq.c.max_captured),
+                )
+            )
+            for row in conn.execute(stmt).fetchall():
+                if row.display_name:
+                    author_names[row.user_id] = row.display_name
+                elif row.discriminator and row.discriminator != "0":
+                    author_names[row.user_id] = f"{row.username}#{row.discriminator}"
+                elif row.username:
+                    author_names[row.user_id] = row.username
+
+    # Build formatted dicts using resolved names
+    results = []
+    for message in messages:
+        results.append({
+            "id": message.id,
+            "channel_id": message.channel_id,
+            "channel_name": channel_names.get(message.channel_id),
+            "server_id": message.server_id,
+            "server_name": server_names.get(message.server_id) if message.server_id else None,
+            "author_id": message.author_id,
+            "author_name": author_names.get(message.author_id),
+            "content": message.content,
+            "created_at": message.created_at,
+            "temporal_marker": relative_time(message.created_at),
+            "visibility_scope": message.visibility_scope.value,
+            "reactions_aggregate": message.reactions_aggregate,
+            "reply_to_id": message.reply_to_id,
+            "thread_id": message.thread_id,
+            "has_media": message.has_media,
+            "has_links": message.has_links,
+        })
+
+    return results

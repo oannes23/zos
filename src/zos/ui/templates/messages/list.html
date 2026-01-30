@@ -42,7 +42,7 @@
     </select>
 </div>
 
-<div id="messages-list" hx-get="/ui/messages/list" hx-trigger="load">
-    Loading...
+<div id="messages-list">
+    {% include "messages/_list.html" %}
 </div>
 {% endblock %}

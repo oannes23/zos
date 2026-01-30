@@ -2049,3 +2049,82 @@ async def list_link_analysis(
             })
 
         return results, total
+
+
+async def get_media_for_message(
+    engine: "Engine",
+    message_id: str,
+) -> list[dict]:
+    """Get media analysis records for a specific message.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        message_id: The message ID.
+
+    Returns:
+        List of media analysis dicts.
+    """
+    from zos.database import media_analysis
+
+    with engine.connect() as conn:
+        stmt = (
+            select(media_analysis)
+            .where(media_analysis.c.message_id == message_id)
+            .order_by(media_analysis.c.analyzed_at.desc())
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "id": row.id,
+                "media_type": row.media_type,
+                "url": row.url,
+                "filename": row.filename,
+                "width": row.width,
+                "height": row.height,
+                "description": row.description,
+                "local_path": row.local_path,
+                "analyzed_at": row.analyzed_at,
+            })
+
+        return results
+
+
+async def get_links_for_message(
+    engine: "Engine",
+    message_id: str,
+) -> list[dict]:
+    """Get link analysis records for a specific message.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        message_id: The message ID.
+
+    Returns:
+        List of link analysis dicts.
+    """
+    from zos.database import link_analysis
+
+    with engine.connect() as conn:
+        stmt = (
+            select(link_analysis)
+            .where(link_analysis.c.message_id == message_id)
+            .order_by(link_analysis.c.fetched_at.desc())
+        )
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "id": row.id,
+                "url": row.url,
+                "domain": row.domain,
+                "content_type": row.content_type,
+                "title": row.title,
+                "summary": row.summary,
+                "is_youtube": row.is_youtube,
+                "duration_seconds": row.duration_seconds,
+                "fetched_at": row.fetched_at,
+                "fetch_failed": row.fetch_failed,
+            })
+
+        return results

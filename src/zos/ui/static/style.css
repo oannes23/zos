@@ -924,14 +924,49 @@ a:hover {
    Messages Browser Styles (Story 5.12)
    ============================================================================= */
 
-/* Message Cards */
-.message-card {
-    cursor: pointer;
-    transition: transform 0.1s;
+/* Messages Table */
+.messages-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-card);
+    border-radius: 8px;
+    overflow: hidden;
 }
 
-.message-card:hover {
-    transform: translateY(-2px);
+.messages-table th {
+    background: var(--bg-secondary);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+.messages-table th:nth-child(1) { width: 12%; } /* Author */
+.messages-table th:nth-child(2) { width: 12%; } /* Channel */
+.messages-table th:nth-child(3) { width: 40%; } /* Content */
+.messages-table th:nth-child(4) { width: 12%; } /* Time */
+.messages-table th:nth-child(5) { width: 8%; }  /* Reactions */
+.messages-table th:nth-child(6) { width: 16%; } /* Flags */
+
+.messages-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.messages-table tbody tr {
+    transition: background 0.1s;
+}
+
+.messages-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.message-preview {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .message-content {

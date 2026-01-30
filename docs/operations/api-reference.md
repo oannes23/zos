@@ -546,6 +546,32 @@ The web UI provides a browser-based interface for exploring Zos data at `/ui/`.
 | `/ui/layers/{name}` | Layer detail — config, pipeline visualization, recent runs and insights |
 | `/ui/runs` | View layer run history and statistics |
 
+### Messages Browser
+
+The messages browser (`/ui/messages`) displays stored Discord messages in a compact table layout.
+
+**Features:**
+- Compact table with columns: Author, Channel, Content Preview, Time, Reactions, Flags
+- Messages load immediately (server-side preloaded, no lazy loading delay)
+- Filter by channel or author via dropdown selects
+- Search messages by content (debounced)
+- Click any row to open a detail modal with:
+  - Full message content
+  - Reactions breakdown (each emoji with count)
+  - Media attachments (type, filename, dimensions, description)
+  - Links (URL, title, summary, YouTube badge)
+  - Metadata (server, visibility scope, reply/thread info)
+  - Link to full-page detail view
+- Pagination for browsing large result sets
+- Direct link to `/ui/messages/{id}` for full-page message detail
+
+**htmx Partials:**
+| Path | Description |
+|------|-------------|
+| `/ui/messages/list` | Paginated messages table (filter, search, paginate) |
+| `/ui/messages/search` | Search messages by content |
+| `/ui/messages/{message_id}/modal` | Message detail modal |
+
 ### Users Browser
 
 The users browser (`/ui/users`) displays all tracked users sorted by insight count.

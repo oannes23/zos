@@ -1,30 +1,41 @@
-{% for message in messages %}
-<div class="card message-card"
-     hx-get="/ui/messages/{{ message.id }}"
-     hx-push-url="true"
-     hx-target="body"
-     hx-swap="innerHTML">
-    <div class="card-header">
-        <span class="card-title">{{ message.author_name or message.author_id }}</span>
-        <span class="badge badge-channel">#{{ message.channel_name or message.channel_id }}</span>
-    </div>
-    <p class="message-content">{{ message.content | truncate(300) }}</p>
-    <div class="card-meta">
-        <span class="temporal-marker">{{ message.temporal_marker }}</span>
-        {% if message.reactions_aggregate %}
-        <span class="reactions-count">
-            {% set total_reactions = message.reactions_aggregate.values() | list | sum %}
-            {{ total_reactions }} reaction{% if total_reactions != 1 %}s{% endif %}
-        </span>
-        {% endif %}
-        {% if message.has_media %}<span class="badge badge-media">media</span>{% endif %}
-        {% if message.has_links %}<span class="badge badge-links">links</span>{% endif %}
-        {% if message.reply_to_id %}<span class="badge badge-reply">reply</span>{% endif %}
-    </div>
-</div>
-{% endfor %}
-
 {% if messages %}
+<table class="messages-table">
+    <thead>
+        <tr>
+            <th>Author</th>
+            <th>Channel</th>
+            <th>Content</th>
+            <th>Time</th>
+            <th>Reactions</th>
+            <th>Flags</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for message in messages %}
+        <tr class="clickable"
+            hx-get="/ui/messages/{{ message.id }}/modal"
+            hx-target="#message-detail-modal"
+            hx-swap="innerHTML">
+            <td>{{ message.author_name or message.author_id }}</td>
+            <td>#{{ message.channel_name or message.channel_id }}</td>
+            <td class="message-preview">{{ message.content | truncate(80) }}</td>
+            <td class="text-muted">{{ message.temporal_marker }}</td>
+            <td>
+                {% if message.reactions_aggregate %}
+                    {% set total_reactions = message.reactions_aggregate.values() | list | sum %}
+                    {{ total_reactions }}
+                {% endif %}
+            </td>
+            <td>
+                {% if message.has_media %}<span class="badge badge-media">media</span>{% endif %}
+                {% if message.has_links %}<span class="badge badge-links">links</span>{% endif %}
+                {% if message.reply_to_id %}<span class="badge badge-reply">reply</span>{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
 <div class="pagination">
     {% if offset > 0 %}
     <button hx-get="/ui/messages/list?offset={{ offset - limit }}&limit={{ limit }}{% if channel_id %}&channel_id={{ channel_id }}{% endif %}{% if author_id %}&author_id={{ author_id }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
@@ -45,3 +56,5 @@
 {% else %}
 <p class="empty-state">No messages found.</p>
 {% endif %}
+
+<div id="message-detail-modal" class="modal"></div>
