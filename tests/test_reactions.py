@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
+
 import pytest
 from sqlalchemy import select
 
@@ -467,6 +469,7 @@ class TestReactionPrivacyGate:
 
         mock_message = MagicMock()
         mock_message.id = 444444444
+        mock_message.guild = None  # No guild for resolution
         mock_message.reactions = [mock_reaction]
 
         # Sync reactions
@@ -539,6 +542,7 @@ class TestReactionPrivacyGate:
 
         mock_message = MagicMock()
         mock_message.id = 444444444
+        mock_message.guild = None  # No guild for resolution
         mock_message.reactions = [mock_reaction]
 
         # Sync reactions
@@ -641,7 +645,7 @@ class TestReactionAggregate:
     async def test_update_aggregate_empty_reactions(
         self, bot: ZosBot, engine, now
     ) -> None:
-        """Should clear aggregate when no reactions."""
+        """Should store empty JSON object when no reactions."""
         msg = await setup_test_message(bot, engine, now)
 
         mock_message = MagicMock()
@@ -651,7 +655,7 @@ class TestReactionAggregate:
         # Update aggregate
         await bot._update_message_reactions(mock_message)
 
-        # Verify
+        # Verify stores "{}" not NULL
         with engine.connect() as conn:
             result = conn.execute(
                 select(messages.c.reactions_aggregate).where(
@@ -659,7 +663,7 @@ class TestReactionAggregate:
                 )
             ).fetchone()
 
-            assert result.reactions_aggregate is None
+            assert result.reactions_aggregate == "{}"
 
 
 # =============================================================================
@@ -692,6 +696,7 @@ class TestReactionSync:
 
         mock_message = MagicMock()
         mock_message.id = int(msg["message_id"])
+        mock_message.guild = None
         mock_message.reactions = [mock_reaction]
 
         # Sync
@@ -727,6 +732,7 @@ class TestReactionSync:
         # Now sync with no reactions (simulating reaction was removed)
         mock_message = MagicMock()
         mock_message.id = int(msg["message_id"])
+        mock_message.guild = None
         mock_message.reactions = []
 
         await bot._sync_reactions(mock_message, msg["server_id"])
@@ -767,6 +773,7 @@ class TestReactionSync:
 
         mock_message = MagicMock()
         mock_message.id = int(msg["message_id"])
+        mock_message.guild = None
         mock_message.reactions = [mock_reaction]
 
         # Sync
@@ -822,6 +829,7 @@ class TestReactionPollingIntegration:
         mock_message.id = 444444444
         mock_message.channel = MagicMock()
         mock_message.channel.id = 222222222
+        mock_message.guild = None  # No guild for User→Member resolution
         mock_message.author = mock_user
         mock_message.content = "Celebrate!"
         mock_message.created_at = datetime.now(timezone.utc)
@@ -867,3 +875,293 @@ class TestReactionPollingIntegration:
             ).fetchone()
             aggregate = json.loads(msg_result.reactions_aggregate)
             assert aggregate == {"🎉": 1}
+
+
+# =============================================================================
+# Regression Tests — Reaction Salience & Dyad Tracking Bugs
+# =============================================================================
+
+
+class TestPhase2ReactionDiscovery:
+    """Regression tests for Phase 2 resync discovering reactions on
+    messages that had no reactions when first polled (Bug 1)."""
+
+    @pytest.mark.asyncio
+    async def test_phase2_discovers_reactions_on_previously_unreacted_message(
+        self, bot: ZosBot, engine, now
+    ) -> None:
+        """Phase 2 should re-fetch messages with NULL reactions_aggregate
+        and discover new reactions added after initial polling."""
+        msg = await setup_test_message(bot, engine, now)
+
+        # Message has NULL reactions_aggregate (never had reactions when polled)
+        with engine.connect() as conn:
+            result = conn.execute(
+                select(messages.c.reactions_aggregate).where(
+                    messages.c.id == msg["message_id"]
+                )
+            ).fetchone()
+            assert result.reactions_aggregate is None  # Starts as NULL
+
+        # Create a mock Discord message with a reaction added later
+        mock_user = create_mock_author(user_id=666666666, display_name="Reactor", username="reactor")
+        mock_user.roles = None  # No privacy gate
+
+        mock_reaction = MagicMock()
+        mock_reaction.emoji = "👍"
+        mock_reaction.count = 1
+
+        async def mock_users():
+            yield mock_user
+
+        mock_reaction.users = mock_users
+
+        mock_discord_message = MagicMock()
+        mock_discord_message.id = int(msg["message_id"])
+        mock_discord_message.guild = None
+        mock_discord_message.reactions = [mock_reaction]
+
+        # Directly call _sync_reactions (simulating what Phase 2 does)
+        await bot._sync_reactions(mock_discord_message, msg["server_id"])
+
+        # Verify reaction was stored
+        with engine.connect() as conn:
+            result = conn.execute(
+                select(reactions).where(
+                    reactions.c.message_id == msg["message_id"]
+                )
+            ).fetchall()
+            assert len(result) == 1
+            assert result[0].user_id == "666666666"
+            assert result[0].emoji == "👍"
+
+    @pytest.mark.asyncio
+    async def test_phase2_discovers_reactions_on_empty_aggregate_message(
+        self, bot: ZosBot, engine, now
+    ) -> None:
+        """Phase 2 should re-fetch messages with '{}' aggregate (all prior
+        reactions removed, then new ones added)."""
+        msg = await setup_test_message(bot, engine, now)
+
+        # Set aggregate to "{}" (reactions were removed)
+        with engine.connect() as conn:
+            conn.execute(
+                messages.update()
+                .where(messages.c.id == msg["message_id"])
+                .values(reactions_aggregate="{}")
+            )
+            conn.commit()
+
+        # Create a mock Discord message with a new reaction
+        mock_user = create_mock_author(user_id=666666666, display_name="Reactor", username="reactor")
+        mock_user.roles = None
+
+        mock_reaction = MagicMock()
+        mock_reaction.emoji = "❤️"
+        mock_reaction.count = 1
+
+        async def mock_users():
+            yield mock_user
+
+        mock_reaction.users = mock_users
+
+        mock_discord_message = MagicMock()
+        mock_discord_message.id = int(msg["message_id"])
+        mock_discord_message.guild = None
+        mock_discord_message.reactions = [mock_reaction]
+
+        await bot._sync_reactions(mock_discord_message, msg["server_id"])
+
+        with engine.connect() as conn:
+            result = conn.execute(
+                select(reactions).where(
+                    reactions.c.message_id == msg["message_id"]
+                )
+            ).fetchall()
+            assert len(result) == 1
+            assert result[0].emoji == "❤️"
+
+
+class TestUserToMemberResolution:
+    """Regression tests for discord.User → discord.Member resolution
+    in _sync_reactions before privacy gate check (Bug 2)."""
+
+    @pytest.mark.asyncio
+    async def test_discord_user_resolved_to_member_via_guild_cache(
+        self, tmp_path: Path, engine
+    ) -> None:
+        """discord.User objects should be resolved to discord.Member via
+        guild cache so privacy gate role check succeeds."""
+        # Config with privacy gate
+        config = Config(
+            data_dir=tmp_path,
+            servers={"111111111": {"privacy_gate_role": "111222333"}},
+        )
+        bot = ZosBot(config, engine)
+
+        # Setup server and channel
+        mock_guild = MagicMock()
+        mock_guild.id = 111111111
+        mock_guild.name = "Test Server"
+        await bot._ensure_server(mock_guild)
+
+        mock_channel = MagicMock(spec=['id', 'name'])
+        mock_channel.id = 222222222
+        mock_channel.name = "test-channel"
+        await bot._ensure_channel(mock_channel, "111111111")
+
+        # Insert test message
+        with engine.connect() as conn:
+            from zos.models import model_to_dict
+            msg_obj = Message(
+                id="444444444",
+                channel_id="222222222",
+                server_id="111111111",
+                author_id="555555555",
+                content="Test message",
+                created_at=datetime.now(timezone.utc),
+                visibility_scope=VisibilityScope.PUBLIC,
+                has_media=False,
+                has_links=False,
+            )
+            conn.execute(messages.insert().values(**model_to_dict(msg_obj)))
+            conn.commit()
+
+        # Create a discord.User (no roles attribute) — this is what
+        # reaction.users() returns when member isn't in cache
+        mock_user = MagicMock(spec=discord.User)
+        mock_user.id = 777777777
+        mock_user.display_name = "Reactor"
+        mock_user.name = "reactor"
+        mock_user.discriminator = "0"
+        mock_user.avatar = None
+        mock_user.bot = False
+        mock_user.created_at = datetime.now(timezone.utc)
+        # discord.User has no 'roles' attribute — spec=discord.User ensures this
+
+        # Create a corresponding discord.Member in guild cache with gate role
+        mock_role = MagicMock()
+        mock_role.id = 111222333
+
+        mock_member = MagicMock(spec=discord.Member)
+        mock_member.id = 777777777
+        mock_member.display_name = "Reactor"
+        mock_member.name = "reactor"
+        mock_member.discriminator = "0"
+        mock_member.avatar = None
+        mock_member.bot = False
+        mock_member.created_at = datetime.now(timezone.utc)
+        mock_member.joined_at = datetime.now(timezone.utc)
+        mock_member.roles = [mock_role]
+
+        # Guild cache returns the member
+        mock_msg_guild = MagicMock()
+        mock_msg_guild.get_member = MagicMock(return_value=mock_member)
+
+        mock_reaction = MagicMock()
+        mock_reaction.emoji = "👍"
+        mock_reaction.count = 1
+
+        async def mock_users():
+            yield mock_user
+
+        mock_reaction.users = mock_users
+
+        mock_message = MagicMock()
+        mock_message.id = 444444444
+        mock_message.guild = mock_msg_guild
+        mock_message.reactions = [mock_reaction]
+
+        # Sync reactions
+        await bot._sync_reactions(mock_message, "111111111")
+
+        # Verify reaction was stored (not anonymized/skipped)
+        with engine.connect() as conn:
+            result = conn.execute(
+                select(reactions).where(
+                    reactions.c.message_id == "444444444"
+                )
+            ).fetchall()
+            assert len(result) == 1
+            assert result[0].user_id == "777777777"
+
+    @pytest.mark.asyncio
+    async def test_discord_user_without_cache_hit_remains_anonymous(
+        self, tmp_path: Path, engine
+    ) -> None:
+        """discord.User not found in guild cache should remain anonymous
+        (same as current behavior for uncached members)."""
+        # Config with privacy gate
+        config = Config(
+            data_dir=tmp_path,
+            servers={"111111111": {"privacy_gate_role": "111222333"}},
+        )
+        bot = ZosBot(config, engine)
+
+        # Setup server and channel
+        mock_guild = MagicMock()
+        mock_guild.id = 111111111
+        mock_guild.name = "Test Server"
+        await bot._ensure_server(mock_guild)
+
+        mock_channel = MagicMock(spec=['id', 'name'])
+        mock_channel.id = 222222222
+        mock_channel.name = "test-channel"
+        await bot._ensure_channel(mock_channel, "111111111")
+
+        # Insert test message
+        with engine.connect() as conn:
+            from zos.models import model_to_dict
+            msg_obj = Message(
+                id="444444444",
+                channel_id="222222222",
+                server_id="111111111",
+                author_id="555555555",
+                content="Test message",
+                created_at=datetime.now(timezone.utc),
+                visibility_scope=VisibilityScope.PUBLIC,
+                has_media=False,
+                has_links=False,
+            )
+            conn.execute(messages.insert().values(**model_to_dict(msg_obj)))
+            conn.commit()
+
+        # Create a discord.User (no roles)
+        mock_user = MagicMock(spec=discord.User)
+        mock_user.id = 777777777
+        mock_user.display_name = "Reactor"
+        mock_user.name = "reactor"
+        mock_user.discriminator = "0"
+        mock_user.avatar = None
+        mock_user.bot = False
+        mock_user.created_at = datetime.now(timezone.utc)
+
+        # Guild cache does NOT have this member
+        mock_msg_guild = MagicMock()
+        mock_msg_guild.get_member = MagicMock(return_value=None)
+
+        mock_reaction = MagicMock()
+        mock_reaction.emoji = "👍"
+        mock_reaction.count = 1
+
+        async def mock_users():
+            yield mock_user
+
+        mock_reaction.users = mock_users
+
+        mock_message = MagicMock()
+        mock_message.id = 444444444
+        mock_message.guild = mock_msg_guild
+        mock_message.reactions = [mock_reaction]
+
+        # Sync reactions
+        await bot._sync_reactions(mock_message, "111111111")
+
+        # Verify no reaction stored (anonymous user skipped)
+        with engine.connect() as conn:
+            result = conn.execute(
+                select(reactions).where(
+                    reactions.c.message_id == "444444444"
+                )
+            ).fetchall()
+            assert len(result) == 0

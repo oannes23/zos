@@ -919,10 +919,6 @@ class ZosBot(commands.Bot):
             message_id = row.id
             messages_checked += 1
 
-            # Skip if no reactions recorded in DB (optimization)
-            if not row.reactions_aggregate:
-                continue
-
             try:
                 discord_message = await channel.fetch_message(int(message_id))
                 if discord_message.reactions:
@@ -1270,6 +1266,14 @@ class ZosBot(commands.Bot):
                 await self._reaction_user_limiter.acquire()
 
                 async for user in reaction.users():
+                    # Resolve User to Member for privacy gate role check
+                    # reaction.users() may return discord.User (no roles attr)
+                    # even when the member IS in the guild cache
+                    if server_id and message.guild and not isinstance(user, discord.Member):
+                        member = message.guild.get_member(user.id)
+                        if member is not None:
+                            user = member
+
                     # Apply privacy gate
                     user_id = self._resolve_author_id(user, server_id)
 
@@ -1537,7 +1541,7 @@ class ZosBot(commands.Bot):
             conn.execute(
                 messages.update()
                 .where(messages.c.id == message_id)
-                .values(reactions_aggregate=json.dumps(aggregate) if aggregate else None)
+                .values(reactions_aggregate=json.dumps(aggregate))
             )
             conn.commit()
 

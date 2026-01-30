@@ -310,6 +310,7 @@ class TestReactionRateLimiting:
         mock_message = MagicMock()
         mock_message.id = 333333333
         mock_message.channel = mock_channel
+        mock_message.guild = None  # No guild for User→Member resolution
         mock_message.author = create_mock_author(444444444)
         mock_message.content = "Test message"
         mock_message.created_at = datetime.now(timezone.utc)
