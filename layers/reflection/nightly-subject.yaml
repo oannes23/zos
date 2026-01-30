@@ -1,7 +1,8 @@
 # Nightly Subject Reflection Layer
 #
 # Reflects on emergent semantic topics to build understanding of community themes.
-# Runs nightly at 3 AM, targeting subjects with highest salience.
+# Runs nightly at 4 AM, targeting subjects with highest salience.
+# Scheduled after user/channel/dyad reflections (3 AM) which bootstrap subjects.
 #
 # This layer implements phenomenological reflection on subjects — recurring
 # themes, ideas, and topics that emerge organically from community conversation.
@@ -10,9 +11,9 @@ name: nightly-subject-reflection
 category: subject
 description: |
   Reflect on emergent semantic topics to build understanding of community themes.
-  Runs nightly at 3 AM, targeting subjects with highest salience.
+  Runs nightly at 4 AM, targeting subjects with highest salience.
 
-schedule: "0 3 * * *"
+schedule: "0 4 * * *"
 target_category: subject
 target_filter: "salience >= 10"
 max_targets: 10

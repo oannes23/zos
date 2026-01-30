@@ -22,7 +22,9 @@ This is attentive presence — Zos notices what's happening without actively pro
 ### Reflect Mode (Nighttime)
 
 Scheduled operation:
-- Runs reflection layers (typically 3 AM)
+- Runs reflection layers on a staggered schedule (3–4 AM UTC)
+- User, channel, and dyad reflections run first (3 AM), bootstrapping subject topics
+- Subject reflection runs after (4 AM), reflecting on themes that emerged
 - Processes high-salience topics
 - Generates insights
 - Updates understanding

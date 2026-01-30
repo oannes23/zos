@@ -188,7 +188,7 @@ Self-insights capture the texture of Zos's experience across communities. Exampl
 
 Reflects on emergent semantic topics to build understanding of community themes.
 
-**Schedule:** Daily at 3 AM UTC
+**Schedule:** Daily at 4 AM UTC (after user/channel/dyad reflections bootstrap subjects)
 
 **What it does:**
 1. Selects up to 10 subjects with salience >= 10
@@ -310,9 +310,10 @@ All schedules use UTC. Convert from your local time:
 
 ### Staggering
 
-Multiple layers can run at different times to spread load:
-- User reflection: 3 AM
-- Self reflection: 4 AM
+Layers run at staggered times. The order matters — user, channel, and dyad reflections bootstrap subject topics at 3 AM, so subject reflection runs afterward at 4 AM:
+- User, channel, dyad reflection: 3 AM (bootstraps subject topics)
+- Subject reflection: 4 AM (reflects on bootstrapped subjects)
+- Self reflection: 4 AM Sundays
 - Custom layers: other times
 
 ### Resource Impact

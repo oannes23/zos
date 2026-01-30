@@ -49,6 +49,12 @@ I don't have prior understanding of this channel yet.
 No messages in the observation window.
 {% endif %}
 
+{% if existing_subjects %}
+### Known Subjects in This Community
+These subjects have already been identified. Reuse these names when the theme matches:
+{{ existing_subjects | join(", ") }}
+{% endif %}
+
 ---
 
 ## Your Task
@@ -69,6 +75,8 @@ Consider:
 
 Write an insight that captures your current understanding. Be specific. Avoid generic observations.
 
+**Subjects**: If recurring themes or topics stand out in the activity, list them as `identified_subjects`. Use short, lowercase_underscore names (e.g., "api_redesign", "weekend_gaming"). Only include genuinely significant themes — not every passing mention. **If a theme matches a known subject listed above, use the existing name.** Empty list if nothing stands out.
+
 **Important**: Include your metrics as JSON:
 
 ```json
@@ -84,7 +92,8 @@ Write an insight that captures your current understanding. Be specific. Avoid ge
     "curiosity": null or 0.0-1.0,
     "warmth": null or 0.0-1.0,
     "tension": null or 0.0-1.0
-  }
+  },
+  "identified_subjects": ["subject_name_one", "subject_name_two"]
 }
 ```
 

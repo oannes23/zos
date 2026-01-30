@@ -78,6 +78,7 @@ DEFAULT_METRICS = {
     "novelty": 0.5,
     "strength_adjustment": 1.0,
     "valence": {"curiosity": 0.5},
+    "identified_subjects": [],
 }
 
 # Maximum retry attempts per topic
@@ -811,6 +812,102 @@ class LayerExecutor:
 
         return (None, None)
 
+    def _normalize_subject_name(self, raw_name: str) -> str | None:
+        """Normalize LLM-generated subject name to topic key format.
+
+        Converts to lowercase_underscore: "API Redesign" -> "api_redesign".
+        Returns None if result is empty or < 2 chars.
+        """
+        name = raw_name.strip().lower()
+        name = re.sub(r'[\s\-\.\/]+', '_', name)       # separators -> underscore
+        name = re.sub(r'[^a-z0-9_]', '', name)          # strip non-alnum
+        name = re.sub(r'_+', '_', name)                  # collapse underscores
+        name = name.strip('_')
+        if not name or len(name) < 2:
+            return None
+        return name[:50]
+
+    def _extract_server_id(self, topic_key: str) -> str | None:
+        """Extract server_id from a topic key.
+
+        Args:
+            topic_key: Topic key (e.g., "server:123:user:456").
+
+        Returns:
+            Server ID string, or None if not a server-scoped topic.
+        """
+        parts = topic_key.split(":")
+        if parts[0] == "server" and len(parts) >= 2:
+            return parts[1]
+        return None
+
+    async def _get_existing_subjects(self, server_id: str) -> list[str]:
+        """Get existing subject names for a server.
+
+        Returns normalized subject names (e.g., ["api_redesign", "weekend_gaming"])
+        for use as context in reflection templates.
+        """
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                select(topics_table.c.key).where(
+                    topics_table.c.key.like(f"server:{server_id}:subject:%")
+                )
+            ).fetchall()
+        return [row.key.split(":subject:", 1)[1] for row in rows if ":subject:" in row.key]
+
+    async def _process_identified_subjects(
+        self,
+        subjects: list[str],
+        source_topic_key: str,
+        insight_importance: float,
+        run_id: str,
+    ) -> None:
+        """Create or reinforce subject topics from LLM-identified subjects.
+
+        Normalizes names, builds topic keys, and earns salience. The earn()
+        call auto-creates topics via ensure_topic() internally.
+
+        Args:
+            subjects: Raw subject names from LLM output.
+            source_topic_key: The topic that identified these subjects.
+            insight_importance: Importance score from the insight (0.0-1.0).
+            run_id: Current layer run ID for logging.
+        """
+        server_id = self._extract_server_id(source_topic_key)
+        if not server_id:
+            log.debug(
+                "skip_subjects_no_server",
+                source_topic=source_topic_key,
+            )
+            return
+
+        # Cap at 3 subjects per reflection to prevent flooding
+        capped = subjects[:3]
+
+        for raw_name in capped:
+            normalized = self._normalize_subject_name(raw_name)
+            if not normalized:
+                log.debug("skip_subject_invalid_name", raw_name=raw_name)
+                continue
+
+            subject_topic_key = f"server:{server_id}:subject:{normalized}"
+            earn_amount = 5.0 * (0.5 + insight_importance)
+
+            await self.ledger.earn(
+                subject_topic_key,
+                earn_amount,
+                reason=f"identified:{run_id}",
+                source_topic=source_topic_key,
+            )
+
+            log.info(
+                "subject_identified",
+                subject=normalized,
+                topic_key=subject_topic_key,
+                earn_amount=earn_amount,
+                source=source_topic_key,
+            )
+
     async def _get_channel_info(
         self,
         channel_id: str,
@@ -1132,6 +1229,12 @@ class LayerExecutor:
                     "server_id": server_id,
                 }
 
+        # Fetch existing subjects for naming consistency
+        existing_subjects: list[str] = []
+        server_id = self._extract_server_id(ctx.topic.key)
+        if server_id:
+            existing_subjects = await self._get_existing_subjects(server_id)
+
         # Render template
         prompt = self.templates.render(
             template_path,
@@ -1141,6 +1244,7 @@ class LayerExecutor:
                 "user_profiles": user_profiles,
                 "channel_info": channel_info,
                 "subject_info": subject_info,
+                "existing_subjects": existing_subjects,
                 "messages": format_messages_for_prompt(
                     messages_data, {}, mention_names=mention_names,
                     channel_names=channel_names,
@@ -1256,6 +1360,16 @@ class LayerExecutor:
         )
 
         await insert_insight(self.engine, insight)
+
+        # Process identified subjects (bootstrap subject topics)
+        identified_subjects = insight_data.get("identified_subjects", [])
+        if identified_subjects and not ctx.dry_run:
+            await self._process_identified_subjects(
+                subjects=identified_subjects,
+                source_topic_key=ctx.topic.key,
+                insight_importance=insight_data.get("importance", 0.5),
+                run_id=ctx.run_id,
+            )
 
         log.info(
             "insight_stored",

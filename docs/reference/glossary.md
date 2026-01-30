@@ -98,7 +98,7 @@ Configurable per server via `threads_as_topics`.
 
 An emergent theme or discussion subject: `server:123:subject:photography`
 
-Subject names are LLM-generated during reflection.
+Subject topics are bootstrapped during user, channel, and dyad reflections. When the LLM identifies recurring themes, it lists them as `identified_subjects`. The executor normalizes names to `lowercase_underscore` format and earns salience for the corresponding subject topic, auto-creating it if new. Once a subject reaches sufficient salience (`>= 10`), the nightly-subject-reflection layer (4 AM) reflects on it directly.
 
 ### Self Topic
 

@@ -83,7 +83,7 @@ A topic representing Zos's understanding of itself. The global `self:zos` topic 
 
 ### Subject Topic
 
-A semantic topic (`server:<id>:subject:<name>`) representing an emergent theme or discussion subject. Subject names are LLM-generated during reflection. Subject topics are subject to consolidation pressure to prevent proliferation — prefer enriching existing subjects over creating new ones.
+A semantic topic (`server:<id>:subject:<name>`) representing an emergent theme or discussion subject. Subject topics are bootstrapped during user, channel, and dyad reflections: when the LLM identifies recurring themes, the executor normalizes names to `lowercase_underscore` format and earns salience for the corresponding topic (auto-creating it if new). Once a subject reaches sufficient salience (`>= 10`), the nightly-subject-reflection layer reflects on it directly. Subject topics are subject to consolidation pressure to prevent proliferation — existing subject names are passed to the LLM for naming consistency, preferring enrichment of existing subjects over creating new ones.
 
 ### Provisional Topic
 

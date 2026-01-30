@@ -51,6 +51,10 @@ A single message might earn salience for:
 - Any mentioned users
 - Any dyads (relationships) involved
 
+### Reflection-Time Earning
+
+Subject topics earn salience through a different mechanism: during user, channel, and dyad reflections, the LLM identifies recurring themes as `identified_subjects`. Each identification earns `5.0 × (0.5 + importance)` salience for the subject topic (range 2.5–7.5). A subject typically needs 2–4 identifications across reflections to reach the nightly-subject-reflection threshold of `salience >= 10`.
+
 ---
 
 ## Propagation

@@ -178,10 +178,22 @@ server:123:subject:photography
 server:123:subject:cooking
 ```
 
-Subject names are LLM-generated during reflection. Subjects are:
+Subjects are:
 - Server-scoped (not global)
 - Subject to consolidation pressure
-- Created when themes emerge across conversations
+- Discovered when themes emerge across conversations
+
+### How Subjects Are Created
+
+Subject topics are bootstrapped during user, channel, and dyad reflections (3 AM). When a reflection layer generates an insight, the LLM also identifies significant recurring themes as `identified_subjects` — short, normalized names like `api_redesign` or `weekend_gaming`.
+
+The executor processes these identifications:
+1. Normalizes the name to `lowercase_underscore` format (max 50 chars)
+2. Builds a topic key: `server:{id}:subject:{name}`
+3. Earns salience for the subject topic (auto-creating it if new)
+4. Existing subject names are passed to the LLM for naming consistency
+
+A subject needs multiple identifications across reflections to reach the `salience >= 10` threshold required by the nightly-subject-reflection layer (4 AM), which then reflects on the subject's significance within the community. This two-stage process — identification then reflection — ensures only genuinely recurring themes receive dedicated reflection.
 
 ---
 
@@ -231,9 +243,9 @@ Topics are created automatically when:
 - A channel is polled (channel topic)
 - A thread is encountered (thread topic, if enabled)
 - Two users interact (dyad topic)
-- A subject emerges (subject topic)
+- A theme is identified during reflection (subject topic)
 
-Operators don't manually create topics — they emerge from observation.
+Operators don't manually create topics — they emerge from observation. Subject topics specifically emerge from the reflection process: user, channel, and dyad reflections identify recurring themes, which bootstrap subject topics with initial salience.
 
 ---
 

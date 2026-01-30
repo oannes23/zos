@@ -1272,3 +1272,285 @@ async def test_fetch_messages_for_subject_excludes_other_servers(
 
     assert len(messages) == 1
     assert messages[0].id == "subj_srv_1"
+
+
+# =============================================================================
+# Subject Bootstrap Tests
+# =============================================================================
+
+
+def test_normalize_subject_name_basic(executor: LayerExecutor) -> None:
+    """Test basic normalization: spaces and mixed case."""
+    assert executor._normalize_subject_name("API Redesign") == "api_redesign"
+    assert executor._normalize_subject_name("weekend gaming") == "weekend_gaming"
+    assert executor._normalize_subject_name("Rust") == "rust"
+
+
+def test_normalize_subject_name_special_chars(executor: LayerExecutor) -> None:
+    """Test normalization with special characters."""
+    assert executor._normalize_subject_name("C++ patterns") == "c_patterns"
+    assert executor._normalize_subject_name("node.js") == "node_js"
+    assert executor._normalize_subject_name("front-end dev") == "front_end_dev"
+    assert executor._normalize_subject_name("api/v2") == "api_v2"
+
+
+def test_normalize_subject_name_empty_and_short(executor: LayerExecutor) -> None:
+    """Test that empty, whitespace, and single-char names return None."""
+    assert executor._normalize_subject_name("") is None
+    assert executor._normalize_subject_name("   ") is None
+    assert executor._normalize_subject_name("a") is None
+    assert executor._normalize_subject_name("!@#") is None
+
+
+def test_normalize_subject_name_max_length(executor: LayerExecutor) -> None:
+    """Test truncation at 50 characters."""
+    long_name = "a" * 100
+    result = executor._normalize_subject_name(long_name)
+    assert result is not None
+    assert len(result) == 50
+
+
+def test_normalize_subject_name_collapses_underscores(executor: LayerExecutor) -> None:
+    """Test that multiple separators collapse to single underscore."""
+    assert executor._normalize_subject_name("api  redesign") == "api_redesign"
+    assert executor._normalize_subject_name("api - redesign") == "api_redesign"
+    assert executor._normalize_subject_name("  api  ") == "api"
+
+
+def test_extract_server_id(executor: LayerExecutor) -> None:
+    """Test extracting server ID from topic keys."""
+    assert executor._extract_server_id("server:123:user:456") == "123"
+    assert executor._extract_server_id("server:abc:channel:def") == "abc"
+    assert executor._extract_server_id("server:999:subject:rust") == "999"
+
+
+def test_extract_server_id_none(executor: LayerExecutor) -> None:
+    """Test that non-server topics return None."""
+    assert executor._extract_server_id("user:456") is None
+    assert executor._extract_server_id("self:zos") is None
+    assert executor._extract_server_id("dyad:123:456") is None
+
+
+@pytest.mark.asyncio
+async def test_get_existing_subjects(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+) -> None:
+    """Test fetching existing subject names for a server."""
+    # Insert some subject topics
+    now = utcnow()
+    with engine.connect() as conn:
+        for name in ["api_redesign", "weekend_gaming", "rust_lang"]:
+            conn.execute(
+                topics_table.insert().values(
+                    key=f"server:{sample_server}:subject:{name}",
+                    category="subject",
+                    is_global=False,
+                    provisional=False,
+                    created_at=now,
+                )
+            )
+        conn.commit()
+
+    subjects = await executor._get_existing_subjects(sample_server)
+
+    assert set(subjects) == {"api_redesign", "weekend_gaming", "rust_lang"}
+
+
+@pytest.mark.asyncio
+async def test_get_existing_subjects_empty(
+    executor: LayerExecutor,
+    sample_server,
+) -> None:
+    """Test that empty list is returned when no subjects exist."""
+    subjects = await executor._get_existing_subjects(sample_server)
+    assert subjects == []
+
+
+@pytest.mark.asyncio
+async def test_process_identified_subjects_creates_topic(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    ledger: SalienceLedger,
+) -> None:
+    """Test that processing subjects creates topics and earns salience."""
+    await executor._process_identified_subjects(
+        subjects=["API Redesign"],
+        source_topic_key=f"server:{sample_server}:user:456",
+        insight_importance=0.8,
+        run_id="test_run",
+    )
+
+    # Verify topic was created
+    with engine.connect() as conn:
+        result = conn.execute(
+            topics_table.select().where(
+                topics_table.c.key == f"server:{sample_server}:subject:api_redesign"
+            )
+        ).fetchone()
+
+    assert result is not None
+    assert result.category == "subject"
+
+    # Verify salience was earned
+    balance = await ledger.get_balance(f"server:{sample_server}:subject:api_redesign")
+    expected = 5.0 * (0.5 + 0.8)  # 6.5
+    assert balance == pytest.approx(expected, abs=0.1)
+
+
+@pytest.mark.asyncio
+async def test_process_identified_subjects_reidentification(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    ledger: SalienceLedger,
+) -> None:
+    """Test that re-identifying a subject increases its salience."""
+    topic_key = f"server:{sample_server}:subject:rust_lang"
+    source = f"server:{sample_server}:user:456"
+
+    # First identification
+    await executor._process_identified_subjects(
+        subjects=["rust_lang"],
+        source_topic_key=source,
+        insight_importance=0.5,
+        run_id="run_1",
+    )
+    balance_1 = await ledger.get_balance(topic_key)
+
+    # Second identification
+    await executor._process_identified_subjects(
+        subjects=["rust_lang"],
+        source_topic_key=source,
+        insight_importance=0.7,
+        run_id="run_2",
+    )
+    balance_2 = await ledger.get_balance(topic_key)
+
+    assert balance_2 > balance_1
+
+
+@pytest.mark.asyncio
+async def test_process_identified_subjects_caps_at_three(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    ledger: SalienceLedger,
+) -> None:
+    """Test that only 3 subjects are processed even if more are provided."""
+    await executor._process_identified_subjects(
+        subjects=["alpha", "beta", "gamma", "delta", "epsilon"],
+        source_topic_key=f"server:{sample_server}:user:456",
+        insight_importance=0.5,
+        run_id="test_run",
+    )
+
+    # Check that only first 3 were created
+    subjects = await executor._get_existing_subjects(sample_server)
+    assert len(subjects) == 3
+    assert set(subjects) == {"alpha", "beta", "gamma"}
+
+
+@pytest.mark.asyncio
+async def test_process_identified_subjects_global_topic_skipped(
+    executor: LayerExecutor,
+    engine,
+    ledger: SalienceLedger,
+) -> None:
+    """Test that global (non-server) source topics skip subject creation."""
+    await executor._process_identified_subjects(
+        subjects=["some_topic"],
+        source_topic_key="user:456",  # No server prefix
+        insight_importance=0.5,
+        run_id="test_run",
+    )
+
+    # No topics should be created (no server to scope to)
+    with engine.connect() as conn:
+        result = conn.execute(
+            topics_table.select().where(
+                topics_table.c.category == "subject"
+            )
+        ).fetchall()
+
+    assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_store_insight_with_identified_subjects(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_topic: Topic,
+    sample_layer: Layer,
+    ledger: SalienceLedger,
+    mock_llm: MagicMock,
+) -> None:
+    """Integration test: LLM response with subjects → insight stored + topics created."""
+    # Configure mock to return response with identified_subjects
+    async def mock_complete_with_subjects(*args, **kwargs):
+        return CompletionResult(
+            text='{"content": "User is passionate about Rust and API design.", "confidence": 0.8, "importance": 0.7, "novelty": 0.6, "valence": {"curiosity": 0.7}, "identified_subjects": ["rust_lang", "api_redesign"]}',
+            usage=Usage(input_tokens=100, output_tokens=80),
+            model="claude-3-5-haiku-20241022",
+            provider="anthropic",
+        )
+
+    mock_llm.complete = AsyncMock(side_effect=mock_complete_with_subjects)
+
+    # Give topic salience
+    await ledger.earn(sample_topic.key, 10.0, reason="test")
+
+    # Create context with LLM response already set
+    ctx = ExecutionContext(
+        topic=sample_topic,
+        layer=sample_layer,
+        run_id=generate_id(),
+    )
+    ctx.llm_response = '{"content": "User is passionate about Rust and API design.", "confidence": 0.8, "importance": 0.7, "novelty": 0.6, "valence": {"curiosity": 0.7}, "identified_subjects": ["rust_lang", "api_redesign"]}'
+    ctx.tokens_input = 100
+
+    # Insert a preliminary layer run so FK constraint is met
+    from zos.database import layer_runs as layer_runs_table
+    with engine.connect() as conn:
+        conn.execute(
+            layer_runs_table.insert().values(
+                id=ctx.run_id,
+                layer_name=sample_layer.name,
+                layer_hash="test",
+                started_at=utcnow(),
+                status="dry",
+                targets_matched=1,
+                targets_processed=0,
+                targets_skipped=0,
+                insights_created=0,
+            )
+        )
+        conn.commit()
+
+    # Execute store_insight
+    node = Node(
+        type=NodeType.STORE_INSIGHT,
+        params={"category": "user_reflection"},
+    )
+    await executor._handle_store_insight(node, ctx)
+
+    # Verify insight was stored
+    with engine.connect() as conn:
+        insights = conn.execute(
+            insights_table.select().where(
+                insights_table.c.topic_key == sample_topic.key
+            )
+        ).fetchall()
+    assert len(insights) == 1
+
+    # Verify subject topics were created
+    subjects = await executor._get_existing_subjects(sample_server)
+    assert "rust_lang" in subjects
+    assert "api_redesign" in subjects
+
+    # Verify salience was earned for subjects
+    rust_balance = await ledger.get_balance(f"server:{sample_server}:subject:rust_lang")
+    assert rust_balance > 0

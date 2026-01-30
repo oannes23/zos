@@ -71,6 +71,11 @@ During observation:
 
 ## Reflection Trigger
 
+Reflection layers run on staggered schedules:
+- **3 AM UTC**: User, channel, and dyad reflections (these bootstrap subject topics)
+- **4 AM UTC**: Subject reflection (runs after subjects are bootstrapped)
+- **4 AM Sundays**: Self-reflection
+
 ```
 ┌─────────────────┐
 │   Scheduler     │
@@ -186,25 +191,36 @@ When an insight is stored:
 │         store_insight               │
 └────────────────┬────────────────────┘
                  │
-         ┌───────┴───────┐
-         │               │
-         ▼               ▼
-┌─────────────┐   ┌─────────────┐
-│   insights  │   │  salience   │
-│    table    │   │  spend tx   │
-└─────────────┘   └─────────────┘
-         │               │
-         │               │
-         ▼               ▼
-• id                • topic balance reduced
-• topic_key         • retention_rate applied
-• category          • transaction logged
-• content
-• strength (salience_spent × adjustment)
-• confidence, importance, novelty
-• valence dimensions
-• layer_run_id (audit link)
+         ┌───────┼───────┐
+         │       │       │
+         ▼       ▼       ▼
+┌──────────┐ ┌──────────┐ ┌───────────────────┐
+│ insights │ │ salience │ │ subject bootstrap │
+│  table   │ │ spend tx │ │ (if subjects      │
+└──────────┘ └──────────┘ │  identified)      │
+         │       │        └─────────┬─────────┘
+         │       │                  │
+         ▼       ▼                  ▼
+• id           • topic balance   • normalized names
+• topic_key      reduced         • topic auto-created
+• category     • retention_rate  • salience earned
+• content        applied           per subject
+• strength     • transaction
+• metrics        logged
+• valence
+• layer_run_id
 ```
+
+### Subject Bootstrap
+
+During user, channel, and dyad reflections, the LLM may identify recurring themes as `identified_subjects`. After the insight is stored, the executor processes these:
+
+1. Normalizes each name to `lowercase_underscore` format
+2. Caps at 3 subjects per reflection
+3. Earns salience: `5.0 × (0.5 + importance)` per subject
+4. The `earn()` call auto-creates the topic if it doesn't exist
+
+This bootstraps subject topics so the nightly-subject-reflection layer (4 AM) has targets to reflect on. A subject typically needs 2–4 identifications to reach the `salience >= 10` threshold.
 
 ---
 
