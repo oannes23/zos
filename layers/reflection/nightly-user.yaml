@@ -22,7 +22,10 @@ nodes:
     type: fetch_messages
     params:
       lookback_hours: 72
-      limit_per_channel: 100
+      conversation_context: true
+      context_window_hours: 2
+      context_min_messages: 10
+      max_channels: 15
 
   - name: fetch_prior_understanding
     type: fetch_insights

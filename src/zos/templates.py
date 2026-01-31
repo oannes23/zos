@@ -512,6 +512,91 @@ def format_insights_for_prompt(insights: list[dict[str, Any]]) -> list[dict[str,
 
 
 # =============================================================================
+# Conversation Context Formatting
+# =============================================================================
+
+
+def format_conversation_chunks_for_prompt(
+    messages_by_channel: dict[str, list[dict[str, Any]]],
+    target_user_id: str,
+    author_names: dict[str, str],
+    channel_names: dict[str, str],
+    mention_names: dict[str, str] | None = None,
+    channel_mention_names: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """Format windowed conversation context into channel-grouped chunks.
+
+    Each chunk contains messages from a single channel with author display
+    names resolved and the target user's messages flagged.
+
+    Args:
+        messages_by_channel: Mapping of channel_id -> list of message dicts
+            (with author_id, content, created_at, etc.).
+        target_user_id: The user being reflected on.
+        author_names: Mapping of user_id -> display name for all message authors.
+        channel_names: Mapping of channel_id -> channel name.
+        mention_names: Optional mapping for inline @mention resolution.
+        channel_mention_names: Optional mapping for inline #channel mention resolution.
+
+    Returns:
+        List of chunk dicts sorted by target_message_count descending:
+        {
+            "channel_name": str,
+            "channel_id": str,
+            "messages": [{created_at, author_display, content, is_target_user, ...}],
+            "message_count": int,
+            "target_message_count": int,
+        }
+    """
+    chunks: list[dict[str, Any]] = []
+
+    for channel_id, messages in messages_by_channel.items():
+        formatted_messages = []
+        target_count = 0
+
+        for msg in messages:
+            author_id = msg.get("author_id", "unknown")
+            is_target = author_id == target_user_id
+            if is_target:
+                target_count += 1
+
+            # Resolve author name
+            display = author_names.get(author_id, author_id)
+
+            # Resolve inline mentions in content
+            content = msg.get("content", "")
+            if mention_names:
+                content = replace_mentions(content, mention_names)
+            if channel_mention_names:
+                content = replace_channel_mentions(content, channel_mention_names)
+
+            formatted_messages.append({
+                "created_at": msg.get("created_at"),
+                "author_display": display,
+                "content": content,
+                "is_target_user": is_target,
+                "has_media": msg.get("has_media", False),
+                "has_links": msg.get("has_links", False),
+                "link_summaries": msg.get("link_summaries", []),
+                "media_descriptions": msg.get("media_descriptions", []),
+                "reactions_aggregate": msg.get("reactions_aggregate"),
+            })
+
+        chunks.append({
+            "channel_name": channel_names.get(channel_id, channel_id),
+            "channel_id": channel_id,
+            "messages": formatted_messages,
+            "message_count": len(formatted_messages),
+            "target_message_count": target_count,
+        })
+
+    # Sort by target_message_count descending (most-active channels first)
+    chunks.sort(key=lambda c: c["target_message_count"], reverse=True)
+
+    return chunks
+
+
+# =============================================================================
 # User Reflection Helpers
 # =============================================================================
 

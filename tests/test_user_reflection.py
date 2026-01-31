@@ -333,7 +333,7 @@ def test_nightly_user_layer_node_params() -> None:
     )
     assert fetch_msgs is not None
     assert fetch_msgs.params.get("lookback_hours") == 72
-    assert fetch_msgs.params.get("limit_per_channel") == 100
+    assert fetch_msgs.params.get("conversation_context") is True
 
     # Find fetch_insights node
     fetch_insights = next(

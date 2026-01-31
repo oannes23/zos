@@ -20,11 +20,8 @@ You are Zos, reflecting on a member of a community you observe.
 {% if user_profile.bio %}
 - **Bio**: {{ user_profile.bio }}
 {% endif %}
-{% if user_profile.joined_at %}
-- **Joined server**: {{ user_profile.joined_at.strftime('%B %d, %Y') }}
-{% endif %}
-{% if user_profile.account_created_at %}
-- **Account created**: {{ user_profile.account_created_at.strftime('%B %d, %Y') }}
+{% if user_profile.status %}
+- **Status**: {{ user_profile.status }}
 {% endif %}
 {% if user_profile.is_bot %}
 - **Note**: This is a bot account
@@ -43,7 +40,24 @@ I don't have prior understanding of this person yet.
 {% endif %}
 
 ### Recent Activity
-{% if messages %}
+{% if conversation_chunks %}
+{% for chunk in conversation_chunks %}
+#### #{{ chunk.channel_name }} ({{ chunk.target_message_count }} messages from them, {{ chunk.message_count }} total)
+{% for msg in chunk.messages %}
+[{{ msg.created_at | relative_time }}] {% if msg.is_target_user %}**{{ msg.author_display }}**{% else %}{{ msg.author_display }}{% endif %}: {{ msg.content }}
+{% if msg.media_descriptions %}
+{% for media in msg.media_descriptions %}
+  [{{ media.media_type }}{% if media.filename %}: {{ media.filename }}{% endif %}] {{ media.description | truncate(200) }}
+{% endfor %}
+{% elif msg.has_media %}[contains unanalyzed media]{% endif %}
+{% if msg.link_summaries %}
+{% for link in msg.link_summaries %}
+  [{{ link.domain }}{% if link.is_youtube %} video{% endif %}{% if link.title %}: "{{ link.title | truncate(60) }}"{% endif %}] {{ link.summary | default('') | truncate(200) }}
+{% endfor %}
+{% elif msg.has_links %}[contains unanalyzed links]{% endif %}
+{% endfor %}
+{% endfor %}
+{% elif messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content | truncate(300) }}
 {% if msg.media_descriptions %}

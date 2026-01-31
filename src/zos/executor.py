@@ -54,6 +54,7 @@ from zos.templates import (
     TemplateEngine,
     extract_channel_mention_ids,
     extract_mention_ids,
+    format_conversation_chunks_for_prompt,
     format_insights_for_prompt,
     format_messages_for_prompt,
 )
@@ -83,6 +84,36 @@ DEFAULT_METRICS = {
 
 # Maximum retry attempts per topic
 MAX_RETRY_ATTEMPTS = 3
+
+
+def merge_time_windows(
+    windows: list[tuple[datetime, datetime]],
+) -> list[tuple[datetime, datetime]]:
+    """Merge overlapping or adjacent time windows into contiguous chunks.
+
+    Sorts by start time, then merges any windows that overlap or touch.
+
+    Args:
+        windows: List of (start, end) datetime tuples.
+
+    Returns:
+        List of merged (start, end) tuples, sorted by start time.
+    """
+    if not windows:
+        return []
+
+    sorted_windows = sorted(windows, key=lambda w: w[0])
+    merged: list[tuple[datetime, datetime]] = [sorted_windows[0]]
+
+    for start, end in sorted_windows[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end:
+            # Overlapping or adjacent — extend
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+
+    return merged
 
 
 # =============================================================================
@@ -128,6 +159,11 @@ class ExecutionContext:
     llm_response: str | None = None
     reduced_results: list[Any] = field(default_factory=list)
     output_content: str | None = None
+
+    # Conversation context (windowed messages grouped by channel)
+    conversation_chunks: dict[str, list[Message]] = field(default_factory=dict)
+    conversation_channel_names: dict[str, str] = field(default_factory=dict)
+    target_user_id: str | None = None
 
     # Tracking
     tokens_input: int = 0
@@ -419,6 +455,10 @@ class LayerExecutor:
     async def _handle_fetch_messages(self, node: Node, ctx: ExecutionContext) -> None:
         """Fetch messages for the topic.
 
+        When `conversation_context: true` is set and the topic is a user topic,
+        fetches windowed conversation context (messages from all participants
+        around the user's messages) instead of just the user's own messages.
+
         Args:
             node: The node with params.
             ctx: The execution context.
@@ -426,8 +466,44 @@ class LayerExecutor:
         params = node.params
         lookback_hours = params.get("lookback_hours", 24)
         limit = params.get("limit_per_channel", 50)
+        conversation_context = params.get("conversation_context", False)
 
         since = utcnow() - timedelta(hours=lookback_hours)
+
+        # Conversation context mode: fetch windowed context for user topics
+        if conversation_context and ctx.topic.category == TopicCategory.USER:
+            user_id, server_id = self._extract_user_from_topic(ctx.topic.key)
+            if user_id and server_id:
+                chunks, channel_names = await self._get_conversation_context_for_user(
+                    user_id=user_id,
+                    server_id=server_id,
+                    since=since,
+                    context_window_hours=params.get("context_window_hours", 2.0),
+                    context_min_messages=params.get("context_min_messages", 10),
+                    max_channels=params.get("max_channels", 15),
+                )
+
+                ctx.conversation_chunks = chunks
+                ctx.conversation_channel_names = channel_names
+                ctx.target_user_id = user_id
+
+                # Flatten into ctx.messages for backward compatibility
+                # (link/media enrichment, scope determination, etc.)
+                all_messages: list[Message] = []
+                for channel_msgs in chunks.values():
+                    all_messages.extend(channel_msgs)
+                all_messages.sort(key=lambda m: m.created_at, reverse=True)
+                ctx.messages = all_messages
+
+                total = sum(len(msgs) for msgs in chunks.values())
+                log.debug(
+                    "conversation_context_messages_fetched",
+                    topic=ctx.topic.key,
+                    channels=len(chunks),
+                    total_messages=total,
+                    lookback_hours=lookback_hours,
+                )
+                return
 
         messages = await self._get_messages_for_topic(
             ctx.topic.key,
@@ -443,6 +519,278 @@ class LayerExecutor:
             count=len(messages),
             lookback_hours=lookback_hours,
         )
+
+    async def _get_conversation_context_for_user(
+        self,
+        user_id: str,
+        server_id: str,
+        since: datetime,
+        *,
+        context_window_hours: float = 2.0,
+        context_min_messages: int = 10,
+        max_channels: int = 15,
+        extreme_per_channel: int = 1000,
+        extreme_total: int = 2000,
+    ) -> tuple[dict[str, list[Message]], dict[str, str]]:
+        """Get windowed conversation context around a user's messages.
+
+        For each channel the user spoke in, fetches surrounding messages
+        within ±context_window_hours of each user message, merging overlapping
+        windows into contiguous chunks. Low-activity channels get everything.
+
+        Args:
+            user_id: Discord user ID of the target user.
+            server_id: Server ID to scope the search.
+            since: Only consider messages after this time.
+            context_window_hours: Hours of context around each user message.
+            context_min_messages: Minimum messages of context per window edge.
+            max_channels: Maximum number of channels to include.
+            extreme_per_channel: Safety cap per channel (pathological cases only).
+            extreme_total: Safety cap across all channels.
+
+        Returns:
+            Tuple of (messages_by_channel, channel_names) where:
+            - messages_by_channel maps channel_id -> list of Messages (sorted by created_at)
+            - channel_names maps channel_id -> channel name
+        """
+        window_delta = timedelta(hours=context_window_hours)
+        padding_delta = timedelta(hours=1)  # Extra hour for min-message guarantee
+
+        # 1. Query user's messages in the lookback window
+        with self.engine.connect() as conn:
+            user_msgs_stmt = (
+                select(
+                    messages_table.c.channel_id,
+                    messages_table.c.created_at,
+                )
+                .where(
+                    and_(
+                        messages_table.c.author_id == user_id,
+                        messages_table.c.server_id == server_id,
+                        messages_table.c.created_at >= since,
+                        messages_table.c.deleted_at.is_(None),
+                    )
+                )
+                .order_by(messages_table.c.created_at)
+            )
+            user_msg_rows = conn.execute(user_msgs_stmt).fetchall()
+
+        if not user_msg_rows:
+            return {}, {}
+
+        # 2. Group by channel_id
+        channel_timestamps: dict[str, list[datetime]] = {}
+        for row in user_msg_rows:
+            channel_timestamps.setdefault(row.channel_id, []).append(row.created_at)
+
+        # 3. Rank channels by user message count, take top max_channels
+        ranked_channels = sorted(
+            channel_timestamps.keys(),
+            key=lambda ch: len(channel_timestamps[ch]),
+            reverse=True,
+        )[:max_channels]
+
+        messages_by_channel: dict[str, list[Message]] = {}
+        total_messages = 0
+
+        for channel_id in ranked_channels:
+            timestamps = channel_timestamps[channel_id]
+
+            with self.engine.connect() as conn:
+                # Check total channel activity in lookback window
+                count_stmt = (
+                    select(messages_table.c.id)
+                    .where(
+                        and_(
+                            messages_table.c.channel_id == channel_id,
+                            messages_table.c.server_id == server_id,
+                            messages_table.c.created_at >= since,
+                            messages_table.c.deleted_at.is_(None),
+                        )
+                    )
+                )
+                channel_total = len(conn.execute(count_stmt).fetchall())
+
+                if channel_total < 50:
+                    # Low-activity: fetch all messages in the channel
+                    fetch_stmt = (
+                        select(messages_table)
+                        .where(
+                            and_(
+                                messages_table.c.channel_id == channel_id,
+                                messages_table.c.server_id == server_id,
+                                messages_table.c.created_at >= since,
+                                messages_table.c.deleted_at.is_(None),
+                            )
+                        )
+                        .order_by(messages_table.c.created_at)
+                        .limit(extreme_per_channel)
+                    )
+                else:
+                    # Build ±window around each user message, with extra padding
+                    windows = [
+                        (ts - window_delta - padding_delta, ts + window_delta + padding_delta)
+                        for ts in timestamps
+                    ]
+                    merged = merge_time_windows(windows)
+
+                    # Build OR conditions for each merged window
+                    window_conditions = []
+                    for w_start, w_end in merged:
+                        window_conditions.append(
+                            and_(
+                                messages_table.c.created_at >= w_start,
+                                messages_table.c.created_at <= w_end,
+                            )
+                        )
+
+                    from sqlalchemy import or_
+
+                    fetch_stmt = (
+                        select(messages_table)
+                        .where(
+                            and_(
+                                messages_table.c.channel_id == channel_id,
+                                messages_table.c.server_id == server_id,
+                                messages_table.c.deleted_at.is_(None),
+                                or_(*window_conditions),
+                            )
+                        )
+                        .order_by(messages_table.c.created_at)
+                        .limit(extreme_per_channel)
+                    )
+
+                rows = conn.execute(fetch_stmt).fetchall()
+
+            channel_messages = [
+                Message(
+                    id=row.id,
+                    channel_id=row.channel_id,
+                    server_id=row.server_id,
+                    author_id=row.author_id,
+                    content=row.content,
+                    created_at=row.created_at,
+                    visibility_scope=VisibilityScope(row.visibility_scope),
+                    reactions_aggregate=(
+                        json.loads(row.reactions_aggregate)
+                        if row.reactions_aggregate and isinstance(row.reactions_aggregate, str)
+                        else row.reactions_aggregate
+                    ),
+                    reply_to_id=row.reply_to_id,
+                    thread_id=row.thread_id,
+                    has_media=row.has_media,
+                    has_links=row.has_links,
+                    ingested_at=row.ingested_at,
+                    deleted_at=row.deleted_at,
+                )
+                for row in rows
+            ]
+
+            # 5. Min-message guarantee check
+            if channel_messages and len(timestamps) > 0:
+                first_user_ts = min(timestamps)
+                last_user_ts = max(timestamps)
+
+                msgs_before = [m for m in channel_messages if m.created_at < first_user_ts]
+                msgs_after = [m for m in channel_messages if m.created_at > last_user_ts]
+
+                need_extend = (
+                    len(msgs_before) < context_min_messages
+                    or len(msgs_after) < context_min_messages
+                )
+
+                if need_extend and channel_total >= 50:
+                    # Extend by another hour on each side
+                    extended_start = min(m.created_at for m in channel_messages) - timedelta(hours=1)
+                    extended_end = max(m.created_at for m in channel_messages) + timedelta(hours=1)
+
+                    with self.engine.connect() as conn:
+                        extend_stmt = (
+                            select(messages_table)
+                            .where(
+                                and_(
+                                    messages_table.c.channel_id == channel_id,
+                                    messages_table.c.server_id == server_id,
+                                    messages_table.c.deleted_at.is_(None),
+                                    messages_table.c.created_at >= extended_start,
+                                    messages_table.c.created_at <= extended_end,
+                                )
+                            )
+                            .order_by(messages_table.c.created_at)
+                            .limit(extreme_per_channel)
+                        )
+                        extended_rows = conn.execute(extend_stmt).fetchall()
+
+                    # Merge with existing, dedup by id
+                    existing_ids = {m.id for m in channel_messages}
+                    for row in extended_rows:
+                        if row.id not in existing_ids:
+                            channel_messages.append(
+                                Message(
+                                    id=row.id,
+                                    channel_id=row.channel_id,
+                                    server_id=row.server_id,
+                                    author_id=row.author_id,
+                                    content=row.content,
+                                    created_at=row.created_at,
+                                    visibility_scope=VisibilityScope(row.visibility_scope),
+                                    reactions_aggregate=(
+                                        json.loads(row.reactions_aggregate)
+                                        if row.reactions_aggregate
+                                        and isinstance(row.reactions_aggregate, str)
+                                        else row.reactions_aggregate
+                                    ),
+                                    reply_to_id=row.reply_to_id,
+                                    thread_id=row.thread_id,
+                                    has_media=row.has_media,
+                                    has_links=row.has_links,
+                                    ingested_at=row.ingested_at,
+                                    deleted_at=row.deleted_at,
+                                )
+                            )
+                            existing_ids.add(row.id)
+
+                    channel_messages.sort(key=lambda m: m.created_at)
+
+            # Apply extreme safety cap
+            if len(channel_messages) > extreme_per_channel:
+                channel_messages = channel_messages[:extreme_per_channel]
+
+            messages_by_channel[channel_id] = channel_messages
+            total_messages += len(channel_messages)
+
+            # Check total extreme cap
+            if total_messages >= extreme_total:
+                log.warning(
+                    "conversation_context_extreme_cap",
+                    total_messages=total_messages,
+                    extreme_total=extreme_total,
+                    channels_processed=len(messages_by_channel),
+                )
+                break
+
+        # 7. Resolve channel names
+        channel_ids = set(messages_by_channel.keys())
+        channel_names: dict[str, str] = {}
+        if channel_ids:
+            with self.engine.connect() as conn:
+                name_rows = conn.execute(
+                    select(channels_table.c.id, channels_table.c.name).where(
+                        channels_table.c.id.in_(channel_ids)
+                    )
+                ).fetchall()
+            for row in name_rows:
+                if row.name:
+                    channel_names[row.id] = row.name
+
+        log.debug(
+            "conversation_context_fetched",
+            user_id=user_id,
+            channels=len(messages_by_channel),
+            total_messages=total_messages,
+        )
+
+        return messages_by_channel, channel_names
 
     async def _handle_fetch_insights(self, node: Node, ctx: ExecutionContext) -> None:
         """Fetch prior insights for the topic.
@@ -1188,37 +1536,26 @@ class LayerExecutor:
                 return row_to_model(result, UserProfile)
             return None
 
-    async def _resolve_mention_names(
-        self,
-        messages: list[Message],
+    async def _resolve_user_ids_to_names(
+        self, user_ids: set[str]
     ) -> dict[str, str]:
-        """Resolve Discord user IDs from mentions to display names.
+        """Resolve Discord user IDs to display names.
 
-        Extracts all mentioned user IDs from message content and batch queries
-        the user_profiles table to get display names.
+        Batch queries the user_profiles table for the most recent profile
+        snapshot of each user.
 
         Args:
-            messages: List of Message models to extract mentions from.
+            user_ids: Set of Discord user IDs to resolve.
 
         Returns:
             Dictionary mapping user_id -> display_name.
             Name resolution priority: display_name > username#discriminator > username.
             Users not found in profiles are omitted from the result.
         """
-        # Extract all unique mentioned user IDs
-        mentioned_ids: set[str] = set()
-        for msg in messages:
-            if msg.content:
-                mentioned_ids.update(extract_mention_ids(msg.content))
-
-        if not mentioned_ids:
+        if not user_ids:
             return {}
 
-        # Batch query user_profiles for most recent profile per user
-        # Use a subquery to get the most recent profile for each user
         with self.engine.connect() as conn:
-            # Query all profiles for the mentioned users, ordered by captured_at desc
-            # We'll group by user_id in Python to get the most recent
             query = (
                 select(
                     user_profiles_table.c.user_id,
@@ -1227,7 +1564,7 @@ class LayerExecutor:
                     user_profiles_table.c.discriminator,
                     user_profiles_table.c.captured_at,
                 )
-                .where(user_profiles_table.c.user_id.in_(mentioned_ids))
+                .where(user_profiles_table.c.user_id.in_(user_ids))
                 .order_by(
                     user_profiles_table.c.user_id,
                     user_profiles_table.c.captured_at.desc(),
@@ -1243,27 +1580,56 @@ class LayerExecutor:
         for row in rows:
             user_id = row.user_id
             if user_id in seen_users:
-                # Already have most recent profile for this user
                 continue
             seen_users.add(user_id)
 
-            # Name resolution priority
             if row.display_name:
                 user_id_to_name[user_id] = row.display_name
             elif row.discriminator and row.discriminator != "0":
-                # Old Discord format: username#discriminator
                 user_id_to_name[user_id] = f"{row.username}#{row.discriminator}"
             elif row.username:
                 user_id_to_name[user_id] = row.username
-            # If no name found, don't include in mapping (mention will be kept as-is)
 
         log.debug(
-            "mention_names_resolved",
-            mentioned_count=len(mentioned_ids),
+            "user_ids_resolved",
+            requested_count=len(user_ids),
             resolved_count=len(user_id_to_name),
         )
 
         return user_id_to_name
+
+    async def _resolve_mention_names(
+        self,
+        messages: list[Message],
+    ) -> dict[str, str]:
+        """Resolve Discord user IDs from mentions to display names.
+
+        Extracts all mentioned user IDs from message content and resolves
+        them to display names.
+
+        Args:
+            messages: List of Message models to extract mentions from.
+
+        Returns:
+            Dictionary mapping user_id -> display_name.
+        """
+        mentioned_ids: set[str] = set()
+        for msg in messages:
+            if msg.content:
+                mentioned_ids.update(extract_mention_ids(msg.content))
+
+        if not mentioned_ids:
+            return {}
+
+        result = await self._resolve_user_ids_to_names(mentioned_ids)
+
+        log.debug(
+            "mention_names_resolved",
+            mentioned_count=len(mentioned_ids),
+            resolved_count=len(result),
+        )
+
+        return result
 
     async def _resolve_channel_mention_names(
         self,
@@ -1400,6 +1766,64 @@ class LayerExecutor:
         # Resolve Discord channel mention IDs to channel names
         channel_names = await self._resolve_channel_mention_names(ctx.messages)
 
+        # Build conversation chunks for template if available
+        conversation_chunks_data: list[dict[str, Any]] | None = None
+        if ctx.conversation_chunks and ctx.target_user_id:
+            # Collect all unique author IDs from conversation chunks
+            author_ids: set[str] = set()
+            for channel_msgs in ctx.conversation_chunks.values():
+                for m in channel_msgs:
+                    author_ids.add(m.author_id)
+
+            # Resolve author display names
+            author_names = await self._resolve_user_ids_to_names(author_ids)
+
+            # Build message dicts per channel (with link/media enrichment)
+            chunks_messages_data: dict[str, list[dict[str, Any]]] = {}
+            for channel_id, channel_msgs in ctx.conversation_chunks.items():
+                ch_data = []
+                for m in channel_msgs:
+                    msg_dict: dict[str, Any] = {
+                        "author_id": m.author_id,
+                        "content": m.content,
+                        "created_at": m.created_at,
+                        "has_media": m.has_media,
+                        "has_links": m.has_links,
+                        "reactions_aggregate": m.reactions_aggregate,
+                    }
+                    # Attach link/media summaries
+                    link_sums = []
+                    for la in link_analyses_map.get(m.id, []):
+                        if not la.fetch_failed:
+                            link_sums.append({
+                                "domain": la.domain,
+                                "title": la.title or "",
+                                "summary": la.summary or "",
+                                "is_youtube": la.is_youtube,
+                            })
+                    msg_dict["link_summaries"] = link_sums
+
+                    media_descs = []
+                    for ma in media_analyses_map.get(m.id, []):
+                        media_descs.append({
+                            "media_type": ma.get("media_type", "image"),
+                            "filename": ma.get("filename") or "",
+                            "description": ma.get("description") or "",
+                        })
+                    msg_dict["media_descriptions"] = media_descs
+
+                    ch_data.append(msg_dict)
+                chunks_messages_data[channel_id] = ch_data
+
+            conversation_chunks_data = format_conversation_chunks_for_prompt(
+                messages_by_channel=chunks_messages_data,
+                target_user_id=ctx.target_user_id,
+                author_names=author_names,
+                channel_names=ctx.conversation_channel_names,
+                mention_names=mention_names,
+                channel_mention_names=channel_names,
+            )
+
         # Prepare insights data for template
         insights_data = [
             {
@@ -1470,6 +1894,7 @@ class LayerExecutor:
                     messages_data, {}, mention_names=mention_names,
                     channel_names=channel_names,
                 ),
+                "conversation_chunks": conversation_chunks_data,
                 "insights": format_insights_for_prompt(insights_data),
                 "individual_insights": ctx.individual_insights,
                 "reactions": ctx.reactions,
