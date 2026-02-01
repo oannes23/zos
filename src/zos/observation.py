@@ -126,6 +126,7 @@ class ZosBot(commands.Bot):
         intents.message_content = True  # Read message text
         intents.reactions = True  # Track reactions
         intents.members = True  # For user info
+        intents.presences = True  # For custom status text
 
         # commands.Bot requires a command_prefix even though we use slash commands
         super().__init__(command_prefix="!", intents=intents)
@@ -642,6 +643,14 @@ class ZosBot(commands.Bot):
         # Fetch extended profile data (bio, pronouns)
         bio, pronouns = await self._fetch_extended_profile(member)
 
+        # Extract custom status from presence activities (requires presences intent)
+        status = None
+        if isinstance(member, discord.Member) and member.activities:
+            for activity in member.activities:
+                if isinstance(activity, discord.CustomActivity) and activity.name:
+                    status = activity.name
+                    break
+
         # Build profile model
         profile = UserProfile(
             user_id=user_id,
@@ -658,6 +667,7 @@ class ZosBot(commands.Bot):
             # Extended profile data
             bio=bio,
             pronouns=pronouns,
+            status=status,
         )
 
         # Upsert profile
@@ -708,6 +718,7 @@ class ZosBot(commands.Bot):
                         "roles": profile_dict["roles"],
                         "bio": profile_dict["bio"],
                         "pronouns": profile_dict["pronouns"],
+                        "status": profile_dict["status"],
                         "captured_at": profile_dict["captured_at"],
                     },
                 )

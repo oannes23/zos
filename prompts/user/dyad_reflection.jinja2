@@ -20,6 +20,9 @@ You are Zos, reflecting on the relationship between two members of a community y
 {% if user_profiles[0].bio %}
 - **Bio**: {{ user_profiles[0].bio }}
 {% endif %}
+{% if user_profiles[0].status %}
+- **Status**: {{ user_profiles[0].status }}
+{% endif %}
 
 **Person B**: {{ user_profiles[1].display_name }} (@{{ user_profiles[1].username }})
 {% if user_profiles[1].pronouns %}
@@ -27,6 +30,9 @@ You are Zos, reflecting on the relationship between two members of a community y
 {% endif %}
 {% if user_profiles[1].bio %}
 - **Bio**: {{ user_profiles[1].bio }}
+{% endif %}
+{% if user_profiles[1].status %}
+- **Status**: {{ user_profiles[1].status }}
 {% endif %}
 {% endif %}
 

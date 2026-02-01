@@ -193,6 +193,7 @@ class UserProfile(BaseModel):
     roles: list[str] | None = None
     bio: str | None = None
     pronouns: str | None = None
+    status: str | None = None
     captured_at: datetime = Field(default_factory=utcnow)
 
 
