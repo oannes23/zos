@@ -1429,17 +1429,23 @@ class LayerExecutor:
         source_topic_key: str,
         insight_importance: float,
         run_id: str,
+        message_ids: list[str] | None = None,
     ) -> None:
         """Create or reinforce subject topics from LLM-identified subjects.
 
         Normalizes names, builds topic keys, and earns salience. The earn()
         call auto-creates topics via ensure_topic() internally.
 
+        When message_ids are provided, records which messages were in the
+        context window so subject reflections can retrieve them directly
+        instead of relying on keyword search.
+
         Args:
             subjects: Raw subject names from LLM output.
             source_topic_key: The topic that identified these subjects.
             insight_importance: Importance score from the insight (0.0-1.0).
             run_id: Current layer run ID for logging.
+            message_ids: Discord message IDs from the reflection context window.
         """
         server_id = self._extract_server_id(source_topic_key)
         if not server_id:
@@ -1468,12 +1474,36 @@ class LayerExecutor:
                 source_topic=source_topic_key,
             )
 
+            # Record which messages were in context when this subject was identified
+            if message_ids:
+                from zos.database import subject_message_sources
+
+                rows = [
+                    {
+                        "id": generate_id(),
+                        "subject_topic_key": subject_topic_key,
+                        "message_id": mid,
+                        "source_topic_key": source_topic_key,
+                        "layer_run_id": run_id,
+                        "created_at": datetime.now(timezone.utc),
+                    }
+                    for mid in message_ids
+                ]
+                with self.engine.connect() as conn:
+                    for row in rows:
+                        conn.execute(
+                            subject_message_sources.insert().prefix_with("OR IGNORE"),
+                            row,
+                        )
+                    conn.commit()
+
             log.info(
                 "subject_identified",
                 subject=normalized,
                 topic_key=subject_topic_key,
                 earn_amount=earn_amount,
                 source=source_topic_key,
+                message_associations=len(message_ids) if message_ids else 0,
             )
 
     async def _get_channel_info(
@@ -2015,6 +2045,7 @@ class LayerExecutor:
                 source_topic_key=ctx.topic.key,
                 insight_importance=insight_data.get("importance", 0.5),
                 run_id=ctx.run_id,
+                message_ids=[m.id for m in ctx.messages],
             )
 
         log.info(
@@ -2471,32 +2502,81 @@ Begin the document with "# Self-Concept" and maintain the existing sections wher
                     .limit(limit)
                 )
             elif category == "subject" and len(parts) >= 4:
-                # server:X:subject:name -> messages containing subject keywords
-                server_id = parts[1]
-                subject_name = ":".join(parts[3:])
+                # server:X:subject:name -> two-phase message retrieval
+                subject_topic_key = topic_key
 
-                # Convert underscore-separated name to search terms
-                search_terms = subject_name.lower().replace("_", " ").split()
+                from zos.database import salience_ledger, subject_message_sources
 
-                # Message must contain ALL terms (case-insensitive)
-                content_filters = [
-                    messages_table.c.content.ilike(f"%{term}%")
-                    for term in search_terms
-                ]
-
-                stmt = (
+                # Phase 1: Messages directly associated via junction table
+                junction_stmt = (
                     select(messages_table)
+                    .join(
+                        subject_message_sources,
+                        messages_table.c.id == subject_message_sources.c.message_id,
+                    )
                     .where(
                         and_(
-                            messages_table.c.server_id == server_id,
+                            subject_message_sources.c.subject_topic_key == subject_topic_key,
                             messages_table.c.created_at >= since,
                             messages_table.c.deleted_at.is_(None),
-                            *content_filters,
                         )
                     )
-                    .order_by(messages_table.c.created_at.desc())
-                    .limit(limit)
+                    .distinct()
                 )
+
+                # Phase 2: Find source topics (users/channels that surfaced this subject)
+                source_topics_stmt = (
+                    select(salience_ledger.c.source_topic)
+                    .where(
+                        and_(
+                            salience_ledger.c.topic_key == subject_topic_key,
+                            salience_ledger.c.source_topic.isnot(None),
+                        )
+                    )
+                    .distinct()
+                )
+
+                junction_rows = conn.execute(junction_stmt).fetchall()
+                junction_msg_ids = {row.id for row in junction_rows}
+
+                source_rows = conn.execute(source_topics_stmt).fetchall()
+                source_topic_keys = [row.source_topic for row in source_rows]
+
+                # Convert junction rows to Message objects
+                all_messages = [
+                    Message(
+                        id=row.id,
+                        channel_id=row.channel_id,
+                        server_id=row.server_id,
+                        author_id=row.author_id,
+                        content=row.content,
+                        created_at=row.created_at,
+                        visibility_scope=VisibilityScope(row.visibility_scope),
+                        reactions_aggregate=(
+                            json.loads(row.reactions_aggregate)
+                            if row.reactions_aggregate and isinstance(row.reactions_aggregate, str)
+                            else row.reactions_aggregate
+                        ),
+                        reply_to_id=row.reply_to_id,
+                        thread_id=row.thread_id,
+                        has_media=row.has_media,
+                        has_links=row.has_links,
+                        ingested_at=row.ingested_at,
+                        deleted_at=row.deleted_at,
+                    )
+                    for row in junction_rows
+                ]
+
+                # For each source topic, fetch recent messages (recursive into user/channel branches)
+                for src_key in source_topic_keys:
+                    src_msgs = await self._get_messages_for_topic(src_key, since, limit)
+                    for m in src_msgs:
+                        if m.id not in junction_msg_ids:
+                            all_messages.append(m)
+                            junction_msg_ids.add(m.id)
+
+                all_messages.sort(key=lambda m: m.created_at, reverse=True)
+                return all_messages[:limit]
             else:
                 # Default: return empty list for unknown topic types
                 return []

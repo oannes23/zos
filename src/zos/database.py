@@ -73,6 +73,7 @@ user_profiles = Table(
     Column("roles", JSON, nullable=True),  # JSON array, NULL for global profiles
     Column("bio", Text, nullable=True),  # From fetch_profile()
     Column("pronouns", String, nullable=True),  # From fetch_profile()
+    Column("status", String, nullable=True),  # Custom status from presence
     Column("captured_at", DateTime, nullable=False, default=datetime.utcnow),
     Index("ix_user_profiles_user_server", "user_id", "server_id", unique=True),
     Index("ix_user_profiles_captured", "captured_at"),
@@ -216,6 +217,20 @@ salience_ledger = Table(
     Column("source_topic", String, nullable=True),  # For propagation/spillover
     Column("created_at", DateTime, nullable=False, default=datetime.utcnow),
     Index("ix_salience_ledger_topic_created", "topic_key", "created_at"),
+)
+
+subject_message_sources = Table(
+    "subject_message_sources",
+    metadata,
+    Column("id", String, primary_key=True),  # ULID
+    Column("subject_topic_key", String, ForeignKey("topics.key"), nullable=False),
+    Column("message_id", String, ForeignKey("messages.id"), nullable=False),
+    Column("source_topic_key", String, nullable=False),
+    Column("layer_run_id", String, nullable=False),
+    Column("created_at", DateTime, nullable=False, default=datetime.utcnow),
+    Index("ix_sms_subject_created", "subject_topic_key", "created_at"),
+    Index("ix_sms_message", "message_id"),
+    Index("ix_sms_unique", "subject_topic_key", "message_id", unique=True),
 )
 
 

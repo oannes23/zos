@@ -295,6 +295,27 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 - Belongs to: Topic
 - Derived: Current balance = `SUM(amount) WHERE topic_key = X`
 
+### SubjectMessageSources
+
+**Purpose**: Junction table linking subject topics to the Discord messages that were in the context window when the subject was identified. Enables subject reflections to retrieve relevant messages directly instead of relying on keyword search (which fails for semantically-identified themes).
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | yes | ULID |
+| subject_topic_key | string | yes | FK to topics.key — the subject topic |
+| message_id | string | yes | FK to messages.id — a message in the original context window |
+| source_topic_key | string | yes | The user/channel/dyad topic that surfaced this subject |
+| layer_run_id | string | yes | Which reflection run identified the subject |
+| created_at | timestamp | yes | When the association was recorded |
+
+**Relationships**:
+- Belongs to: Topic (subject), Message
+- Unique constraint on (subject_topic_key, message_id) — prevents duplicates across reflection runs
+
+**Usage**: At subject reflection time, two-phase retrieval:
+1. **Junction table** — directly associated messages from past reflection context windows
+2. **Source topic re-query** — recent messages from users/channels that originally surfaced the subject (via salience_ledger.source_topic)
+
 ### Transaction Types
 
 | Type | Direction | Cause |

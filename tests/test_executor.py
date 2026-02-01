@@ -1099,18 +1099,31 @@ async def test_fetch_messages_for_subject_topic(
     sample_server,
     sample_channel,
 ) -> None:
-    """Test fetching messages for a subject topic using content search."""
-    now = utcnow()
+    """Test fetching messages for a subject topic via junction table."""
+    from zos.database import subject_message_sources
 
-    # Insert messages with varying content
+    now = utcnow()
+    topic_key = f"server:{sample_server}:subject:api_redesign"
+
+    # Create the subject topic
     with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values(
+                key=topic_key,
+                category="subject",
+                is_global=False,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        # Insert messages — content doesn't need to match keywords
         conn.execute(
             messages_table.insert().values(
                 id="subj_msg_1",
                 channel_id=sample_channel,
                 server_id=sample_server,
                 author_id="user_a",
-                content="The api redesign is looking great",
+                content="Anyone playing Elden Ring Saturday?",
                 created_at=now - timedelta(hours=1),
                 visibility_scope="public",
                 has_media=False,
@@ -1124,7 +1137,7 @@ async def test_fetch_messages_for_subject_topic(
                 channel_id=sample_channel,
                 server_id=sample_server,
                 author_id="user_b",
-                content="I think the redesign of our API needs work",
+                content="I'm down for some co-op this weekend",
                 created_at=now - timedelta(hours=2),
                 visibility_scope="public",
                 has_media=False,
@@ -1132,14 +1145,14 @@ async def test_fetch_messages_for_subject_topic(
                 ingested_at=now,
             )
         )
-        # This message only contains "api" but NOT "redesign"
+        # Message NOT associated with the subject
         conn.execute(
             messages_table.insert().values(
                 id="subj_msg_3",
                 channel_id=sample_channel,
                 server_id=sample_server,
                 author_id="user_c",
-                content="The api is slow today",
+                content="Unrelated message about cooking",
                 created_at=now - timedelta(hours=3),
                 visibility_scope="public",
                 has_media=False,
@@ -1147,42 +1160,112 @@ async def test_fetch_messages_for_subject_topic(
                 ingested_at=now,
             )
         )
+        # Associate first two messages with the subject via junction table
+        conn.execute(
+            subject_message_sources.insert(),
+            [
+                {
+                    "id": generate_id(),
+                    "subject_topic_key": topic_key,
+                    "message_id": "subj_msg_1",
+                    "source_topic_key": f"server:{sample_server}:user:user_a",
+                    "layer_run_id": "run_1",
+                    "created_at": now,
+                },
+                {
+                    "id": generate_id(),
+                    "subject_topic_key": topic_key,
+                    "message_id": "subj_msg_2",
+                    "source_topic_key": f"server:{sample_server}:user:user_b",
+                    "layer_run_id": "run_1",
+                    "created_at": now,
+                },
+            ],
+        )
         conn.commit()
 
-    topic_key = f"server:{sample_server}:subject:api_redesign"
     messages = await executor._get_messages_for_topic(
         topic_key,
         since=now - timedelta(hours=48),
         limit=50,
     )
 
-    # Should match messages containing BOTH "api" AND "redesign"
+    # Should return only the two associated messages
     assert len(messages) == 2
     msg_ids = {m.id for m in messages}
     assert "subj_msg_1" in msg_ids
     assert "subj_msg_2" in msg_ids
-    # "subj_msg_3" only has "api", not "redesign"
     assert "subj_msg_3" not in msg_ids
 
 
 @pytest.mark.asyncio
-async def test_fetch_messages_for_subject_case_insensitive(
+async def test_fetch_messages_for_subject_with_source_topics(
     executor: LayerExecutor,
     engine,
     sample_server,
     sample_channel,
 ) -> None:
-    """Test that subject content search is case-insensitive."""
+    """Test that subject fetch also retrieves recent messages from source topics."""
+    from zos.database import salience_ledger, subject_message_sources
+
     now = utcnow()
+    topic_key = f"server:{sample_server}:subject:rust"
+    user_topic = f"server:{sample_server}:user:user_a"
 
     with engine.connect() as conn:
+        # Create the subject topic
+        conn.execute(
+            topics_table.insert().values(
+                key=topic_key,
+                category="subject",
+                is_global=False,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        # Create the user topic
+        conn.execute(
+            topics_table.insert().values(
+                key=user_topic,
+                category="user",
+                is_global=False,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        # Old message linked via junction table
         conn.execute(
             messages_table.insert().values(
-                id="subj_case_1",
+                id="subj_old_1",
                 channel_id=sample_channel,
                 server_id=sample_server,
                 author_id="user_a",
-                content="RUST is amazing for systems programming",
+                content="Rust ownership model is elegant",
+                created_at=now - timedelta(hours=12),
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.execute(
+            subject_message_sources.insert().values(
+                id=generate_id(),
+                subject_topic_key=topic_key,
+                message_id="subj_old_1",
+                source_topic_key=user_topic,
+                layer_run_id="run_1",
+                created_at=now,
+            )
+        )
+        # Newer message by same user (found via source topic re-query)
+        conn.execute(
+            messages_table.insert().values(
+                id="subj_new_1",
+                channel_id=sample_channel,
+                server_id=sample_server,
+                author_id="user_a",
+                content="Just finished a new Rust project",
                 created_at=now - timedelta(hours=1),
                 visibility_scope="public",
                 has_media=False,
@@ -1190,17 +1273,30 @@ async def test_fetch_messages_for_subject_case_insensitive(
                 ingested_at=now,
             )
         )
+        # Record salience ledger entry linking subject to user topic
+        conn.execute(
+            salience_ledger.insert().values(
+                id=generate_id(),
+                topic_key=topic_key,
+                transaction_type="earn",
+                amount=5.0,
+                reason="identified:run_1",
+                source_topic=user_topic,
+                created_at=now,
+            )
+        )
         conn.commit()
 
-    topic_key = f"server:{sample_server}:subject:rust"
     messages = await executor._get_messages_for_topic(
         topic_key,
         since=now - timedelta(hours=48),
         limit=50,
     )
 
-    assert len(messages) == 1
-    assert messages[0].id == "subj_case_1"
+    # Should include both the junction-table message and the source-topic message
+    msg_ids = {m.id for m in messages}
+    assert "subj_old_1" in msg_ids
+    assert "subj_new_1" in msg_ids
 
 
 @pytest.mark.asyncio
@@ -1210,10 +1306,23 @@ async def test_fetch_messages_for_subject_excludes_other_servers(
     sample_server,
     sample_channel,
 ) -> None:
-    """Test that subject message fetch is scoped to the correct server."""
+    """Test that subject message fetch via junction table respects associations."""
+    from zos.database import subject_message_sources
+
     now = utcnow()
+    topic_key = f"server:{sample_server}:subject:rust"
 
     with engine.connect() as conn:
+        # Create the subject topic
+        conn.execute(
+            topics_table.insert().values(
+                key=topic_key,
+                category="subject",
+                is_global=False,
+                provisional=False,
+                created_at=now,
+            )
+        )
         # Create another server
         conn.execute(
             servers_table.insert().values(
@@ -1232,7 +1341,7 @@ async def test_fetch_messages_for_subject_excludes_other_servers(
                 created_at=utcnow(),
             )
         )
-        # Message in the target server
+        # Message in the target server — associated with subject
         conn.execute(
             messages_table.insert().values(
                 id="subj_srv_1",
@@ -1247,7 +1356,17 @@ async def test_fetch_messages_for_subject_excludes_other_servers(
                 ingested_at=now,
             )
         )
-        # Message in a DIFFERENT server (should be excluded)
+        conn.execute(
+            subject_message_sources.insert().values(
+                id=generate_id(),
+                subject_topic_key=topic_key,
+                message_id="subj_srv_1",
+                source_topic_key=f"server:{sample_server}:user:user_a",
+                layer_run_id="run_1",
+                created_at=now,
+            )
+        )
+        # Message in a DIFFERENT server — NOT associated
         conn.execute(
             messages_table.insert().values(
                 id="subj_srv_2",
@@ -1264,15 +1383,132 @@ async def test_fetch_messages_for_subject_excludes_other_servers(
         )
         conn.commit()
 
-    topic_key = f"server:{sample_server}:subject:rust"
     messages = await executor._get_messages_for_topic(
         topic_key,
         since=now - timedelta(hours=48),
         limit=50,
     )
 
+    # Only the associated message should be returned
     assert len(messages) == 1
     assert messages[0].id == "subj_srv_1"
+
+
+@pytest.mark.asyncio
+async def test_fetch_messages_for_subject_empty_when_no_associations(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+) -> None:
+    """Test that a subject with no junction rows or source topics returns empty."""
+    now = utcnow()
+    topic_key = f"server:{sample_server}:subject:phantom_topic"
+
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values(
+                key=topic_key,
+                category="subject",
+                is_global=False,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        conn.commit()
+
+    messages = await executor._get_messages_for_topic(
+        topic_key,
+        since=now - timedelta(hours=48),
+        limit=50,
+    )
+
+    assert messages == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_messages_for_subject_deduplicates_phases(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+) -> None:
+    """Test that messages appearing in both junction table and source topic are deduplicated."""
+    from zos.database import salience_ledger, subject_message_sources
+
+    now = utcnow()
+    topic_key = f"server:{sample_server}:subject:rust"
+    user_topic = f"server:{sample_server}:user:user_a"
+
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values(
+                key=topic_key,
+                category="subject",
+                is_global=False,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        conn.execute(
+            topics_table.insert().values(
+                key=user_topic,
+                category="user",
+                is_global=False,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        # Insert a message by user_a
+        conn.execute(
+            messages_table.insert().values(
+                id="dedup_msg_1",
+                channel_id=sample_channel,
+                server_id=sample_server,
+                author_id="user_a",
+                content="Rust is great for systems programming",
+                created_at=now - timedelta(hours=1),
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        # This message is BOTH in the junction table AND will be found
+        # by the source topic re-query (since it's by user_a in the server)
+        conn.execute(
+            subject_message_sources.insert().values(
+                id=generate_id(),
+                subject_topic_key=topic_key,
+                message_id="dedup_msg_1",
+                source_topic_key=user_topic,
+                layer_run_id="run_1",
+                created_at=now,
+            )
+        )
+        # Record salience linking subject to user topic (triggers Phase 2)
+        conn.execute(
+            salience_ledger.insert().values(
+                id=generate_id(),
+                topic_key=topic_key,
+                transaction_type="earn",
+                amount=5.0,
+                reason="identified:run_1",
+                source_topic=user_topic,
+                created_at=now,
+            )
+        )
+        conn.commit()
+
+    messages = await executor._get_messages_for_topic(
+        topic_key,
+        since=now - timedelta(hours=48),
+        limit=50,
+    )
+
+    # Should appear only once despite being in both phases
+    assert len(messages) == 1
+    assert messages[0].id == "dedup_msg_1"
 
 
 # =============================================================================
@@ -1477,6 +1713,124 @@ async def test_process_identified_subjects_global_topic_skipped(
         ).fetchall()
 
     assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_process_identified_subjects_records_message_associations(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+    ledger: SalienceLedger,
+) -> None:
+    """Test that passing message_ids records associations in junction table."""
+    from zos.database import subject_message_sources
+
+    now = utcnow()
+    source_topic = f"server:{sample_server}:user:456"
+
+    # Create messages first (FK constraint)
+    with engine.connect() as conn:
+        for mid in ["msg_a", "msg_b"]:
+            conn.execute(
+                messages_table.insert().values(
+                    id=mid,
+                    channel_id=sample_channel,
+                    server_id=sample_server,
+                    author_id="456",
+                    content=f"Message {mid}",
+                    created_at=now,
+                    visibility_scope="public",
+                    has_media=False,
+                    has_links=False,
+                    ingested_at=now,
+                )
+            )
+        conn.commit()
+
+    await executor._process_identified_subjects(
+        subjects=["rust_lang"],
+        source_topic_key=source_topic,
+        insight_importance=0.7,
+        run_id="test_run",
+        message_ids=["msg_a", "msg_b"],
+    )
+
+    # Verify junction table rows were created
+    subject_key = f"server:{sample_server}:subject:rust_lang"
+    with engine.connect() as conn:
+        rows = conn.execute(
+            subject_message_sources.select().where(
+                subject_message_sources.c.subject_topic_key == subject_key
+            )
+        ).fetchall()
+
+    assert len(rows) == 2
+    row_msg_ids = {r.message_id for r in rows}
+    assert row_msg_ids == {"msg_a", "msg_b"}
+    assert all(r.source_topic_key == source_topic for r in rows)
+    assert all(r.layer_run_id == "test_run" for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_process_identified_subjects_ignores_duplicate_messages(
+    executor: LayerExecutor,
+    engine,
+    sample_server,
+    sample_channel,
+    ledger: SalienceLedger,
+) -> None:
+    """Test that re-identifying a subject with same messages doesn't create duplicates."""
+    from zos.database import subject_message_sources
+
+    now = utcnow()
+    source_topic = f"server:{sample_server}:user:456"
+
+    with engine.connect() as conn:
+        conn.execute(
+            messages_table.insert().values(
+                id="msg_dup",
+                channel_id=sample_channel,
+                server_id=sample_server,
+                author_id="456",
+                content="Some message",
+                created_at=now,
+                visibility_scope="public",
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.commit()
+
+    # First identification
+    await executor._process_identified_subjects(
+        subjects=["rust_lang"],
+        source_topic_key=source_topic,
+        insight_importance=0.5,
+        run_id="run_1",
+        message_ids=["msg_dup"],
+    )
+
+    # Second identification with same message
+    await executor._process_identified_subjects(
+        subjects=["rust_lang"],
+        source_topic_key=source_topic,
+        insight_importance=0.7,
+        run_id="run_2",
+        message_ids=["msg_dup"],
+    )
+
+    # Should still be only one row (INSERT OR IGNORE)
+    subject_key = f"server:{sample_server}:subject:rust_lang"
+    with engine.connect() as conn:
+        rows = conn.execute(
+            subject_message_sources.select().where(
+                subject_message_sources.c.subject_topic_key == subject_key
+            )
+        ).fetchall()
+
+    assert len(rows) == 1
 
 
 @pytest.mark.asyncio

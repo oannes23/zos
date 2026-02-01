@@ -419,7 +419,7 @@ class LayerExecutor:
 | **user:X** | Messages in threads the user participated in (broader context) |
 | **channel:X** | Messages where `channel_id == X` (straightforward) |
 | **dyad:A:B** | Messages by A or B where reply_to is the other, OR in same thread together (captures interaction) |
-| **subject:X** | Messages mentioning the subject keyword/phrase (content search) |
+| **subject:X** | Two-phase: (1) messages linked via `subject_message_sources` junction table, (2) recent messages from source topics (users/channels that surfaced the subject) |
 | **self:zos** | Self-insights and layer run logs (no messages in MVP 0) |
 
 **Implementation**:
@@ -442,8 +442,9 @@ async def get_messages_for_topic(self, topic_key: str, since: datetime, limit: i
         return await self.get_dyad_messages(user_a, user_b, since, limit)
 
     elif category == 'subject':
-        subject = extract_subject(topic_key)
-        return await self.search_messages_by_content(subject, since, limit)
+        # Phase 1: Messages directly associated via subject_message_sources junction table
+        # Phase 2: Recent messages from source topics (users/channels that surfaced this subject)
+        return await self.get_subject_messages_two_phase(topic_key, since, limit)
 ```
 
 ### Q6: Topic-Specific Message Context Limits
