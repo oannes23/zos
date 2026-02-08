@@ -17,6 +17,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from zos.insights import get_insights_for_topic
+from zos.layers import LayerCategory
 from zos.logging import get_logger
 from zos.salience import BudgetGroup, SalienceLedger, get_budget_group
 
@@ -224,14 +225,28 @@ class OperatorCommands(commands.Cog):
 
         log.info("reflect_now_command", user=str(interaction.user))
 
-        # Get all scheduled layers
+        # Get all scheduled layers, ordered so self-reflection runs last
+        # (mirroring the cron schedule where entity layers run at 3 AM
+        # and self/synthesis run at 4 AM, ensuring prior insights exist)
+        _CATEGORY_ORDER = {
+            LayerCategory.USER: 0,
+            LayerCategory.DYAD: 0,
+            LayerCategory.CHANNEL: 0,
+            LayerCategory.SUBJECT: 1,
+            LayerCategory.SYNTHESIS: 2,
+            LayerCategory.SELF: 3,
+        }
+
         try:
             layers = self.bot.scheduler.loader.load_all()
-            scheduled_layers = [
-                (name, layer)
-                for name, layer in layers.items()
-                if layer.schedule
-            ]
+            scheduled_layers = sorted(
+                [
+                    (name, layer)
+                    for name, layer in layers.items()
+                    if layer.schedule
+                ],
+                key=lambda pair: _CATEGORY_ORDER.get(pair[1].category, 1),
+            )
 
             if not scheduled_layers:
                 await interaction.followup.send(
@@ -240,7 +255,7 @@ class OperatorCommands(commands.Cog):
                 )
                 return
 
-            # Trigger each scheduled layer
+            # Trigger each scheduled layer sequentially
             results = []
             for layer_name, layer in scheduled_layers:
                 run = await self.bot.scheduler.trigger_now(layer_name)
