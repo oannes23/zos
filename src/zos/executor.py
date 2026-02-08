@@ -55,6 +55,7 @@ from zos.templates import (
     extract_channel_mention_ids,
     extract_mention_ids,
     format_conversation_chunks_for_prompt,
+    format_cross_topic_insights_for_prompt,
     format_insights_for_prompt,
     format_messages_for_prompt,
 )
@@ -159,6 +160,9 @@ class ExecutionContext:
     llm_response: str | None = None
     reduced_results: list[Any] = field(default_factory=list)
     output_content: str | None = None
+
+    # Named data storage (for store_as param in fetch nodes)
+    named_data: dict[str, Any] = field(default_factory=dict)
 
     # Conversation context (windowed messages grouped by channel)
     conversation_chunks: dict[str, list[Message]] = field(default_factory=dict)
@@ -795,8 +799,12 @@ class LayerExecutor:
     async def _handle_fetch_insights(self, node: Node, ctx: ExecutionContext) -> None:
         """Fetch prior insights for the topic.
 
-        Supports `members_of_topic` param for dyad reflection: fetches individual
-        user insights for each member of the dyad.
+        Supports multiple retrieval modes:
+        - `members_of_topic`: Fetches individual user insights for dyad members.
+        - `topic_pattern`: Cross-topic retrieval with category/date filtering.
+        - `store_as`: Stores results in ctx.named_data[store_as] instead of
+          ctx.insights, preventing sequential fetch_insights calls from
+          overwriting each other.
 
         Args:
             node: The node with params.
@@ -807,8 +815,35 @@ class LayerExecutor:
         max_per_topic = params.get("max_per_topic", 5)
         members_of_topic = params.get("members_of_topic", False)
         categories = params.get("categories")
+        topic_pattern = params.get("topic_pattern")
+        since_days = params.get("since_days")
+        store_as = params.get("store_as")
 
-        if members_of_topic and ctx.topic.category == TopicCategory.DYAD:
+        if topic_pattern:
+            # Cross-topic retrieval (e.g., for self-reflection gathering all experiences)
+            insights = await self.insight_retriever.retrieve_cross_topic(
+                categories=categories,
+                since_days=since_days,
+                limit=max_per_topic * 10 if max_per_topic else 50,
+            )
+
+            # Format for template with category/topic_key preserved
+            formatted = format_cross_topic_insights_for_prompt(insights)
+
+            if store_as:
+                ctx.named_data[store_as] = formatted
+            else:
+                ctx.insights = insights
+
+            log.debug(
+                "cross_topic_insights_fetched",
+                topic=ctx.topic.key,
+                count=len(insights),
+                categories=categories,
+                since_days=since_days,
+                store_as=store_as,
+            )
+        elif members_of_topic and ctx.topic.category == TopicCategory.DYAD:
             # Fetch individual insights for each dyad member
             user_id_1, user_id_2, server_id = self._extract_dyad_from_topic(
                 ctx.topic.key
@@ -858,13 +893,18 @@ class LayerExecutor:
                 limit=max_per_topic,
             )
 
-            ctx.insights = insights
+            if store_as:
+                formatted = format_cross_topic_insights_for_prompt(insights)
+                ctx.named_data[store_as] = formatted
+            else:
+                ctx.insights = insights
 
             log.debug(
                 "insights_fetched",
                 topic=ctx.topic.key,
                 count=len(insights),
                 profile=profile,
+                store_as=store_as,
             )
 
     async def _handle_fetch_layer_runs(
@@ -1911,27 +1951,28 @@ class LayerExecutor:
             existing_subjects = await self._get_existing_subjects(server_id)
 
         # Render template
-        prompt = self.templates.render(
-            template_path,
-            {
-                "topic": ctx.topic,
-                "user_profile": user_profile,
-                "user_profiles": user_profiles,
-                "channel_info": channel_info,
-                "subject_info": subject_info,
-                "existing_subjects": existing_subjects,
-                "messages": format_messages_for_prompt(
-                    messages_data, {}, mention_names=mention_names,
-                    channel_names=channel_names,
-                ),
-                "conversation_chunks": conversation_chunks_data,
-                "insights": format_insights_for_prompt(insights_data),
-                "individual_insights": ctx.individual_insights,
-                "reactions": ctx.reactions,
-                "layer_runs": ctx.layer_runs,
-                "llm_response": ctx.llm_response,  # Prior LLM response (for chained calls)
-            },
-        )
+        template_context = {
+            "topic": ctx.topic,
+            "user_profile": user_profile,
+            "user_profiles": user_profiles,
+            "channel_info": channel_info,
+            "subject_info": subject_info,
+            "existing_subjects": existing_subjects,
+            "messages": format_messages_for_prompt(
+                messages_data, {}, mention_names=mention_names,
+                channel_names=channel_names,
+            ),
+            "conversation_chunks": conversation_chunks_data,
+            "insights": format_insights_for_prompt(insights_data),
+            "individual_insights": ctx.individual_insights,
+            "reactions": ctx.reactions,
+            "layer_runs": ctx.layer_runs,
+            "llm_response": ctx.llm_response,  # Prior LLM response (for chained calls)
+        }
+        # Merge named data (e.g., recent_insights from store_as)
+        template_context.update(ctx.named_data)
+
+        prompt = self.templates.render(template_path, template_context)
 
         # Call LLM
         result = await self.llm.complete(

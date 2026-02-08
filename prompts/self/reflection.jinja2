@@ -16,13 +16,17 @@ No previous self-insights. This is your first self-reflection.
 {% endif %}
 
 ## Recent Experiences
-What I've been thinking about this week:
+What I've been thinking about recently:
 
 {% if recent_insights %}
-{% for insight in recent_insights %}
-**{{ insight.topic_key }}** ({{ insight.category }}):
+{% set categories_found = recent_insights | map(attribute='category') | unique | sort | list %}
+{% for cat in categories_found %}
+### {{ cat | replace('_', ' ') | title }}
+{% for insight in recent_insights | selectattr('category', 'equalto', cat) | sort(attribute='created_at') %}
+[{{ insight.created_at | relative_time }}] **{{ insight.topic_key }}**:
 {{ insight.content | truncate(200) }}
 
+{% endfor %}
 {% endfor %}
 {% else %}
 No recent insights from other reflection layers.

@@ -32,10 +32,14 @@ nodes:
       topic_pattern: "*"  # All topics
       retrieval_profile: recent
       max_per_topic: 7
+      store_as: recent_insights
       categories:
         - user_reflection
         - dyad_observation
         - channel_reflection
+        - subject_reflection
+        - social_texture
+        - synthesis
       since_days: 14
 
   - name: gather_layer_runs

@@ -2288,3 +2288,260 @@ async def test_handle_update_self_concept_warns_on_oversized(
 
     # Restore
     executor.config.self_concept_max_chars = 15000
+
+
+# =============================================================================
+# Cross-Topic Fetch Insights Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_fetch_insights_with_store_as(
+    executor: LayerExecutor,
+    engine,
+    ledger: SalienceLedger,
+) -> None:
+    """Test that store_as prevents overwriting ctx.insights."""
+    # Create a self topic
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values(
+                key="self:zos",
+                category="self",
+                is_global=True,
+                provisional=False,
+                created_at=utcnow(),
+            )
+        )
+        conn.commit()
+
+    topic = Topic(
+        key="self:zos",
+        category=TopicCategory.SELF,
+        is_global=True,
+        provisional=False,
+        created_at=utcnow(),
+    )
+
+    ctx = ExecutionContext(
+        topic=topic,
+        layer=Layer(
+            name="test",
+            category=LayerCategory.SELF,
+            nodes=[Node(type=NodeType.FETCH_INSIGHTS)],
+        ),
+        run_id=generate_id(),
+    )
+
+    # First fetch populates ctx.insights normally
+    node1 = Node(
+        type=NodeType.FETCH_INSIGHTS,
+        params={"max_per_topic": 5},
+    )
+    await executor._handle_fetch_insights(node1, ctx)
+    assert isinstance(ctx.insights, list)
+
+    # Second fetch with store_as should go into named_data, not overwrite ctx.insights
+    node2 = Node(
+        type=NodeType.FETCH_INSIGHTS,
+        params={
+            "topic_pattern": "*",
+            "max_per_topic": 5,
+            "store_as": "recent_insights",
+            "categories": ["user_reflection"],
+            "since_days": 14,
+        },
+    )
+    await executor._handle_fetch_insights(node2, ctx)
+
+    # ctx.insights should still be the original list (not overwritten)
+    assert isinstance(ctx.insights, list)
+    # named_data should contain the cross-topic results
+    assert "recent_insights" in ctx.named_data
+    assert isinstance(ctx.named_data["recent_insights"], list)
+
+
+@pytest.mark.asyncio
+async def test_fetch_insights_cross_topic_with_categories(
+    executor: LayerExecutor,
+    engine,
+    ledger: SalienceLedger,
+) -> None:
+    """Test cross-topic retrieval filters by category."""
+    # Create topics and insights
+    now = utcnow()
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values(
+                key="self:zos",
+                category="self",
+                is_global=True,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        conn.execute(
+            topics_table.insert().values(
+                key="server:1:user:100",
+                category="user",
+                is_global=False,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        # Create a layer run for the insights
+        run_id = generate_id()
+        conn.execute(
+            layer_runs_table.insert().values(
+                id=run_id,
+                layer_name="test-layer",
+                layer_hash="abc",
+                started_at=now,
+                completed_at=now,
+                status="success",
+                targets_matched=1,
+                targets_processed=1,
+                targets_skipped=0,
+                insights_created=2,
+            )
+        )
+        # Insert a user_reflection insight
+        conn.execute(
+            insights_table.insert().values(
+                id=generate_id(),
+                topic_key="server:1:user:100",
+                category="user_reflection",
+                content="User is helpful",
+                sources_scope_max=VisibilityScope.PUBLIC.value,
+                created_at=now - timedelta(days=1),
+                layer_run_id=run_id,
+                salience_spent=1.0,
+                strength_adjustment=1.0,
+                strength=5.0,
+                original_topic_salience=10.0,
+                confidence=0.8,
+                importance=0.7,
+                novelty=0.5,
+                valence_curiosity=0.6,
+            )
+        )
+        # Insert a synthesis insight (should be excluded when filtering for user_reflection only)
+        conn.execute(
+            insights_table.insert().values(
+                id=generate_id(),
+                topic_key="server:1:user:100",
+                category="synthesis",
+                content="Synthesis result",
+                sources_scope_max=VisibilityScope.PUBLIC.value,
+                created_at=now - timedelta(days=2),
+                layer_run_id=run_id,
+                salience_spent=1.0,
+                strength_adjustment=1.0,
+                strength=5.0,
+                original_topic_salience=10.0,
+                confidence=0.8,
+                importance=0.7,
+                novelty=0.5,
+                valence_curiosity=0.6,
+            )
+        )
+        conn.commit()
+
+    topic = Topic(
+        key="self:zos",
+        category=TopicCategory.SELF,
+        is_global=True,
+        provisional=False,
+        created_at=now,
+    )
+
+    ctx = ExecutionContext(
+        topic=topic,
+        layer=Layer(
+            name="test",
+            category=LayerCategory.SELF,
+            nodes=[Node(type=NodeType.FETCH_INSIGHTS)],
+        ),
+        run_id=generate_id(),
+    )
+
+    # Fetch only user_reflection category
+    node = Node(
+        type=NodeType.FETCH_INSIGHTS,
+        params={
+            "topic_pattern": "*",
+            "max_per_topic": 10,
+            "store_as": "recent_insights",
+            "categories": ["user_reflection"],
+            "since_days": 14,
+        },
+    )
+    await executor._handle_fetch_insights(node, ctx)
+
+    recent = ctx.named_data["recent_insights"]
+    assert len(recent) == 1
+    assert recent[0]["category"] == "user_reflection"
+    assert recent[0]["content"] == "User is helpful"
+    assert "topic_key" in recent[0]
+
+
+@pytest.mark.asyncio
+async def test_named_data_merged_into_template_context(
+    executor: LayerExecutor,
+    engine,
+    ledger: SalienceLedger,
+    templates_dir: Path,
+) -> None:
+    """Test that named_data entries are available in template rendering."""
+    # Create a simple template that uses recent_insights
+    (templates_dir / "test_named.jinja2").write_text(
+        "{% if recent_insights %}found {{ recent_insights | length }}{% else %}empty{% endif %}"
+    )
+
+    now = utcnow()
+    with engine.connect() as conn:
+        conn.execute(
+            topics_table.insert().values(
+                key="self:zos",
+                category="self",
+                is_global=True,
+                provisional=False,
+                created_at=now,
+            )
+        )
+        conn.commit()
+
+    topic = Topic(
+        key="self:zos",
+        category=TopicCategory.SELF,
+        is_global=True,
+        provisional=False,
+        created_at=now,
+    )
+
+    ctx = ExecutionContext(
+        topic=topic,
+        layer=Layer(
+            name="test",
+            category=LayerCategory.SELF,
+            nodes=[Node(type=NodeType.LLM_CALL)],
+        ),
+        run_id=generate_id(),
+    )
+
+    # Pre-populate named_data
+    ctx.named_data["recent_insights"] = [
+        {"category": "user_reflection", "content": "test", "topic_key": "user:1"},
+    ]
+
+    node = Node(
+        type=NodeType.LLM_CALL,
+        params={"prompt_template": "test_named.jinja2", "model": "simple"},
+    )
+
+    await executor._handle_llm_call(node, ctx)
+
+    # The LLM should have been called — verify the prompt contained our data
+    call_args = executor.llm.complete.call_args
+    prompt = call_args.kwargs.get("prompt", call_args.args[0] if call_args.args else "")
+    assert "found 1" in prompt

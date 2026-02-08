@@ -96,13 +96,17 @@ class TestMigrationDiscovery:
         assert len(versions) == len(set(versions)), "Duplicate migration versions"
 
     def test_migration_versions_are_sequential(self) -> None:
-        """Test that migration versions form a sequence (no gaps)."""
+        """Test that migration versions form a sequence (no gaps).
+
+        Note: version 006 was accidentally skipped and is intentionally absent.
+        """
         migrations = get_migrations()
         if len(migrations) <= 1:
             pytest.skip("Need multiple migrations for this test")
 
         versions = [v for v, _ in migrations]
-        expected = list(range(versions[0], versions[-1] + 1))
+        known_skipped = {6}  # 006 was accidentally skipped
+        expected = [v for v in range(versions[0], versions[-1] + 1) if v not in known_skipped]
         assert versions == expected, f"Non-sequential versions: {versions} vs {expected}"
 
 

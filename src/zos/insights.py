@@ -577,6 +577,58 @@ class InsightRetriever:
 
             return formatted
 
+    async def retrieve_cross_topic(
+        self,
+        categories: list[str] | None = None,
+        since_days: int | None = None,
+        limit: int = 50,
+    ) -> list[FormattedInsight]:
+        """Retrieve insights across all topics.
+
+        Used by self-reflection to gather experiences from all reflection
+        layers. Filters by category and time window, returns formatted
+        insights with topic_key preserved for grouping.
+
+        Args:
+            categories: Optional list of insight categories to include.
+            since_days: Only return insights from the last N days.
+            limit: Maximum number of insights to return.
+
+        Returns:
+            List of FormattedInsight, ordered by created_at descending.
+        """
+        with self.engine.connect() as conn:
+            conditions = [insights_table.c.quarantined == False]
+
+            if categories:
+                conditions.append(insights_table.c.category.in_(categories))
+
+            if since_days is not None:
+                since = utcnow() - timedelta(days=since_days)
+                conditions.append(insights_table.c.created_at >= since)
+
+            stmt = (
+                select(insights_table)
+                .where(and_(*conditions))
+                .order_by(insights_table.c.created_at.desc())
+                .limit(limit)
+            )
+
+            rows = conn.execute(stmt).fetchall()
+
+            formatted = []
+            for row in rows:
+                insight = self._row_to_insight(row)
+                current_salience = await self._get_current_salience(
+                    insight.topic_key
+                )
+                fi = await self._format_insight(insight, current_salience)
+                # Attach topic_key for cross-topic grouping in templates
+                fi.topic_key = insight.topic_key  # type: ignore[attr-defined]
+                formatted.append(fi)
+
+            return formatted
+
 
 # =============================================================================
 # Database Operations

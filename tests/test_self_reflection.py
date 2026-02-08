@@ -476,6 +476,10 @@ def test_self_reflection_template_renders() -> None:
                 "topic_key": "server:123:user:456",
                 "category": "user_reflection",
                 "content": "User shows consistent patterns of helpfulness.",
+                "created_at": now - timedelta(days=1),
+                "strength": 5.0,
+                "confidence": 0.8,
+                "temporal_marker": "clear memory from 1 days ago",
             }
         ],
         "layer_runs": [
@@ -1130,3 +1134,103 @@ async def test_fetch_layer_runs_empty(
 
     # Should return empty list without error
     assert ctx.layer_runs == []
+
+
+# =============================================================================
+# Weekly Self-Reflection Layer Bug Fix Tests
+# =============================================================================
+
+
+def test_weekly_self_layer_gather_recent_has_store_as() -> None:
+    """Test that gather_recent_experiences uses store_as to avoid overwrite."""
+    layer_path = Path("layers/reflection/weekly-self.yaml")
+
+    if not layer_path.exists():
+        pytest.skip("Layer file not found")
+
+    with open(layer_path) as f:
+        data = yaml.safe_load(f)
+
+    # Find the gather_recent_experiences node
+    recent_node = None
+    for node in data["nodes"]:
+        if node.get("name") == "gather_recent_experiences":
+            recent_node = node
+            break
+
+    assert recent_node is not None, "gather_recent_experiences node not found"
+    params = recent_node["params"]
+
+    # Must have store_as to prevent overwriting ctx.insights from first fetch
+    assert params.get("store_as") == "recent_insights"
+
+    # Must include all insight categories
+    categories = params.get("categories", [])
+    assert "user_reflection" in categories
+    assert "dyad_observation" in categories
+    assert "channel_reflection" in categories
+    assert "subject_reflection" in categories
+    assert "social_texture" in categories
+    assert "synthesis" in categories
+
+
+def test_self_reflection_template_groups_by_category() -> None:
+    """Test that the template groups recent_insights by category with dates."""
+    prompts_path = Path("prompts")
+    data_path = Path("data")
+
+    if not prompts_path.exists():
+        pytest.skip("Prompts directory not found")
+
+    engine = TemplateEngine(templates_dir=prompts_path, data_dir=data_path)
+
+    now = datetime.now(timezone.utc)
+    context = {
+        "topic": {"key": "self:zos"},
+        "insights": [],
+        "recent_insights": [
+            {
+                "topic_key": "server:1:user:100",
+                "category": "user_reflection",
+                "content": "User Alpha is helpful.",
+                "created_at": now - timedelta(days=3),
+                "strength": 5.0,
+                "confidence": 0.8,
+                "temporal_marker": "clear memory from 3 days ago",
+            },
+            {
+                "topic_key": "server:1:user:200",
+                "category": "user_reflection",
+                "content": "User Beta asks good questions.",
+                "created_at": now - timedelta(days=1),
+                "strength": 4.0,
+                "confidence": 0.7,
+                "temporal_marker": "clear memory from 1 days ago",
+            },
+            {
+                "topic_key": "server:1:channel:general",
+                "category": "channel_reflection",
+                "content": "General channel has collaborative tone.",
+                "created_at": now - timedelta(days=2),
+                "strength": 4.5,
+                "confidence": 0.75,
+                "temporal_marker": "clear memory from 2 days ago",
+            },
+        ],
+        "layer_runs": [],
+    }
+
+    result = engine.render("self/reflection.jinja2", context)
+
+    # Should have category headers
+    assert "User Reflection" in result
+    assert "Channel Reflection" in result
+
+    # Should contain the insight content
+    assert "User Alpha is helpful" in result
+    assert "User Beta asks good questions" in result
+    assert "General channel has collaborative tone" in result
+
+    # Should have topic keys
+    assert "server:1:user:100" in result
+    assert "server:1:channel:general" in result

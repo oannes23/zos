@@ -511,6 +511,34 @@ def format_insights_for_prompt(insights: list[dict[str, Any]]) -> list[dict[str,
     ]
 
 
+def format_cross_topic_insights_for_prompt(
+    insights: list,
+) -> list[dict[str, Any]]:
+    """Format cross-topic insights preserving category and topic_key for grouping.
+
+    Unlike format_insights_for_prompt, this retains the category and topic_key
+    fields needed by the self-reflection template to group insights by type.
+
+    Args:
+        insights: List of FormattedInsight objects (with topic_key attached).
+
+    Returns:
+        List of dicts with category, topic_key, content, dates, and strength.
+    """
+    return [
+        {
+            "created_at": i.created_at,
+            "content": i.content,
+            "strength": i.strength,
+            "confidence": i.confidence,
+            "category": i.category,
+            "topic_key": getattr(i, "topic_key", ""),
+            "temporal_marker": i.temporal_marker,
+        }
+        for i in insights
+    ]
+
+
 # =============================================================================
 # Conversation Context Formatting
 # =============================================================================
