@@ -2258,7 +2258,7 @@ class LayerExecutor:
         result = await self.llm.complete(
             prompt=update_prompt,
             model_profile="complex",
-            max_tokens=2000,
+            max_tokens=8192,
             layer_run_id=ctx.run_id,
             topic_key=ctx.topic.key,
             call_type=LLMCallType.REFLECTION,

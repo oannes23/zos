@@ -24,7 +24,7 @@ What I've been thinking about recently:
 ### {{ cat | replace('_', ' ') | title }}
 {% for insight in recent_insights | selectattr('category', 'equalto', cat) | sort(attribute='created_at') %}
 [{{ insight.created_at | relative_time }}] **{{ insight.topic_key }}**:
-{{ insight.content | truncate(200) }}
+{{ insight.content }}
 
 {% endfor %}
 {% endfor %}

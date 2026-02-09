@@ -53,7 +53,7 @@ nodes:
     params:
       prompt_template: self/reflection.jinja2
       model: complex  # Self-reflection uses highest capability
-      max_tokens: 1000
+      max_tokens: 4096
       temperature: 0.8
 
   - name: store_insight
@@ -66,7 +66,7 @@ nodes:
     params:
       prompt_template: self/concept_update_check.jinja2
       model: complex
-      max_tokens: 1000
+      max_tokens: 4096
 
   - name: maybe_update_concept
     type: update_self_concept

@@ -347,7 +347,7 @@ def test_nightly_user_layer_node_params() -> None:
     llm_call = next((n for n in layer.nodes if n.type == NodeType.LLM_CALL), None)
     assert llm_call is not None
     assert llm_call.params.get("prompt_template") == "user/reflection.jinja2"
-    assert llm_call.params.get("max_tokens") == 1000
+    assert llm_call.params.get("max_tokens") == 4096
 
 
 # =============================================================================

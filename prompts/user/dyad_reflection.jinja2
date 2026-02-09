@@ -52,7 +52,7 @@ I don't have prior understanding of this relationship yet.
 Context about who these individuals are, separate from their relationship:
 
 {% for insight in individual_insights %}
-**{{ insight.topic_key }}**: {{ insight.content | truncate(200) }}
+**{{ insight.topic_key }}**: {{ insight.content }}
 {% endfor %}
 {% endif %}
 
@@ -77,7 +77,7 @@ Context about who these individuals are, separate from their relationship:
 {% if direction.total_count > 0 %}
 **{{ reactor_name }} → {{ target_name }}**: {{ direction.total_count }} reactions
 {% for e in direction.emojis %}
-- {{ e.emoji }} ({{ e.count }}x){% if e.examples %} — e.g., "{{ e.examples[0] | truncate(80) }}"{% endif %}
+- {{ e.emoji }} ({{ e.count }}x){% if e.examples %} — e.g., "{{ e.examples[0] }}"{% endif %}
 
 {% endfor %}
 {% else %}
@@ -89,16 +89,16 @@ Context about who these individuals are, separate from their relationship:
 ### Recent Interactions
 {% if messages %}
 {% for msg in messages %}
-[{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content | truncate(300) }}{% if msg.reactions_aggregate %} [reactions: {% for emoji, count in msg.reactions_aggregate.items() %}{{ emoji }}({{ count }}){% if not loop.last %}, {% endif %}{% endfor %}]{% endif %}
+[{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}{% if msg.reactions_aggregate %} [reactions: {% for emoji, count in msg.reactions_aggregate.items() %}{{ emoji }}({{ count }}){% if not loop.last %}, {% endif %}{% endfor %}]{% endif %}
 
 {% if msg.media_descriptions %}
 {% for media in msg.media_descriptions %}
-  [{{ media.media_type }}{% if media.filename %}: {{ media.filename }}{% endif %}] {{ media.description | truncate(200) }}
+  [{{ media.media_type }}{% if media.filename %}: {{ media.filename }}{% endif %}] {{ media.description }}
 {% endfor %}
 {% elif msg.has_media %}[contains unanalyzed media]{% endif %}
 {% if msg.link_summaries %}
 {% for link in msg.link_summaries %}
-  [{{ link.domain }}{% if link.is_youtube %} video{% endif %}{% if link.title %}: "{{ link.title | truncate(60) }}"{% endif %}] {{ link.summary | default('') | truncate(200) }}
+  [{{ link.domain }}{% if link.is_youtube %} video{% endif %}{% if link.title %}: "{{ link.title }}"{% endif %}] {{ link.summary | default('') }}
 {% endfor %}
 {% elif msg.has_links %}[contains unanalyzed links]{% endif %}
 {% endfor %}
