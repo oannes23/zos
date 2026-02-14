@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy import and_, select
@@ -166,6 +167,9 @@ class ExecutionContext:
     # Named data storage (for store_as param in fetch nodes)
     named_data: dict[str, Any] = field(default_factory=dict)
 
+    # Send context for conversation output (destination routing info)
+    send_context: dict[str, Any] = field(default_factory=dict)
+
     # Conversation context (windowed messages grouped by channel)
     conversation_chunks: dict[str, list[Message]] = field(default_factory=dict)
     conversation_channel_names: dict[str, str] = field(default_factory=dict)
@@ -234,6 +238,9 @@ class LayerExecutor:
         loader: Layer loader (for hash lookup).
     """
 
+    # Type alias for send callback: (content, context_dict) -> message_id
+    SendCallback = Callable[[str, dict[str, Any]], Coroutine[Any, Any, str | None]]
+
     def __init__(
         self,
         engine: "Engine",
@@ -242,6 +249,7 @@ class LayerExecutor:
         llm: ModelClient,
         config: "Config",
         loader: LayerLoader | None = None,
+        send_callback: SendCallback | None = None,
     ) -> None:
         """Initialize the layer executor.
 
@@ -252,6 +260,8 @@ class LayerExecutor:
             llm: Model client for LLM calls.
             config: Application configuration.
             loader: Optional layer loader for hash lookup.
+            send_callback: Async function to send messages to Discord.
+                Takes (content, context_dict) and returns message_id or None.
         """
         self.engine = engine
         self.ledger = ledger
@@ -259,6 +269,7 @@ class LayerExecutor:
         self.llm = llm
         self.config = config
         self.loader = loader or LayerLoader()
+        self.send_callback = send_callback
 
         # Initialize insight retriever
         self.insight_retriever = InsightRetriever(engine, config)
@@ -282,6 +293,7 @@ class LayerExecutor:
         layer: Layer,
         topics: list[str],
         dry_run: bool = False,
+        send_context: dict[str, Any] | None = None,
     ) -> LayerRun:
         """Execute a layer for the given topics.
 
@@ -289,6 +301,7 @@ class LayerExecutor:
             layer: The layer to execute.
             topics: List of topic keys to process.
             dry_run: If True, skip LLM calls and database writes.
+            send_context: Optional context dict for conversation output routing.
 
         Returns:
             LayerRun record with execution results.
@@ -339,6 +352,7 @@ class LayerExecutor:
                     layer=layer,
                     run_id=run_id,
                     dry_run=dry_run,
+                    send_context=send_context or {},
                 )
 
                 # Execute each node in sequence
@@ -2034,8 +2048,20 @@ class LayerExecutor:
         }
         # Merge named data (e.g., recent_insights from store_as)
         template_context.update(ctx.named_data)
+        # Merge send_context (e.g., operator_dm_only for conversation templates)
+        template_context.update(ctx.send_context)
 
         prompt = self.templates.render(template_path, template_context)
+
+        # Determine call type based on layer category
+        from zos.layers import LayerCategory as LC
+
+        conversation_categories = {LC.RESPONSE, LC.PARTICIPATION, LC.INSIGHT_SHARING}
+        call_type = (
+            LLMCallType.CONVERSATION
+            if ctx.layer.category in conversation_categories
+            else LLMCallType.REFLECTION
+        )
 
         # Call LLM
         result = await self.llm.complete(
@@ -2044,7 +2070,7 @@ class LayerExecutor:
             max_tokens=max_tokens,
             layer_run_id=ctx.run_id,
             topic_key=ctx.topic.key,
-            call_type=LLMCallType.REFLECTION,
+            call_type=call_type,
         )
 
         ctx.llm_response = result.text
@@ -2197,6 +2223,7 @@ class LayerExecutor:
         params = node.params
         destination = params.get("destination", "log")
         format_type = params.get("format", "text")
+        review = params.get("review", False)
 
         # Format output
         if format_type == "json" and ctx.llm_response:
@@ -2216,13 +2243,82 @@ class LayerExecutor:
                 layer=ctx.layer.name,
                 content_length=len(ctx.output_content) if ctx.output_content else 0,
             )
-        # Future: other destinations like channel, file, etc.
+        elif destination == "discord" and self.send_callback:
+            if not ctx.output_content:
+                log.warning(
+                    "discord_output_empty",
+                    topic=ctx.topic.key,
+                    layer=ctx.layer.name,
+                )
+                return
+
+            # Send via callback
+            try:
+                message_id = await self.send_callback(
+                    ctx.output_content,
+                    ctx.send_context,
+                )
+                log.info(
+                    "discord_message_sent",
+                    topic=ctx.topic.key,
+                    layer=ctx.layer.name,
+                    message_id=message_id,
+                    content_length=len(ctx.output_content),
+                )
+
+                # Log to conversation_log
+                if message_id:
+                    await self._log_conversation(message_id, ctx)
+
+            except Exception as e:
+                log.error(
+                    "discord_send_failed",
+                    topic=ctx.topic.key,
+                    layer=ctx.layer.name,
+                    error=str(e),
+                )
+                ctx.errors.append({
+                    "node": "output",
+                    "error": f"Discord send failed: {e}",
+                })
+        elif destination == "discord" and not self.send_callback:
+            log.warning(
+                "discord_output_no_callback",
+                topic=ctx.topic.key,
+                layer=ctx.layer.name,
+            )
 
         log.debug(
             "output_complete",
             destination=destination,
             format=format_type,
         )
+
+    async def _log_conversation(
+        self, message_id: str, ctx: ExecutionContext
+    ) -> None:
+        """Log a sent conversation message to the conversation_log table."""
+        from zos.database import conversation_log
+
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(
+                    conversation_log.insert().values(
+                        id=generate_id(),
+                        message_id=message_id,
+                        channel_id=ctx.send_context.get("channel_id", "unknown"),
+                        server_id=ctx.send_context.get("server_id"),
+                        content=ctx.output_content or "",
+                        layer_name=ctx.layer.name,
+                        trigger_type="impulse",
+                        impulse_pool="conversational",
+                        impulse_spent=0.0,
+                        priority_flagged=False,
+                        created_at=utcnow(),
+                    )
+                )
+        except Exception as e:
+            log.error("conversation_log_failed", error=str(e))
 
     async def _handle_synthesize_to_global(
         self, node: Node, ctx: ExecutionContext

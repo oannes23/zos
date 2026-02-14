@@ -489,6 +489,104 @@ class OperatorCommands(commands.Cog):
         )
         log.info("dev_mode_toggled", state=state, user=str(interaction.user))
 
+    @app_commands.command(name="impulse", description="Show impulse balances")
+    async def impulse(self, interaction: discord.Interaction) -> None:
+        """Show current impulse balances for top topics.
+
+        Displays which topics are closest to the speech threshold.
+        """
+        if not await self.operator_check(interaction):
+            return
+
+        if self.bot._impulse_engine is None:
+            await interaction.response.send_message(
+                "Impulse engine not initialized.",
+                ephemeral=True,
+            )
+            return
+
+        threshold = self.config.chattiness.threshold
+        enabled = self.config.chattiness.enabled
+
+        # Get topics above threshold
+        above = self.bot._impulse_engine.get_topics_above_threshold()
+
+        # Build response
+        lines = [
+            f"**Impulse Status** (enabled={enabled}, threshold={threshold})",
+            "",
+        ]
+
+        if above:
+            lines.append("**Above threshold:**")
+            for topic_key, balance in sorted(above, key=lambda x: -x[1]):
+                lines.append(f"  `{topic_key}`: {balance:.1f}")
+        else:
+            lines.append("No topics above threshold.")
+
+        await interaction.response.send_message(
+            "\n".join(lines),
+            ephemeral=True,
+        )
+        log.info("impulse_command", user=str(interaction.user))
+
+    @app_commands.command(name="speak-now", description="Trigger speech for a topic")
+    @app_commands.describe(topic="Topic key to speak about")
+    async def speak_now(
+        self, interaction: discord.Interaction, topic: str
+    ) -> None:
+        """Manually trigger conversation for a topic (testing).
+
+        Forces Zos to speak about a topic regardless of impulse level.
+        Useful for testing conversation layers.
+        """
+        if not await self.operator_check(interaction):
+            return
+
+        if self.bot._executor is None or self.bot._layer_loader is None:
+            await interaction.response.send_message(
+                "Conversation system not initialized.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        from zos.chattiness import extract_category
+
+        category = extract_category(topic)
+        layer_name = {
+            "channel": "channel-speak",
+            "user": "dm-response",
+            "subject": "subject-share",
+        }.get(category)
+
+        if not layer_name:
+            await interaction.followup.send(
+                f"Cannot determine layer for topic `{topic}` (category={category})",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            await self.bot._dispatch_conversation(topic, layer_name)
+            await interaction.followup.send(
+                f"Dispatched `{layer_name}` for topic `{topic}`",
+                ephemeral=True,
+            )
+        except Exception as e:
+            await interaction.followup.send(
+                f"Failed: {e}",
+                ephemeral=True,
+            )
+
+        log.info(
+            "speak_now_command",
+            topic=topic,
+            layer_name=layer_name,
+            user=str(interaction.user),
+        )
+
 
 async def setup(bot: ZosBot) -> None:
     """Setup function for loading the cog.

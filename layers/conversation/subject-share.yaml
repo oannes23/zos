@@ -1,0 +1,34 @@
+# Subject Share Layer
+#
+# Shares a subject insight after reflection produces something noteworthy.
+# Context includes recent subject insights and self-concept.
+# Model: Sonnet (moderate tier) for natural conversation.
+
+name: subject-share
+category: insight_sharing
+description: |
+  Share subject insight after reflection produces something noteworthy.
+  Triggered when subject topic impulse exceeds threshold post-reflection.
+
+trigger: impulse_threshold
+target_category: subject
+
+nodes:
+  - name: fetch_subject_insights
+    type: fetch_insights
+    params:
+      max_per_topic: 5
+
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/subject-share.jinja2
+      model: moderate
+      max_tokens: 512
+      temperature: 0.8
+
+  - name: send
+    type: output
+    params:
+      destination: discord
+      review: true

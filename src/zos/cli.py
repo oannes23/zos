@@ -103,6 +103,7 @@ def serve(
     from uvicorn import Server
 
     from zos.api import create_app
+    from zos.chattiness import ImpulseEngine
     from zos.database import create_tables, get_engine
     from zos.executor import LayerExecutor
     from zos.layers import LayerLoader
@@ -154,6 +155,42 @@ def serve(
             )
             llm = ModelClient(config, engine=engine)
 
+            # Create impulse engine for conversation
+            impulse_engine = ImpulseEngine(engine, config)
+
+            # Create send callback for Discord message delivery
+            # This closure is passed to the executor, keeping it decoupled from discord.py
+            send_bot_ref: list = []  # Mutable ref to bot (set after bot starts)
+
+            async def send_to_discord(
+                content: str, context: dict
+            ) -> str | None:
+                """Send a message to Discord via the bot."""
+                bot = send_bot_ref[0] if send_bot_ref else None
+                if bot is None:
+                    log.warning("send_callback_no_bot")
+                    return None
+
+                try:
+                    if context.get("operator_dm"):
+                        msg = None
+                        for op_id in config.discord.operators.user_ids:
+                            user = await bot.fetch_user(int(op_id))
+                            msg = await user.send(content)
+                        return str(msg.id) if msg else None
+                    elif context.get("dm_user_id"):
+                        user = await bot.fetch_user(int(context["dm_user_id"]))
+                        msg = await user.send(content)
+                        return str(msg.id)
+                    elif context.get("channel_id"):
+                        channel = bot.get_channel(int(context["channel_id"]))
+                        if channel:
+                            msg = await channel.send(content)
+                            return str(msg.id)
+                except Exception as e:
+                    log.error("send_to_discord_failed", error=str(e))
+                return None
+
             executor = LayerExecutor(
                 engine=engine,
                 ledger=ledger,
@@ -161,6 +198,7 @@ def serve(
                 llm=llm,
                 config=config,
                 loader=loader,
+                send_callback=send_to_discord,
             )
 
             # Create and start scheduler
@@ -172,6 +210,7 @@ def serve(
                 ledger=ledger,
                 config=config,
             )
+            scheduler.impulse_engine = impulse_engine
             scheduler.start()
             log.info("scheduler_started")
 
@@ -194,7 +233,17 @@ def serve(
             # The bot task will run until cancelled or shutdown
             # The API task runs the uvicorn server
             api_task = asyncio.create_task(server.serve())
-            bot_task = asyncio.create_task(run_bot(config, engine, scheduler))
+            bot_task = asyncio.create_task(
+                run_bot(
+                    config,
+                    engine,
+                    scheduler,
+                    impulse_engine=impulse_engine,
+                    executor=executor,
+                    layer_loader=loader,
+                    bot_ref=send_bot_ref,
+                )
+            )
 
             # Wait for both tasks
             # If either completes or fails, cancel the other

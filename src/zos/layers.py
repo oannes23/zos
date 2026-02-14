@@ -70,6 +70,11 @@ class LayerCategory(str, Enum):
     - subject: Reflects on semantic topics
     - self: Self-reflection
     - synthesis: Consolidates insights across scopes
+
+    Conversation categories (impulse-triggered):
+    - response: Direct response to DMs
+    - participation: Contributing to channel conversations
+    - insight_sharing: Sharing subject insights post-reflection
     """
 
     USER = "user"
@@ -78,6 +83,11 @@ class LayerCategory(str, Enum):
     SUBJECT = "subject"
     SELF = "self"
     SYNTHESIS = "synthesis"
+
+    # Conversation categories
+    RESPONSE = "response"
+    PARTICIPATION = "participation"
+    INSIGHT_SHARING = "insight_sharing"
 
 
 # =============================================================================

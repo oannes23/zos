@@ -137,8 +137,8 @@ Prove that:
 - Context assembly respects scope boundaries (output filter active)
 
 #### Rate Limiting
-- **Deferred**: Requires new "extraverted salience" domain spec
-- Temporary: Simple cooldowns until proper domain is designed
+- **Resolved (MVP 1 Foundation)**: Per-topic impulse with single threshold, reset-to-zero after speaking
+- Full "extraverted salience" with 6 pools deferred to future iteration
 
 ### Explicitly Out of Scope
 
@@ -154,6 +154,42 @@ Prove that:
 - Zero scope boundary violations (DM content never appears in public responses)
 - The system adds value to conversations, not just noise
 - Cold DM responses are graceful (acknowledge limited context, invite continued interaction)
+
+### MVP 1 Foundation — Implementation Status (2026-02-13)
+
+The first phase of MVP 1 has been implemented with a simplified impulse model and operator DM gating:
+
+#### What's Built
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| ImpulseEngine | ✅ | Per-topic impulse tracking (earn, balance, reset, threshold, decay) |
+| Conversation heartbeat | ✅ | 30s background loop dispatching conversation layers |
+| Typing awareness | ✅ | on_typing event prevents interrupting mid-thought |
+| DM ingestion | ✅ | Real-time on_message handler + impulse earning |
+| Channel impulse | ✅ | +1 per message during polling |
+| Subject impulse | ✅ | Post-reflection hook earns impulse for subject insights |
+| dm-response layer | ✅ | Responds to DMs (user insights, dyad context, messages) |
+| channel-speak layer | ✅ | Channel participation (channel context, user insights) |
+| subject-share layer | ✅ | Subject insight sharing after reflection |
+| Operator DM mode | ✅ | All output → operator DMs when enabled |
+| Executor send_callback | ✅ | Discord output decoupled from executor |
+| /impulse command | ✅ | Operator debug: show impulse balances |
+| /speak-now command | ✅ | Operator debug: manually trigger conversation |
+
+#### What's Remaining for Full MVP 1
+
+- Question/curiosity layer
+- Emoji reaction output modality
+- Global speech pressure
+- Self-adjusting threshold
+- Thread-aware context assembly
+- Draft history (discarded drafts informing future responses)
+- Priority flagging for reflection
+- Output channel routing
+- Full compound topic support in context assembly
+- First-contact acknowledgment for new DM users
+- Disable operator_dm_only for public channel participation
 
 ---
 
@@ -198,8 +234,12 @@ These are implemented in MVP 0 but not fully utilized until later:
 | Global topics (`user:<id>`, `dyad:<a>:<b>`) | MVP 0 | MVP 2 |
 | Global topic warming tracking | MVP 0 | MVP 2 |
 | Cross-server synthesis layer | MVP 0 (code) | MVP 2 (feature flag) |
+| Chattiness impulse engine | MVP 1 | MVP 1 |
+| Conversation layers (3 of 4) | MVP 1 | MVP 1 |
+| Operator DM mode | MVP 1 | MVP 1 |
+| Conversation heartbeat | MVP 1 | MVP 1 |
 | Self-modification proposal format | — | MVP 2 |
 
 ---
 
-_Last updated: 2026-01-22 — Interrogated to completion_
+_Last updated: 2026-02-13 — Added MVP 1 Foundation implementation status_

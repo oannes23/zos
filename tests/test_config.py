@@ -592,18 +592,31 @@ def test_chattiness_config_defaults() -> None:
     """Test chattiness configuration defaults."""
     chat = ChattinessConfig()
 
+    assert chat.enabled is False
+    assert chat.operator_dm_only is True
+    assert chat.threshold == 25
+    assert chat.channel_impulse_per_message == 1.0
+    assert chat.dm_impulse_per_message == 100.0
+    assert chat.subject_impulse_per_insight == 10.0
+    assert chat.heartbeat_interval_seconds == 30
     assert chat.decay_threshold_hours == 1
     assert chat.decay_rate_per_hour == 0.05
-    assert chat.base_spend == 10
+    assert chat.review_enabled is True
 
 
 def test_chattiness_config_custom(tmp_path: Path) -> None:
     """Test custom chattiness configuration."""
     config_data = {
         "chattiness": {
+            "enabled": True,
+            "operator_dm_only": False,
+            "threshold": 50,
+            "channel_impulse_per_message": 2.0,
+            "dm_impulse_per_message": 50.0,
+            "heartbeat_interval_seconds": 15,
             "decay_threshold_hours": 2.5,
             "decay_rate_per_hour": 0.1,
-            "base_spend": 20,
+            "review_enabled": False,
         }
     }
     config_path = tmp_path / "config.yaml"
@@ -611,9 +624,15 @@ def test_chattiness_config_custom(tmp_path: Path) -> None:
         yaml.dump(config_data, f)
 
     config = Config.load(config_path)
+    assert config.chattiness.enabled is True
+    assert config.chattiness.operator_dm_only is False
+    assert config.chattiness.threshold == 50
+    assert config.chattiness.channel_impulse_per_message == 2.0
+    assert config.chattiness.dm_impulse_per_message == 50.0
+    assert config.chattiness.heartbeat_interval_seconds == 15
     assert config.chattiness.decay_threshold_hours == 2.5
     assert config.chattiness.decay_rate_per_hour == 0.1
-    assert config.chattiness.base_spend == 20
+    assert config.chattiness.review_enabled is False
 
 
 # ===== SCHEDULER CONFIGURATION =====

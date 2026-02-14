@@ -143,11 +143,28 @@ class SalienceConfig(BaseModel):
 
 
 class ChattinessConfig(BaseModel):
-    """Chattiness configuration (MVP 1 prep)."""
+    """Chattiness configuration — impulse-to-speech system."""
 
+    enabled: bool = False  # Master switch
+    operator_dm_only: bool = True  # All output → operator DMs
+
+    # Impulse threshold (one number — earning rates create differentiation)
+    threshold: float = 25
+
+    # Earning rates per topic category
+    channel_impulse_per_message: float = 1.0
+    dm_impulse_per_message: float = 100.0  # Floods past threshold
+    subject_impulse_per_insight: float = 10.0
+
+    # Conversation heartbeat
+    heartbeat_interval_seconds: int = 30
+
+    # Decay
     decay_threshold_hours: float = 1
     decay_rate_per_hour: float = 0.05
-    base_spend: float = 10
+
+    # Generation
+    review_enabled: bool = True  # Self-review before sending
 
 
 class PrivacyConfig(BaseModel):

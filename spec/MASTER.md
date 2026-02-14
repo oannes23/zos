@@ -59,8 +59,8 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Privacy | [privacy.md](domains/privacy.md) | 🟢 | — |
 | Salience | [salience.md](domains/salience.md) | 🟢 | — |
 | Insights | [insights.md](domains/insights.md) | 🟢 | — |
-| Layers | [layers.md](domains/layers.md) | 🟢 | — |
-| Chattiness | [chattiness.md](domains/chattiness.md) | 🟢 | — |
+| Layers | [layers.md](domains/layers.md) | 🔄 | MVP 1 conversation layers implemented (3 of 4 spec'd) |
+| Chattiness | [chattiness.md](domains/chattiness.md) | 🔄 | MVP 1 implementation simplified impulse model — see Implementation Notes |
 | Self-Modification | [self-modification.md](domains/self-modification.md) | 🟢 | Proposal format only; execution deferred to MVP 2+ |
 
 ---
@@ -82,7 +82,8 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 
 | Epic | Doc | Status | Blocked By |
 |------|-----|--------|------------|
-| Overview | [overview.md](implementation/mvp-1/overview.md) | 🔴 | MVP 0 complete |
+| Overview | [overview.md](implementation/mvp-1/overview.md) | 🟡 | MVP 0 complete |
+| Chattiness Foundation | — | 🟢 | Config, models, layers, impulse engine, conversation dispatch |
 
 ---
 
@@ -133,6 +134,43 @@ See [future/self-modification.md](future/self-modification.md) for the vision do
 ---
 
 ## Recent Changes
+
+### 2026-02-13: MVP 1 Foundation — Chattiness & Conversation System Implemented
+
+Implemented the first phase of MVP 1 "The Participant" — the operator DM mode foundation. This builds the impulse-to-speech pipeline, intentionally simplified from the full spec vision.
+
+**Simplified Impulse Model (diverges from spec):**
+- **Per-topic impulse** instead of 6 separate pools — topic category determines earning rules
+- **One threshold** (default 25) instead of per-pool thresholds
+- **Reset-to-zero after speaking** instead of proportional spending
+- **No global speech pressure** — the reset IS the rate limiting
+- **No per-channel tracking** — impulse is per-topic only
+
+**New Modules & Files:**
+- `src/zos/chattiness.py` — **ImpulseEngine**: earn, balance, reset, threshold query, decay
+- `layers/conversation/dm-response.yaml` — DM response layer (category: response)
+- `layers/conversation/channel-speak.yaml` — Channel participation layer (category: participation)
+- `layers/conversation/subject-share.yaml` — Subject insight sharing layer (category: insight_sharing)
+- `prompts/conversation/dm-response.jinja2`, `channel-speak.jinja2`, `subject-share.jinja2`
+
+**Modified Files:**
+- `src/zos/config.py` — Expanded ChattinessConfig (enabled, operator_dm_only, threshold, earning rates, heartbeat, review)
+- `src/zos/models.py` — ImpulsePool.PRESENCE→REACTION, added ChattinessTransactionType.RESET
+- `src/zos/layers.py` — Added LayerCategory: RESPONSE, PARTICIPATION, INSIGHT_SHARING
+- `src/zos/observation.py` — on_message DM handler, on_typing tracker, channel impulse earning, conversation heartbeat loop
+- `src/zos/executor.py` — send_callback for Discord output, conversation context assembly, LLMCallType.CONVERSATION
+- `src/zos/scheduler.py` — Post-reflection subject impulse hook
+- `src/zos/cli.py` — Wired ImpulseEngine, send_callback, bot_ref pattern
+- `src/zos/commands.py` — Added /impulse and /speak-now operator commands
+
+**Key Design Decisions:**
+- **Operator DM mode** (`operator_dm_only: true`): All speech output goes to operator DMs. Non-operator DMs observed but no impulse earned, no response.
+- **Conversation heartbeat**: Background loop (~30s) checks thresholds, dispatches conversation layers. Creates natural DM pacing — multiple rapid messages coalesce into one response.
+- **Typing awareness**: `on_typing` event tracking prevents interrupting someone mid-thought.
+- **3 conversation layers** (not 4): dm-response, channel-speak, subject-share. Question layer deferred — curiosity impulse not yet implemented.
+- **bot_ref pattern**: Mutable list passed through closure to share bot instance with send_callback.
+
+**Specs needing revision:** chattiness.md (major simplification), layers.md (3 vs 4 conversation layers, actual YAML differs from examples)
 
 ### 2026-01-24: Final Design Questions Resolved
 
@@ -617,8 +655,9 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-01-25 — MVP 0 complete! All 5 epics implemented (Foundation, Observation, Salience, Reflection, Introspection). 32 stories total._
+_2026-02-13 — MVP 1 Foundation implemented: impulse engine, conversation layers, operator DM mode, conversation heartbeat._
 
 ## Pending Updates
 
-*None — all specs complete. Ready to begin code implementation.*
+- **chattiness.md**: Needs 🔄 revision to document simplified per-topic impulse model vs. spec's 6-pool vision. Implementation notes added but full reconciliation deferred.
+- **layers.md**: Needs 🔄 revision to reflect actual conversation layer implementations (3 layers, not 4).

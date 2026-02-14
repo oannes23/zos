@@ -1,0 +1,46 @@
+# DM Response Layer
+#
+# Responds to direct message conversations when impulse threshold is reached.
+# Context includes user insights, dyad insights, channel context, and DM history.
+# Model: Sonnet (moderate tier) for natural conversation.
+
+name: dm-response
+category: response
+description: |
+  Respond to a DM conversation with accumulated context.
+  Triggered when user topic impulse exceeds threshold.
+
+trigger: impulse_threshold
+target_category: user
+
+nodes:
+  - name: fetch_dm_history
+    type: fetch_messages
+    params:
+      source: dm
+      max_messages: 50
+      lookback_hours: 24
+      use_greater: true
+
+  - name: fetch_user_insights
+    type: fetch_insights
+    params:
+      max_per_topic: 10
+      include_dyads: true
+      dyad_max_per_topic: 5
+      include_channels: true
+      channel_max_per_topic: 3
+
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/dm-response.jinja2
+      model: moderate
+      max_tokens: 1024
+      temperature: 0.8
+
+  - name: send
+    type: output
+    params:
+      destination: discord
+      review: true

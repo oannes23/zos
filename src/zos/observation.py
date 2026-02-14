@@ -23,7 +23,7 @@ import json
 import re
 import signal
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.ext import commands, tasks
@@ -59,6 +59,7 @@ from zos.models import (
 )
 
 if TYPE_CHECKING:
+    from zos.chattiness import ImpulseEngine
     from zos.config import Config
     from zos.salience import EarningCoordinator
     from zos.scheduler import ReflectionScheduler
@@ -171,6 +172,19 @@ class ZosBot(commands.Bot):
         # Earning coordinator for salience (lazy initialized when engine is available)
         self._earning_coordinator: "EarningCoordinator | None" = None
 
+        # Impulse engine for conversation triggering (set externally via cli.py)
+        self._impulse_engine: "ImpulseEngine | None" = None
+
+        # Layer executor for conversation dispatch (set externally via cli.py)
+        self._executor: Any | None = None
+        self._layer_loader: Any | None = None
+
+        # Typing tracker: channel_id → last_typing_at (UTC)
+        self._typing_channels: dict[str, datetime] = {}
+
+        # Conversation heartbeat task
+        self._conversation_heartbeat_task: asyncio.Task | None = None
+
     async def setup_hook(self) -> None:
         """Called when bot is ready to start tasks.
 
@@ -211,6 +225,84 @@ class ZosBot(commands.Bot):
                 self._process_link_queue()
             )
             log.info("background_task_started", task="link_analysis")
+
+        # Start conversation heartbeat if chattiness is enabled
+        if self.config.chattiness.enabled:
+            self._conversation_heartbeat_task = asyncio.create_task(
+                self._conversation_heartbeat_loop()
+            )
+            log.info(
+                "background_task_started",
+                task="conversation_heartbeat",
+                interval_seconds=self.config.chattiness.heartbeat_interval_seconds,
+            )
+
+    # =========================================================================
+    # Typing Awareness & Real-time Message Handling
+    # =========================================================================
+
+    async def on_typing(
+        self,
+        channel: discord.abc.Messageable,
+        user: discord.User | discord.Member,
+        when: datetime,
+    ) -> None:
+        """Track when someone is typing — Zos waits before responding."""
+        if user == self.user:
+            return
+        self._typing_channels[str(channel.id)] = when
+
+    def is_someone_typing(self, channel_id: str) -> bool:
+        """Check if someone typed recently (within 15s) in a channel."""
+        last = self._typing_channels.get(channel_id)
+        if not last:
+            return False
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - last).total_seconds() < 15
+
+    async def on_message(self, message: discord.Message) -> None:
+        """Handle incoming messages for real-time DM processing.
+
+        Channel messages are still handled by polling. This handler adds
+        real-time DM ingestion and impulse earning for conversation.
+        """
+        if message.author == self.user:
+            return
+
+        if not self.config.chattiness.enabled:
+            # Process commands even when chattiness is disabled
+            await self.process_commands(message)
+            return
+
+        # Only handle DMs here (channels handled by polling)
+        if isinstance(message.channel, discord.DMChannel):
+            # In operator_dm_only, only earn impulse for operators
+            if self.config.chattiness.operator_dm_only:
+                if str(message.author.id) not in self.config.discord.operators.user_ids:
+                    await self.process_commands(message)
+                    return
+
+            # Ingest the DM message to database (upsert — safe if poll also picks it up)
+            await self._ensure_channel(message.channel, None)
+            await self._ensure_user(str(message.author.id))
+            await self._store_message(message, None)
+
+            # Earn impulse on user topic
+            if self._impulse_engine is not None:
+                user_topic = f"user:{message.author.id}"
+                self._impulse_engine.earn(
+                    user_topic,
+                    self.config.chattiness.dm_impulse_per_message,
+                    trigger=f"dm:{message.id}",
+                )
+                log.debug(
+                    "dm_impulse_earned",
+                    user_id=str(message.author.id),
+                    amount=self.config.chattiness.dm_impulse_per_message,
+                )
+
+        await self.process_commands(message)
 
     def _get_llm_client(self) -> ModelClient:
         """Get or create the LLM client for vision analysis.
@@ -901,6 +993,19 @@ class ZosBot(commands.Bot):
                 channel_name=channel.name,
                 messages_stored=messages_stored,
             )
+
+            # Earn channel impulse for new messages
+            if (
+                self.config.chattiness.enabled
+                and self._impulse_engine is not None
+            ):
+                channel_topic = f"server:{server_id}:channel:{channel_id}"
+                amount = messages_stored * self.config.chattiness.channel_impulse_per_message
+                self._impulse_engine.earn(
+                    channel_topic,
+                    amount,
+                    trigger=f"poll:{messages_stored}_msgs",
+                )
 
         # Phase 2: Re-sync reactions by checking stored messages from database
         # This catches reactions added to older messages after they were first polled
@@ -2021,6 +2126,176 @@ class ZosBot(commands.Bot):
 
         log.debug("link_analysis_task_stopped")
 
+    # =========================================================================
+    # Conversation Heartbeat & Dispatch
+    # =========================================================================
+
+    async def _conversation_heartbeat_loop(self) -> None:
+        """Background loop that checks impulse thresholds and dispatches conversation.
+
+        Runs every heartbeat_interval_seconds. For each topic above threshold,
+        checks if someone is still typing, then dispatches the appropriate
+        conversation layer.
+        """
+        await self.wait_until_ready()
+        interval = self.config.chattiness.heartbeat_interval_seconds
+        log.debug("conversation_heartbeat_started", interval=interval)
+
+        while not self._shutdown_requested:
+            try:
+                await asyncio.sleep(interval)
+
+                if not self.config.chattiness.enabled:
+                    continue
+                if self._impulse_engine is None:
+                    continue
+
+                topics_above = self._impulse_engine.get_topics_above_threshold()
+                if not topics_above:
+                    continue
+
+                for topic_key, impulse in topics_above:
+                    # Check if someone is still typing in the relevant channel/DM
+                    channel_id = self._resolve_channel_for_topic(topic_key)
+                    if channel_id and self.is_someone_typing(channel_id):
+                        log.debug(
+                            "heartbeat_skip_typing",
+                            topic_key=topic_key,
+                            channel_id=channel_id,
+                        )
+                        continue
+
+                    from zos.chattiness import extract_category
+
+                    category = extract_category(topic_key)
+
+                    # Select conversation layer based on category
+                    layer_name = {
+                        "channel": "channel-speak",
+                        "user": "dm-response",
+                        "subject": "subject-share",
+                    }.get(category)
+
+                    if not layer_name:
+                        continue
+
+                    # Dispatch conversation
+                    await self._dispatch_conversation(topic_key, layer_name)
+
+                    # Reset impulse after speaking
+                    self._impulse_engine.reset(
+                        topic_key, trigger=f"spoke:{layer_name}"
+                    )
+
+            except asyncio.CancelledError:
+                log.debug("conversation_heartbeat_cancelled")
+                break
+            except Exception as e:
+                log.error("conversation_heartbeat_error", error=str(e))
+
+        log.debug("conversation_heartbeat_stopped")
+
+    def _resolve_channel_for_topic(self, topic_key: str) -> str | None:
+        """Extract channel/DM ID from a topic key for typing checks.
+
+        Returns the Discord channel ID, or None if not resolvable.
+        """
+        # Channel topic: server:<id>:channel:<channel_id>
+        if ":channel:" in topic_key:
+            parts = topic_key.split(":channel:")
+            if len(parts) == 2:
+                return parts[1]
+
+        # User topic: user:<user_id> — resolve to DM channel
+        if topic_key.startswith("user:"):
+            user_id = topic_key.split(":", 1)[1]
+            # Look up DM channel for this user from discord.py cache
+            for dm in self.private_channels:
+                if (
+                    isinstance(dm, discord.DMChannel)
+                    and dm.recipient
+                    and str(dm.recipient.id) == user_id
+                ):
+                    return str(dm.id)
+
+        return None
+
+    async def _dispatch_conversation(
+        self, topic_key: str, layer_name: str
+    ) -> None:
+        """Dispatch a conversation layer for a topic.
+
+        Loads the layer, builds context, executes, and handles output routing.
+        """
+        if self._executor is None or self._layer_loader is None:
+            log.warning("dispatch_no_executor", topic_key=topic_key)
+            return
+
+        layer = self._layer_loader.get_layer(layer_name)
+        if layer is None:
+            log.error("dispatch_layer_not_found", layer_name=layer_name)
+            return
+
+        from zos.chattiness import extract_category
+        from zos.models import Topic, TopicCategory
+
+        category = extract_category(topic_key)
+
+        # Build a Topic object for execution context
+        topic_category_map = {
+            "channel": TopicCategory.CHANNEL,
+            "user": TopicCategory.USER,
+            "subject": TopicCategory.SUBJECT,
+        }
+        topic_category = topic_category_map.get(category, TopicCategory.CHANNEL)
+        topic = Topic(
+            key=topic_key,
+            category=topic_category,
+            is_global=not topic_key.startswith("server:"),
+        )
+
+        # Build send context for output routing
+        send_context: dict[str, Any] = {}
+        if self.config.chattiness.operator_dm_only:
+            send_context["operator_dm"] = True
+        elif category == "user":
+            user_id = topic_key.split(":", 1)[1]
+            send_context["dm_user_id"] = user_id
+        elif category == "channel":
+            channel_id = self._resolve_channel_for_topic(topic_key)
+            if channel_id:
+                send_context["channel_id"] = channel_id
+
+        log.info(
+            "conversation_dispatch",
+            topic_key=topic_key,
+            layer_name=layer_name,
+            operator_dm_only=self.config.chattiness.operator_dm_only,
+        )
+
+        try:
+            # Add operator_dm_only to send_context so executor can pass to templates
+            send_context["operator_dm_only"] = self.config.chattiness.operator_dm_only
+
+            # Execute layer — executor creates context per topic, passing send_context
+            run = await self._executor.execute_layer(
+                layer, [topic_key], send_context=send_context
+            )
+
+            log.info(
+                "conversation_dispatch_complete",
+                topic_key=topic_key,
+                layer_name=layer_name,
+                status=run.status.value if run else "unknown",
+            )
+        except Exception as e:
+            log.error(
+                "conversation_dispatch_failed",
+                topic_key=topic_key,
+                layer_name=layer_name,
+                error=str(e),
+            )
+
     async def graceful_shutdown(self) -> None:
         """Perform graceful shutdown.
 
@@ -2051,6 +2326,14 @@ class ZosBot(commands.Bot):
             except asyncio.CancelledError:
                 pass
             log.debug("link_analysis_task_cancelled")
+
+        if self._conversation_heartbeat_task is not None:
+            self._conversation_heartbeat_task.cancel()
+            try:
+                await self._conversation_heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            log.debug("conversation_heartbeat_cancelled")
 
         # Close the LLM client if initialized
         if self._llm_client is not None:
@@ -2087,6 +2370,10 @@ async def run_bot(
     config: Config,
     engine: Engine | None = None,
     scheduler: "ReflectionScheduler | None" = None,
+    impulse_engine: "ImpulseEngine | None" = None,
+    executor: Any | None = None,
+    layer_loader: Any | None = None,
+    bot_ref: list | None = None,
 ) -> None:
     """Run the Discord observation bot.
 
@@ -2097,8 +2384,25 @@ async def run_bot(
         config: Application configuration with discord_token.
         engine: SQLAlchemy database engine for message storage.
         scheduler: Optional ReflectionScheduler for reflection commands.
+        impulse_engine: Optional ImpulseEngine for conversation triggering.
+        executor: Optional LayerExecutor for conversation dispatch.
+        layer_loader: Optional LayerLoader for conversation layers.
+        bot_ref: Mutable list to receive bot reference (for send_callback).
     """
     bot = ZosBot(config, engine, scheduler)
+
+    # Wire conversation components
+    if impulse_engine is not None:
+        bot._impulse_engine = impulse_engine
+    if executor is not None:
+        bot._executor = executor
+    if layer_loader is not None:
+        bot._layer_loader = layer_loader
+
+    # Expose bot reference for send_callback
+    if bot_ref is not None:
+        bot_ref.append(bot)
+
     loop = asyncio.get_running_loop()
 
     # Setup signal handlers for graceful shutdown

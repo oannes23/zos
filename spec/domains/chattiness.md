@@ -1,8 +1,8 @@
 # Chattiness — Domain Specification
 
-**Status**: 🟢 Complete
+**Status**: 🔄 Needs revision — MVP 1 implementation simplified impulse model
 **Last interrogated**: 2026-01-23 (added reaction as output modality)
-**Last verified**: —
+**Last verified**: 2026-02-13 (implementation diverges from spec — see Implementation Notes)
 **Depends on**: Topics, Privacy, Salience, Insights, Layers (integrates all domains)
 **Depended on by**: Conversation Layers (layers.md), MVP 1 conversation mechanics
 
@@ -624,4 +624,102 @@ Additional integration:
 
 ---
 
-_Last updated: 2026-01-23 — Reaction as output modality; acknowledgment layer replaced_
+---
+
+## MVP 1 Implementation Notes (2026-02-13)
+
+> **The spec above describes the full vision. MVP 1 intentionally simplified the impulse model.** This section documents what was actually built and the rationale for divergences. The full vision remains the target for future iterations.
+
+### Simplified Impulse Model
+
+The spec describes 6 separate impulse pools with per-pool thresholds, 3-dimensional tracking (pool × channel × topic), and global speech pressure. The implementation simplifies to:
+
+| Spec Vision | MVP 1 Implementation |
+|-------------|---------------------|
+| 6 separate impulse pools | Per-topic impulse (no pools) |
+| Per-pool thresholds | One global threshold (default 25) |
+| Pool × channel × topic tracking | Per-topic only |
+| Proportional spending | Reset-to-zero after speaking |
+| Global speech pressure | None — the reset IS rate limiting |
+| Self-adjusting threshold | Fixed threshold from config |
+
+**Rationale**: The simplified model validates the core loop (earn impulse → exceed threshold → speak → reset) without the complexity of pool management. Topic category determines earning rates, which naturally creates differentiation.
+
+### Earning Rules by Topic Category
+
+| Category | Trigger | Amount | Notes |
+|----------|---------|--------|-------|
+| **Channel** | Message observed in channel | +1 per message | ~25 messages to trigger |
+| **User** | DM sent to Zos | +100 per message | Floods past threshold (impulse flooding) |
+| **Subject** | Nightly reflection produces insight | +10 per insight | Proportional to reflection output |
+
+Reaction impulse, curiosity impulse, and conversational impulse (as separate pools) are deferred.
+
+### Operator DM Mode
+
+New concept not in original spec: `operator_dm_only: true` gates ALL speech to operator DMs.
+
+- Channel impulse fires → DM operators about what Zos noticed in that channel
+- User DM impulse fires → respond in that DM (only for operators)
+- Subject impulse fires → DM operators with subject insight
+- Non-operator DMs: observed for reflection but no impulse earned, no response
+
+This provides a safe testing mode before enabling public speech.
+
+### Conversation Heartbeat
+
+New concept not in original spec: a background loop running every ~30 seconds that:
+
+1. Queries all topics where `SUM(impulse) > threshold`
+2. Checks if someone is still typing in the relevant channel/DM — if so, skip
+3. Dispatches the appropriate conversation layer
+4. Resets impulse on the topic
+
+**Typing awareness**: Uses discord.py's `on_typing` event to track when someone is composing a message. If someone typed within the last 15 seconds in the target channel/DM, Zos waits. This prevents interrupting someone mid-thought.
+
+**Natural DM pacing**: `on_message` captures DM + earns impulse, but response waits for next heartbeat (0-30s). Multiple rapid DMs accumulate into one thoughtful response.
+
+### ImpulseEngine (`src/zos/chattiness.py`)
+
+New module implementing the simplified impulse system:
+
+- `earn(topic_key, amount, trigger)` — Write EARN transaction to chattiness_ledger
+- `get_balance(topic_key)` — SUM(amount) from ledger for this topic
+- `reset(topic_key, trigger)` — Write negative RESET transaction (zeroes balance)
+- `get_topics_above_threshold()` — GROUP BY/HAVING query for heartbeat
+- `apply_decay()` — Decay impulse on topics with no recent earning
+
+Uses existing `chattiness_ledger` table. No schema migration needed.
+
+### Configuration (Actual)
+
+```python
+class ChattinessConfig(BaseModel):
+    enabled: bool = False                    # Master switch
+    operator_dm_only: bool = True            # All output → operator DMs
+    threshold: float = 25                    # Single impulse threshold
+    channel_impulse_per_message: float = 1.0
+    dm_impulse_per_message: float = 100.0
+    subject_impulse_per_insight: float = 10.0
+    heartbeat_interval_seconds: int = 30
+    decay_threshold_hours: float = 1         # Hours before decay begins
+    decay_rate_per_hour: float = 0.05        # 5% per hour
+    review_enabled: bool = True              # Self-review before sending
+```
+
+### What's Deferred to Future Iterations
+
+- Separate impulse pools (address, insight, conversational, curiosity, reaction)
+- Global speech pressure
+- Per-channel tracking within pools
+- Self-adjusting threshold (within operator bounds)
+- Reaction as output modality (emoji reactions)
+- Question/curiosity layer
+- Chaining between conversation layers
+- Output channel routing
+- Per-server pool enable/disable
+- Adaptive voice mechanics
+
+---
+
+_Last updated: 2026-02-13 — Added MVP 1 implementation notes documenting simplified impulse model_

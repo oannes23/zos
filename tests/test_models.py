@@ -1884,13 +1884,13 @@ class TestEnums:
 
     def test_impulse_pool_values(self) -> None:
         """Test impulse pool enum values."""
-        expected = {"address", "insight", "conversational", "curiosity", "presence"}
+        expected = {"address", "insight", "conversational", "curiosity", "reaction"}
         actual = {p.value for p in ImpulsePool}
         assert actual == expected
 
     def test_chattiness_transaction_type_values(self) -> None:
         """Test chattiness transaction type values."""
-        expected = {"earn", "spend", "decay", "flood"}
+        expected = {"earn", "spend", "decay", "flood", "reset"}
         actual = {t.value for t in ChattinessTransactionType}
         assert actual == expected
 

@@ -71,16 +71,21 @@ class ChattinessTransactionType(str, Enum):
     SPEND = "spend"
     DECAY = "decay"
     FLOOD = "flood"
+    RESET = "reset"
 
 
 class ImpulsePool(str, Enum):
-    """Chattiness impulse pools."""
+    """Chattiness impulse pools.
+
+    With per-topic impulse, the pool is less critical — topic_key provides
+    differentiation. Kept for DB compatibility and optional categorization.
+    """
 
     ADDRESS = "address"
     INSIGHT = "insight"
     CONVERSATIONAL = "conversational"
     CURIOSITY = "curiosity"
-    PRESENCE = "presence"
+    REACTION = "reaction"
 
 
 class LayerRunStatus(str, Enum):

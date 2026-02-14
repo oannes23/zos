@@ -1,8 +1,8 @@
 # Layers — Domain Specification
 
-**Status**: 🟢 Complete
+**Status**: 🔄 Needs revision — MVP 1 conversation layers implemented (3 of 4 spec'd)
 **Last interrogated**: 2026-01-23 (acknowledgment layer deprecated; replaced by reactions)
-**Last verified**: 2026-01-28
+**Last verified**: 2026-02-13 (conversation layers implemented, diverges from examples)
 **Depends on**: Topics, Salience, Insights, Privacy, Chattiness
 **Depended on by**: None (top of dependency chain for cognition)
 
@@ -1072,4 +1072,168 @@ Chaining is limited to prevent runaway responses:
 
 ---
 
-_Last updated: 2026-01-28 — Forward-looking curiosity guidance, appreciation in self-reflection, expanded valence metrics (🟡 Open Issues)_
+---
+
+## MVP 1 Implementation Notes (2026-02-13)
+
+> **The conversation layer examples above describe the full vision. MVP 1 implemented a simplified set.** This section documents what was actually built.
+
+### Implemented Conversation Layers
+
+Three conversation layers were implemented (vs. 4 in the spec). The question layer is deferred.
+
+#### `dm-response` (category: response)
+
+Responds to DM conversations. Triggered by impulse threshold (DM impulse floods at 100/message).
+
+```yaml
+name: dm-response
+category: response
+description: Respond to a DM conversation with accumulated context.
+trigger: impulse_threshold
+nodes:
+  - name: fetch_dm_history
+    type: fetch_messages
+    params:
+      source: dm
+      max_messages: 50
+      lookback_hours: 24
+      use_greater: true
+  - name: fetch_user_insights
+    type: fetch_insights
+    params:
+      max_per_topic: 10
+      include_dyads: true
+      include_channels: true
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/dm-response.jinja2
+      model: moderate
+      max_tokens: 1024
+      temperature: 0.8
+  - name: send
+    type: output
+    params:
+      destination: discord
+      review: true
+```
+
+#### `channel-speak` (category: participation)
+
+Contributes to channel conversation when impulse threshold reached (~25 messages).
+
+```yaml
+name: channel-speak
+category: participation
+description: Contribute to a channel conversation when impulse threshold reached.
+trigger: impulse_threshold
+nodes:
+  - name: fetch_channel_messages
+    type: fetch_messages
+    params:
+      max_messages: 25
+      lookback_hours: 24
+      use_greater: true
+  - name: fetch_channel_context
+    type: fetch_insights
+    params:
+      max_per_topic: 10
+      include_users: true
+      include_dyads: true
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/channel-speak.jinja2
+      model: moderate
+      max_tokens: 1024
+      temperature: 0.8
+  - name: send
+    type: output
+    params:
+      destination: discord
+      review: true
+```
+
+#### `subject-share` (category: insight_sharing)
+
+Shares subject insight after reflection generates enough impulse.
+
+```yaml
+name: subject-share
+category: insight_sharing
+description: Share subject insight after reflection.
+trigger: impulse_threshold
+nodes:
+  - name: fetch_subject_insights
+    type: fetch_insights
+    params:
+      max_per_topic: 5
+  - name: generate
+    type: llm_call
+    params:
+      prompt_template: conversation/subject-share.jinja2
+      model: moderate
+      max_tokens: 512
+      temperature: 0.8
+  - name: send
+    type: output
+    params:
+      destination: discord
+      review: true
+```
+
+### LayerCategory Additions
+
+Three new categories added to the enum:
+
+| Category | Python Enum | Purpose |
+|----------|-------------|---------|
+| `response` | `LayerCategory.RESPONSE` | DM response |
+| `participation` | `LayerCategory.PARTICIPATION` | Channel contribution |
+| `insight_sharing` | `LayerCategory.INSIGHT_SHARING` | Subject insight sharing |
+
+Note: `question` category not yet implemented. The spec's `insight-sharing` (hyphenated) became `insight_sharing` (underscored) to match Python enum conventions.
+
+### Executor Conversation Support
+
+The `LayerExecutor` was upgraded to support conversation output:
+
+- **`send_callback`**: Async callback passed to executor, decoupling it from discord.py
+- **`send_context`**: Dict passed through to templates (includes `operator_dm_only`, `topic_key`, destination info)
+- **`destination: discord`**: New output destination type (in addition to existing `log`)
+- **`LLMCallType.CONVERSATION`**: Dynamic call type selection — conversation categories use CONVERSATION, reflection uses REFLECTION
+- **`conversation_log`**: Zos's own messages logged for future conversation context
+
+### Prompt Template Organization
+
+```
+prompts/
+├── conversation/
+│   ├── dm-response.jinja2      # DM response (user insights, dyad context, messages)
+│   ├── channel-speak.jinja2    # Channel participation (channel context, user insights)
+│   └── subject-share.jinja2    # Subject insight sharing (subject insights, self-concept)
+├── user/
+│   └── ...
+├── ...
+```
+
+All conversation templates include:
+- Self-concept (always)
+- `operator_dm_only` flag for framing (when true, contextualizes where conversation came from)
+- Voice guidance: authentic, not performative
+- Privacy guidance: DM-sourced knowledge handled with discretion
+
+### What's Deferred
+
+- Question layer (curiosity impulse, `fetch_open_questions` node)
+- `fetch_thread` node (thread-aware context)
+- `fetch_drafts` node (draft history)
+- `fetch_context` node (impulse trigger context)
+- Priority flagging for reflection
+- Limited chaining between conversation layers
+- `flag_for_reflection` parameter on output nodes
+
+---
+
+_Last updated: 2026-02-13 — Added MVP 1 implementation notes for conversation layers_

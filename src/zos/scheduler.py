@@ -35,6 +35,7 @@ from zos.models import LayerRun, utcnow
 from zos.salience import BudgetGroup, ReflectionSelector
 
 if TYPE_CHECKING:
+    from zos.chattiness import ImpulseEngine
     from zos.config import Config
     from zos.executor import LayerExecutor
     from zos.salience import SalienceLedger
@@ -88,6 +89,9 @@ class ReflectionScheduler:
         self.ledger = ledger
         self.config = config
         self._db_path = db_path  # Stored for reference but not used
+
+        # Impulse engine for post-reflection subject impulse (set externally)
+        self.impulse_engine: "ImpulseEngine | None" = None
 
         # Resolve configured timezone
         tz_name = config.scheduler.timezone
@@ -224,6 +228,10 @@ class ReflectionScheduler:
                 targets_processed=run.targets_processed,
             )
 
+            # Post-reflection: earn subject impulse for insights created
+            if run.insights_created > 0 and layer.category == LayerCategory.SUBJECT:
+                await self._post_reflection_impulse(run, topics)
+
             return run
 
         except Exception as e:
@@ -233,6 +241,33 @@ class ReflectionScheduler:
                 error=str(e),
             )
             return None
+
+    async def _post_reflection_impulse(
+        self, run: LayerRun, topics: list[str]
+    ) -> None:
+        """Earn subject impulse for insights created during reflection.
+
+        Called after subject reflection completes. Each processed subject topic
+        gets impulse proportional to the insight count.
+        """
+        if not self.config.chattiness.enabled:
+            return
+        if self.impulse_engine is None:
+            return
+
+        amount = self.config.chattiness.subject_impulse_per_insight
+        for topic_key in topics:
+            self.impulse_engine.earn(
+                topic_key,
+                amount,
+                trigger=f"reflection:{run.id}",
+            )
+            log.debug(
+                "subject_impulse_earned",
+                topic_key=topic_key,
+                amount=amount,
+                run_id=run.id,
+            )
 
     async def _select_topics(self, layer: Layer) -> list[str]:
         """Select topics for a layer based on its configuration.

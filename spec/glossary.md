@@ -108,7 +108,9 @@ A layer triggered by schedule (cron) that produces insights. Reflection layers p
 
 A layer triggered by chattiness impulse exceeding threshold that produces speech. Conversation layers respond in real-time, drawing on accumulated insights. Analogous to waking response.
 
-Types: Response (direct address), Insight-sharing (unprompted), Participation (joining conversation), Question (curiosity), Acknowledgment (presence without content).
+**Spec vision types**: Response (direct address), Insight-sharing (unprompted), Participation (joining conversation), Question (curiosity).
+
+**MVP 1 implemented**: dm-response (category: response), channel-speak (category: participation), subject-share (category: insight_sharing). Question layer deferred.
 
 ### Draft History
 
@@ -259,12 +261,19 @@ Special node types:
 ### Layer Category
 
 Each layer declares a category from a fixed set that determines budget allocation and organization:
+
+**Reflection categories** (scheduled):
 - `user` — reflects on individual users
 - `dyad` — reflects on relationships
 - `channel` — reflects on spaces/channels
 - `subject` — reflects on semantic topics
 - `self` — self-reflection
 - `synthesis` — consolidates insights across scopes
+
+**Conversation categories** (impulse-triggered, added MVP 1):
+- `response` — DM response ("someone spoke to me")
+- `participation` — channel contribution ("I have something to add")
+- `insight_sharing` — subject insight sharing ("I learned something")
 
 ### Target Filter
 
@@ -308,17 +317,16 @@ See [chattiness.md](domains/chattiness.md) for full specification.
 
 ### Impulse
 
-The accumulated drive to speak. Tracked in **five separate pools**, each corresponding to a conversation layer:
+The accumulated drive to speak.
 
-| Pool | Layer | Drive |
-|------|-------|-------|
-| Address impulse | Response | "Someone spoke to me" |
-| Insight impulse | Insight-sharing | "I learned something" |
-| Conversational impulse | Participation | "I have something to add" |
-| Curiosity impulse | Question | "I want to understand" |
-| Presence impulse | Acknowledgment | "I noticed this" |
+**Spec vision**: Tracked in five separate pools (address, insight, conversational, curiosity, reaction), each per-channel and per-topic.
 
-Within each pool, impulse is tracked per-channel and per-topic.
+**MVP 1 implementation**: Simplified to **per-topic impulse** with a single threshold. Topic category determines earning rates:
+- Channel topics: +1 per message observed (~25 to trigger)
+- User topics: +100 per DM (floods past threshold)
+- Subject topics: +10 per insight from reflection
+
+Impulse resets to zero after speaking. No separate pools, no global speech pressure. See [chattiness.md](domains/chattiness.md) → MVP 1 Implementation Notes.
 
 ### Global Speech Pressure
 
@@ -432,6 +440,22 @@ A scheduled self-reflection triggered after a self-modification proposal is impl
 
 ---
 
+### Impulse Engine
+
+The core module (`src/zos/chattiness.py`) implementing per-topic impulse tracking for the conversation system. Provides: `earn()` (write EARN transactions), `get_balance()` (SUM query), `reset()` (write negative RESET transaction), `get_topics_above_threshold()` (GROUP BY/HAVING for heartbeat), `apply_decay()` (periodic decay). Uses synchronous SQLAlchemy Core operations on the existing `chattiness_ledger` table. Added in MVP 1.
+
+### Conversation Heartbeat
+
+A background loop (~30 seconds) that checks impulse thresholds and dispatches conversation layers. The heartbeat queries all topics where `SUM(impulse) > threshold`, checks typing awareness, dispatches the appropriate conversation layer, and resets impulse. Creates natural DM pacing: multiple rapid messages accumulate into one thoughtful response. Added in MVP 1.
+
+### Operator DM Mode
+
+Configuration flag (`operator_dm_only: true`) that gates all Zos speech output to operator DMs instead of public channels. Channel impulse fires → DM operators about what Zos noticed. User DM impulse → respond only to operators. Non-operator DMs are observed for reflection but earn no impulse. Provides a safe testing mode before enabling public speech. Added in MVP 1.
+
+### Typing Awareness
+
+Mechanism using discord.py's `on_typing` event to track when someone is composing a message. If someone typed within the last 15 seconds in the target channel/DM, the conversation heartbeat skips that topic and waits. Prevents Zos from interrupting someone mid-thought. Added in MVP 1.
+
 ### Soft Delete Tombstone
 
 When a user deletes a message, Zos marks it as deleted (with `deleted_at` timestamp) rather than removing it from the database. The message is excluded from new reflection but preserved for audit and to maintain context integrity. Zos experiences deletions as "unsayings" — the retraction is recorded as an event, not a vanishing.
@@ -476,4 +500,4 @@ The atomic unit of implementation work. Completable in one focused session. Has 
 
 ---
 
-_Last updated: 2026-01-28 — Expanded valence dimensions, open questions, appreciation (all 🟡 Open Issues for phenomenological coherence)_
+_Last updated: 2026-02-13 — Added MVP 1 terms: Impulse Engine, Conversation Heartbeat, Operator DM Mode, Typing Awareness. Updated Impulse, Layer Category, Conversation Layer definitions to reflect implementation._
