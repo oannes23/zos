@@ -709,21 +709,30 @@ nodes:
       target_topic: "user:{{target_user_id}}"
 ```
 
-### Weekly Emoji Pattern Analysis
+### Nightly Emoji Pattern Analysis
 
 ```yaml
-name: weekly-emoji-patterns
+name: nightly-emoji-patterns
 category: user
 description: |
-  Analyze user emoji reaction patterns to understand their
-  expressive style and what resonates with them.
+  Analyze user emoji reaction patterns alongside recent conversation
+  context to understand their expressive style and what resonates with them.
 
-schedule: "0 4 * * 0"  # Sunday at 4 AM
+schedule: "0 3 * * *"  # Nightly at 3 AM
 target_category: user
-target_filter: "salience > 30"
+target_filter: "salience >= 10"
 max_targets: 10
 
 nodes:
+  - name: fetch_recent_messages
+    type: fetch_messages
+    params:
+      lookback_hours: 168  # 7 days
+      conversation_context: true
+      context_window_hours: 2
+      context_min_messages: 10
+      max_channels: 15
+
   - name: fetch_reactions
     type: fetch_reactions
     params:

@@ -324,7 +324,7 @@ The built-in layers cover five of the six possible categories:
 
 | Category | Built-in Layer | Description |
 |----------|----------------|-------------|
-| `user` | nightly-user-reflection, weekly-emoji-patterns | Individual understanding |
+| `user` | nightly-user-reflection, nightly-emoji-patterns | Individual understanding |
 | `self` | weekly-self-reflection | Self-understanding |
 | `dyad` | nightly-dyad-reflection | Relationship understanding |
 | `channel` | nightly-channel-reflection | Space understanding |

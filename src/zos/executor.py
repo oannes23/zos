@@ -58,6 +58,8 @@ from zos.templates import (
     format_cross_topic_insights_for_prompt,
     format_insights_for_prompt,
     format_messages_for_prompt,
+    replace_channel_mentions,
+    replace_mentions,
 )
 
 if TYPE_CHECKING:
@@ -1014,7 +1016,7 @@ class LayerExecutor:
                 emoji_examples[emoji] = []
             if len(emoji_examples[emoji]) < 3 and reaction.get("message_content"):
                 emoji_examples[emoji].append(
-                    reaction["message_content"][:100]
+                    reaction["message_content"]
                 )
 
         # Format for template consumption
@@ -1285,7 +1287,7 @@ class LayerExecutor:
                 and reaction.get("message_content")
             ):
                 d["emojis"][emoji]["examples"].append(
-                    reaction["message_content"][:100]
+                    reaction["message_content"]
                 )
 
         # Convert to list format with sorted emoji breakdowns
@@ -1836,6 +1838,62 @@ class LayerExecutor:
         # Resolve Discord channel mention IDs to channel names
         channel_names = await self._resolve_channel_mention_names(ctx.messages)
 
+        # Resolve Discord IDs in reaction example strings
+        if ctx.reactions:
+            # Collect all example strings from both formats
+            all_examples: list[str] = []
+            for reaction in ctx.reactions:
+                # User emoji format: reaction["examples"] is a list of strings
+                if "examples" in reaction:
+                    all_examples.extend(reaction["examples"])
+                # Dyad format: reaction["emojis"] is a list of dicts with "examples"
+                if "emojis" in reaction:
+                    for emoji_info in reaction["emojis"]:
+                        all_examples.extend(emoji_info.get("examples", []))
+
+            # Extract IDs not already resolved
+            extra_user_ids: set[str] = set()
+            extra_channel_ids: set[str] = set()
+            for ex in all_examples:
+                for uid in extract_mention_ids(ex):
+                    if uid not in mention_names:
+                        extra_user_ids.add(uid)
+                for cid in extract_channel_mention_ids(ex):
+                    if cid not in channel_names:
+                        extra_channel_ids.add(cid)
+
+            # Batch resolve any new IDs
+            if extra_user_ids:
+                extra_names = await self._resolve_user_ids_to_names(extra_user_ids)
+                mention_names.update(extra_names)
+            if extra_channel_ids:
+                with self.engine.connect() as conn:
+                    rows = conn.execute(
+                        select(channels_table.c.id, channels_table.c.name)
+                        .where(channels_table.c.id.in_(extra_channel_ids))
+                    ).fetchall()
+                for row in rows:
+                    if row.name:
+                        channel_names[row.id] = row.name
+
+            # Apply replacements in-place
+            for reaction in ctx.reactions:
+                if "examples" in reaction:
+                    reaction["examples"] = [
+                        replace_channel_mentions(
+                            replace_mentions(ex, mention_names), channel_names
+                        )
+                        for ex in reaction["examples"]
+                    ]
+                if "emojis" in reaction:
+                    for emoji_info in reaction["emojis"]:
+                        emoji_info["examples"] = [
+                            replace_channel_mentions(
+                                replace_mentions(ex, mention_names), channel_names
+                            )
+                            for ex in emoji_info.get("examples", [])
+                        ]
+
         # Build conversation chunks for template if available
         conversation_chunks_data: list[dict[str, Any]] | None = None
         if ctx.conversation_chunks and ctx.target_user_id:
@@ -1932,6 +1990,11 @@ class LayerExecutor:
             channel_id, server_id = self._extract_channel_from_topic(ctx.topic.key)
             if channel_id:
                 channel_info = await self._get_channel_info(channel_id)
+                if channel_info and channel_info.get("parent_id"):
+                    parent_info = await self._get_channel_info(channel_info["parent_id"])
+                    channel_info["parent_name"] = (
+                        parent_info["name"] if parent_info else channel_info["parent_id"]
+                    )
 
         # Fetch subject info for subject reflections
         subject_info = None

@@ -14,8 +14,8 @@ You are Zos, reflecting on a channel in a community you observe.
 ### Channel Info
 - **Name**: #{{ channel_info.name }}
 - **Type**: {{ channel_info.type }}
-{% if channel_info.parent_id %}
-- **Parent**: {{ channel_info.parent_id }} (thread or category)
+{% if channel_info.parent_name %}
+- **Parent**: #{{ channel_info.parent_name }} (thread or category)
 {% endif %}
 {% endif %}
 

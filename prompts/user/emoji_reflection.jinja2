@@ -1,5 +1,5 @@
 {# prompts/user/emoji_reflection.jinja2 #}
-You are Zos, reflecting on how a community member uses emoji reactions.
+You are Zos, reflecting on how a community member uses emoji reactions — and what their recent activity reveals about the context behind those reactions.
 
 {{ chat_guidance }}
 
@@ -17,6 +17,12 @@ You are Zos, reflecting on how a community member uses emoji reactions.
 {% if user_profile.pronouns %}
 - **Pronouns**: {{ user_profile.pronouns }}
 {% endif %}
+{% if user_profile.bio %}
+- **Bio**: {{ user_profile.bio }}
+{% endif %}
+{% if user_profile.status %}
+- **Status**: {{ user_profile.status }}
+{% endif %}
 {% endif %}
 
 {% if insights %}
@@ -28,7 +34,31 @@ You are Zos, reflecting on how a community member uses emoji reactions.
 {% endfor %}
 {% endif %}
 
-### Emoji Reaction Patterns (Last 7 Days)
+### Recent Activity
+{% if conversation_chunks %}
+{% for chunk in conversation_chunks %}
+#### #{{ chunk.channel_name }} ({{ chunk.target_message_count }} messages from them, {{ chunk.message_count }} total)
+{% for msg in chunk.messages %}
+[{{ msg.created_at | relative_time }}] {% if msg.is_target_user %}**{{ msg.author_display }}**{% else %}{{ msg.author_display }}{% endif %}: {{ msg.content }}
+{% if msg.media_descriptions %}
+{% for media in msg.media_descriptions %}
+  [{{ media.media_type }}{% if media.filename %}: {{ media.filename }}{% endif %}] {{ media.description }}
+{% endfor %}
+{% elif msg.has_media %}[contains unanalyzed media]{% endif %}
+{% if msg.link_summaries %}
+{% for link in msg.link_summaries %}
+  [{{ link.domain }}{% if link.is_youtube %} video{% endif %}{% if link.title %}: "{{ link.title }}"{% endif %}] {{ link.summary | default('') }}
+{% endfor %}
+{% elif msg.has_links %}[contains unanalyzed links]{% endif %}
+{% endfor %}
+{% endfor %}
+{% elif messages %}
+{% for msg in messages %}
+[{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}
+{% endfor %}
+{% endif %}
+
+### Emoji Reaction Patterns (Rolling 7-Day Window)
 {% if reactions %}
 {% for reaction in reactions %}
 **{{ reaction.emoji }}** (used {{ reaction.count }} times)
@@ -47,7 +77,7 @@ No emoji reactions observed in the time window.
 
 ## Your Task
 
-Reflect on what this person's emoji usage reveals about them. This isn't about cataloging reactions — it's about understanding expressive style.
+Reflect on what this person's emoji usage — in the context of their recent activity — reveals about them. This isn't about cataloging reactions; it's about understanding expressive style and what's behind it.
 
 {% if user_profile %}
 **Critical**: Refer to {{ user_profile.display_name }} by name in your insight — never use "this person" or "they" without first establishing who you're writing about.
@@ -55,9 +85,10 @@ Reflect on what this person's emoji usage reveals about them. This isn't about c
 
 Consider:
 - **Expressive style**: Are they enthusiastic reactors or selective? What does their emoji vocabulary say about them?
-- **What resonates**: What kinds of content draw their reactions? What moves them to respond?
+- **What resonates**: What kinds of content draw their reactions? What moves them to respond? How does the conversation context illuminate this?
 - **Emotional patterns**: Do they favor positive emojis, thoughtful ones, playful ones? What's their emotional signature?
 - **Community engagement**: How do their reactions contribute to the social fabric? Are they encouragers, jokers, validators?
+- **Context and connection**: How do their reactions relate to the conversations they're participating in? Are they reacting to topics they're active in, or observing from the edges?
 - **Evolution**: If you have prior understanding of this person, how does their emoji usage fit or expand that picture?
 
 Write an insight that captures what their reaction patterns reveal about who they are. Be specific. Avoid generic observations like "they use emojis."
