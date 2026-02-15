@@ -68,6 +68,7 @@ class LayerCategory(str, Enum):
     - dyad: Reflects on relationships
     - channel: Reflects on spaces/channels
     - subject: Reflects on semantic topics
+    - emoji: Reflects on emoji as cultural artifacts
     - self: Self-reflection
     - synthesis: Consolidates insights across scopes
 
@@ -81,6 +82,7 @@ class LayerCategory(str, Enum):
     DYAD = "dyad"
     CHANNEL = "channel"
     SUBJECT = "subject"
+    EMOJI = "emoji"
     SELF = "self"
     SYNTHESIS = "synthesis"
 

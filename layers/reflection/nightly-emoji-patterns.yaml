@@ -1,38 +1,30 @@
-# Nightly Emoji Pattern Reflection Layer
+# Nightly Emoji Reflection Layer
 #
-# Analyzes user emoji reaction patterns alongside recent conversation context
-# to understand their expressive style and what resonates with them.
-# Runs nightly at 3 AM with a rolling 7-day window.
+# Reflects on emojis as cultural artifacts — what they mean in this community,
+# who reaches for them, what messages draw them out, how their usage evolves.
+# Runs nightly at 3 AM, targeting emoji topics with salience >= 10.
 #
-# This layer implements phenomenological reflection on how users express
-# themselves through reactions, adding another dimension to understanding.
+# An emoji that accumulates salience has become part of the community's
+# shared language. This layer reflects on that significance — not on
+# any individual user's emoji habits (that belongs in user reflection).
 
 name: nightly-emoji-patterns
-category: user
+category: emoji
 description: |
-  Analyze user emoji reaction patterns alongside recent conversation
-  context to understand their expressive style and what resonates with them.
+  Reflect on emoji topics as cultural artifacts — their meaning in the
+  community, who uses them, what draws them out, how usage evolves.
 
 schedule: "0 3 * * *"  # Nightly at 3 AM
-target_category: user
+target_category: emoji
 target_filter: "salience >= 10"  # Matches config salience.min_reflection_salience
 max_targets: 10
 
 nodes:
-  - name: fetch_recent_messages
-    type: fetch_messages
-    params:
-      lookback_hours: 168  # 7 days
-      conversation_context: true
-      context_window_hours: 2
-      context_min_messages: 10
-      max_channels: 15
-
   - name: fetch_reactions
     type: fetch_reactions
     params:
       lookback_days: 7
-      min_reactions: 5  # Only users who react enough to analyze
+      min_reactions: 5  # Only emojis with enough usage to analyze
 
   - name: fetch_prior_understanding
     type: fetch_insights
@@ -43,7 +35,7 @@ nodes:
   - name: reflect
     type: llm_call
     params:
-      prompt_template: user/emoji_reflection.jinja2
+      prompt_template: emoji/reflection.jinja2
       model: reflection
       max_tokens: 4096
       temperature: 0.7
@@ -51,4 +43,4 @@ nodes:
   - name: store
     type: store_insight
     params:
-      category: user_reflection
+      category: emoji_reflection

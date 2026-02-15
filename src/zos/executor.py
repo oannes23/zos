@@ -991,6 +991,15 @@ class LayerExecutor:
             )
             return
 
+        # Emoji topics get community-wide usage analysis
+        if ctx.topic.category == TopicCategory.EMOJI:
+            await self._handle_fetch_reactions_emoji(
+                lookback_days=lookback_days,
+                min_reactions=min_reactions,
+                ctx=ctx,
+            )
+            return
+
         # Extract user_id from topic
         user_id, server_id = self._extract_user_from_topic(ctx.topic.key)
         if not user_id:
@@ -1326,6 +1335,163 @@ class LayerExecutor:
             for d in directions.values()
         ]
 
+    async def _handle_fetch_reactions_emoji(
+        self,
+        lookback_days: int,
+        min_reactions: int,
+        ctx: ExecutionContext,
+    ) -> None:
+        """Fetch community-wide usage patterns for an emoji topic.
+
+        Retrieves all reactions using this specific emoji across the server,
+        grouped by who uses it and what messages attract it.
+
+        Args:
+            lookback_days: How many days to look back.
+            min_reactions: Minimum total reactions to include.
+            ctx: The execution context.
+        """
+        emoji_name, server_id = self._extract_emoji_from_topic(ctx.topic.key)
+        if not emoji_name:
+            log.warning(
+                "fetch_reactions_emoji_no_emoji",
+                topic=ctx.topic.key,
+            )
+            return
+
+        reactions = self._get_reactions_for_emoji(
+            emoji_name=emoji_name,
+            server_id=server_id,
+            lookback_days=lookback_days,
+        )
+
+        if len(reactions) < min_reactions:
+            log.debug(
+                "fetch_reactions_emoji_insufficient",
+                emoji=emoji_name,
+                count=len(reactions),
+                min_required=min_reactions,
+            )
+            ctx.reactions = []
+            return
+
+        # Group by user to see who uses this emoji
+        user_counts: dict[str, int] = {}
+        user_examples: dict[str, list[str]] = {}
+
+        for reaction in reactions:
+            user_id = reaction["user_id"]
+            user_counts[user_id] = user_counts.get(user_id, 0) + 1
+
+            if user_id not in user_examples:
+                user_examples[user_id] = []
+            if len(user_examples[user_id]) < 3 and reaction.get("message_content"):
+                user_examples[user_id].append(reaction["message_content"])
+
+        # Resolve user display names
+        user_names: dict[str, str] = {}
+        for user_id in user_counts:
+            profile = await self._get_user_profile(user_id, server_id)
+            if profile:
+                user_names[user_id] = profile.display_name
+            else:
+                user_names[user_id] = user_id
+
+        # Collect example messages this emoji was used on (deduplicated)
+        seen_examples: set[str] = set()
+        message_examples: list[str] = []
+        for reaction in reactions:
+            content = reaction.get("message_content")
+            if content and content not in seen_examples and len(message_examples) < 10:
+                seen_examples.add(content)
+                message_examples.append(content)
+
+        # Format for template consumption
+        formatted = {
+            "emoji": emoji_name,
+            "total_uses": len(reactions),
+            "unique_users": len(user_counts),
+            "users": [
+                {
+                    "user_id": user_id,
+                    "display_name": user_names.get(user_id, user_id),
+                    "count": count,
+                    "examples": user_examples.get(user_id, []),
+                }
+                for user_id, count in sorted(
+                    user_counts.items(), key=lambda x: x[1], reverse=True
+                )
+            ],
+            "message_examples": message_examples,
+        }
+
+        ctx.reactions = formatted
+
+        log.debug(
+            "reactions_fetched_emoji",
+            emoji=emoji_name,
+            total_reactions=len(reactions),
+            unique_users=len(user_counts),
+        )
+
+    def _get_reactions_for_emoji(
+        self,
+        emoji_name: str,
+        server_id: str | None,
+        lookback_days: int,
+    ) -> list[dict[str, Any]]:
+        """Get all uses of a specific emoji as reactions across the server.
+
+        Args:
+            emoji_name: The emoji identifier (custom emoji name or unicode).
+            server_id: Server ID (None for global lookup).
+            lookback_days: How many days to look back.
+
+        Returns:
+            List of reaction dicts with user_id, message content, and context.
+        """
+        since = utcnow() - timedelta(days=lookback_days)
+
+        with self.engine.connect() as conn:
+            conditions = [
+                reactions_table.c.emoji == emoji_name,
+                reactions_table.c.created_at >= since,
+                reactions_table.c.removed_at.is_(None),
+            ]
+
+            if server_id:
+                conditions.append(reactions_table.c.server_id == server_id)
+
+            stmt = (
+                select(
+                    reactions_table.c.user_id,
+                    reactions_table.c.created_at,
+                    messages_table.c.content.label("message_content"),
+                    messages_table.c.author_id.label("message_author"),
+                )
+                .select_from(
+                    reactions_table.join(
+                        messages_table,
+                        reactions_table.c.message_id == messages_table.c.id,
+                    )
+                )
+                .where(and_(*conditions))
+                .order_by(reactions_table.c.created_at.desc())
+                .limit(500)
+            )
+
+            rows = conn.execute(stmt).fetchall()
+
+            return [
+                {
+                    "user_id": row.user_id,
+                    "created_at": row.created_at,
+                    "message_content": row.message_content,
+                    "message_author": row.message_author,
+                }
+                for row in rows
+            ]
+
     def _extract_user_from_topic(self, topic_key: str) -> tuple[str | None, str | None]:
         """Extract user_id and server_id from a user topic key.
 
@@ -1433,6 +1599,30 @@ class LayerExecutor:
             if subject_idx >= 0 and subject_idx + 1 < len(parts):
                 subject_name = ":".join(parts[subject_idx + 1 :])
                 return (subject_name, server_id)
+
+        return (None, None)
+
+    def _extract_emoji_from_topic(
+        self, topic_key: str
+    ) -> tuple[str | None, str | None]:
+        """Extract emoji name and server_id from an emoji topic key.
+
+        Args:
+            topic_key: Topic key (e.g., "server:<sid>:emoji:<emoji>").
+
+        Returns:
+            (emoji_name, server_id) tuple.
+        """
+        if ":emoji:" in topic_key:
+            parts = topic_key.split(":")
+            server_id = None
+            if parts[0] == "server" and len(parts) >= 2:
+                server_id = parts[1]
+            emoji_idx = parts.index("emoji") if "emoji" in parts else -1
+            if emoji_idx >= 0 and emoji_idx + 1 < len(parts):
+                # Emoji names may contain colons (unlikely but safe)
+                emoji_name = ":".join(parts[emoji_idx + 1 :])
+                return (emoji_name, server_id)
 
         return (None, None)
 
@@ -2021,6 +2211,16 @@ class LayerExecutor:
                     "server_id": server_id,
                 }
 
+        # Fetch emoji info for emoji reflections
+        emoji_info = None
+        if ctx.topic.category == TopicCategory.EMOJI:
+            emoji_name, server_id = self._extract_emoji_from_topic(ctx.topic.key)
+            if emoji_name:
+                emoji_info = {
+                    "name": emoji_name,
+                    "server_id": server_id,
+                }
+
         # Fetch existing subjects for naming consistency
         existing_subjects: list[str] = []
         server_id = self._extract_server_id(ctx.topic.key)
@@ -2034,6 +2234,7 @@ class LayerExecutor:
             "user_profiles": user_profiles,
             "channel_info": channel_info,
             "subject_info": subject_info,
+            "emoji_info": emoji_info,
             "existing_subjects": existing_subjects,
             "messages": format_messages_for_prompt(
                 messages_data, {}, mention_names=mention_names,

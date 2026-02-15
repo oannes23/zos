@@ -137,6 +137,7 @@ Filter expressions support:
 |------|---------|-------|
 | `synthesize_to_global` | Consolidate server-scoped insights to global topic | Used in automatic post-hook |
 | `update_self_concept` | Update the self-concept.md document | Used in self-reflection layer |
+| `fetch_layer_runs` | Retrieve recent layer run history | Used by weekly self-reflection for operational awareness |
 
 ### Node Parameters
 
@@ -709,30 +710,21 @@ nodes:
       target_topic: "user:{{target_user_id}}"
 ```
 
-### Nightly Emoji Pattern Analysis
+### Nightly Emoji Reflection
 
 ```yaml
 name: nightly-emoji-patterns
-category: user
+category: emoji
 description: |
-  Analyze user emoji reaction patterns alongside recent conversation
-  context to understand their expressive style and what resonates with them.
+  Reflect on emoji topics as cultural artifacts — their meaning in the
+  community, who uses them, what draws them out, how usage evolves.
 
 schedule: "0 3 * * *"  # Nightly at 3 AM
-target_category: user
+target_category: emoji
 target_filter: "salience >= 10"
 max_targets: 10
 
 nodes:
-  - name: fetch_recent_messages
-    type: fetch_messages
-    params:
-      lookback_hours: 168  # 7 days
-      conversation_context: true
-      context_window_hours: 2
-      context_min_messages: 10
-      max_channels: 15
-
   - name: fetch_reactions
     type: fetch_reactions
     params:
@@ -748,13 +740,13 @@ nodes:
   - name: reflect
     type: llm_call
     params:
-      prompt_template: user/emoji_reflection.jinja2
+      prompt_template: emoji/reflection.jinja2
       model: reflection
 
   - name: save
     type: store_insight
     params:
-      category: user_reflection
+      category: emoji_reflection
 ```
 
 ---
@@ -1226,13 +1218,13 @@ All conversation templates include:
 
 ### What's Deferred
 
-- Question layer (curiosity impulse, `fetch_open_questions` node)
-- `fetch_thread` node (thread-aware context)
-- `fetch_drafts` node (draft history)
-- `fetch_context` node (impulse trigger context)
-- Priority flagging for reflection
-- Limited chaining between conversation layers
-- `flag_for_reflection` parameter on output nodes
+- 🔴 `question` category (curiosity impulse, `fetch_open_questions` node)
+- 🔴 `fetch_thread` node (thread-aware context)
+- 🔴 `fetch_drafts` node (draft history)
+- 🔴 `fetch_context` node (impulse trigger context)
+- 🔴 Priority flagging for reflection
+- 🔴 Limited chaining between conversation layers
+- 🔴 `flag_for_reflection` parameter on output nodes
 
 ---
 
