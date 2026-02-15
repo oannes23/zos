@@ -796,3 +796,44 @@ class TestLLMCallAuditing:
 
         # Result should still be returned despite recording failure
         assert result.text == "A photo of a cat"
+
+    @pytest.mark.asyncio
+    async def test_failed_call_recorded_in_database(
+        self, db_engine, config_with_models
+    ) -> None:
+        """Failed LLM calls are recorded with success=False and error_message."""
+        client = ModelClient(config_with_models, engine=db_engine)
+
+        # Mock the rate limiter
+        mock_limiter = MagicMock()
+        mock_limiter.acquire = AsyncMock()
+        client._rate_limiters["anthropic"] = mock_limiter
+
+        # Mock _anthropic_complete to raise an API error
+        api_error = Exception("Internal server error")
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(
+                client, "_anthropic_complete", side_effect=api_error
+            ):
+                with pytest.raises(Exception, match="Internal server error"):
+                    await client.complete(
+                        prompt="Test prompt",
+                        model_profile="simple",
+                        layer_run_id=None,
+                        topic_key="user:789",
+                        call_type=LLMCallType.FILTER,
+                    )
+
+        # Verify the failed call was recorded
+        with db_engine.connect() as conn:
+            rows = list(conn.execute(select(llm_calls)))
+            assert len(rows) == 1
+            row = rows[0]
+            assert row.success is False
+            assert row.error_message == "Internal server error"
+            assert row.call_type == "filter"
+            assert row.topic_key == "user:789"
+            assert row.response is None
+            assert row.tokens_input == 0
+            assert row.tokens_output == 0
+            assert row.latency_ms >= 0

@@ -2921,3 +2921,42 @@ async def test_handle_filter_edit_no_revised_text(
 
     # Response should be unchanged — edit with no revised text falls back to send
     assert ctx.llm_response == original
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_llm_error_passes_through(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+    templates_dir: Path,
+) -> None:
+    """LLM error during filter does not suppress the message."""
+    (templates_dir / "conversation").mkdir(exist_ok=True)
+    (templates_dir / "conversation" / "filter.jinja2").write_text("filter: {{ draft }}")
+
+    ctx = _make_filter_ctx(executor, sample_topic)
+    original = ctx.llm_response
+
+    executor.llm.complete = AsyncMock(side_effect=Exception("API timeout"))
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    # Response should be untouched — filter error defaults to pass-through
+    assert ctx.llm_response == original
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_template_error_passes_through(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+) -> None:
+    """Missing template during filter does not suppress the message."""
+    # Intentionally do NOT create the template file
+    ctx = _make_filter_ctx(executor, sample_topic)
+    original = ctx.llm_response
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    # Response should be untouched — template error defaults to pass-through
+    assert ctx.llm_response == original
+    # LLM should NOT have been called (error happened before LLM call)
+    executor.llm.complete.assert_not_called()

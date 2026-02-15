@@ -260,10 +260,32 @@ class ModelClient:
         # Track timing for latency
         start_time = time.monotonic()
 
-        if provider == "anthropic":
-            result = await self._anthropic_complete(prompt, model, max_tokens, temperature)
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
+        try:
+            if provider == "anthropic":
+                result = await self._anthropic_complete(prompt, model, max_tokens, temperature)
+            else:
+                raise ValueError(f"Unsupported provider: {provider}")
+        except Exception as exc:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            if self.engine is not None:
+                try:
+                    await self._record_llm_call(
+                        layer_run_id=layer_run_id,
+                        topic_key=topic_key,
+                        call_type=call_type,
+                        model_profile=model_profile,
+                        provider=provider,
+                        model=model,
+                        prompt=prompt,
+                        response=None,
+                        usage=Usage(input_tokens=0, output_tokens=0),
+                        latency_ms=latency_ms,
+                        success=False,
+                        error_message=str(exc),
+                    )
+                except Exception:
+                    log.warning("llm_call_recording_failed", call_type=call_type.value, exc_info=True)
+            raise
 
         # Calculate latency
         latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -533,7 +555,7 @@ class ModelClient:
         provider: str,
         model: str,
         prompt: str,
-        response: str,
+        response: str | None,
         usage: Usage,
         latency_ms: int,
         success: bool,

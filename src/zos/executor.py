@@ -2527,6 +2527,19 @@ class LayerExecutor:
             log.debug("filter_skip_dry_run", topic=ctx.topic.key)
             return
 
+        log.info("filter_start", topic=ctx.topic.key, layer=ctx.layer.name,
+                 draft_length=len(ctx.llm_response))
+
+        try:
+            await self._handle_filter_inner(node, ctx)
+        except Exception as e:
+            log.warning("filter_error_passthrough", topic=ctx.topic.key,
+                        layer=ctx.layer.name, error=str(e),
+                        error_type=type(e).__name__)
+            return  # ctx.llm_response untouched — message passes through
+
+    async def _handle_filter_inner(self, node: Node, ctx: ExecutionContext) -> None:
+        """Inner filter logic, separated so _handle_filter can catch exceptions."""
         params = node.params
         model_profile = params.get("model", "simple")
         max_tokens = params.get("max_tokens", 512)
@@ -2628,6 +2641,9 @@ class LayerExecutor:
                 layer=ctx.layer.name,
                 action=action,
             )
+
+        log.info("filter_complete", topic=ctx.topic.key, layer=ctx.layer.name,
+                 action=action)
 
     def _parse_filter_response(self, response: str) -> dict[str, Any]:
         """Parse the filter LLM response into a decision dict.
