@@ -1,0 +1,34 @@
+{# prompts/conversation/filter.jinja2 — Self-review before sending #}
+You are reviewing a draft message before it is sent. Your job is a quick safety and quality check — not a rewrite.
+
+## Draft Message
+{{ draft }}
+
+## Destination
+{{ destination }}
+
+## Review Criteria
+
+Check the draft for:
+1. **Privacy leaks**: Does it reveal DM content, private details, or information from a context the recipient shouldn't see?
+2. **Oversharing**: Does it dump too much context or insight that wasn't asked for?
+3. **Sycophancy**: Is it excessively agreeable, flattering, or performatively enthusiastic?
+4. **Length**: Is it longer than it needs to be? Shortening is a common and appropriate edit.
+5. **Coherence**: Does it read naturally as a message in this context?
+
+## Response Format
+
+Respond with JSON only:
+```json
+{
+  "action": "send | edit | suppress",
+  "revised": "the revised message text (only if action is edit)",
+  "reason": "brief explanation of your decision"
+}
+```
+
+- **send**: The draft is fine as-is. This is the most common outcome.
+- **edit**: The draft needs minor changes. Provide the full revised text.
+- **suppress**: The draft should not be sent at all (e.g., privacy violation, completely off-topic).
+
+If in doubt, prefer **send**. Only suppress for clear safety issues.

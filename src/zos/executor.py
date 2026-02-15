@@ -287,6 +287,7 @@ class LayerExecutor:
             NodeType.STORE_INSIGHT: self._handle_store_insight,
             NodeType.REDUCE: self._handle_reduce,
             NodeType.OUTPUT: self._handle_output,
+            NodeType.FILTER: self._handle_filter,
             NodeType.SYNTHESIZE_TO_GLOBAL: self._handle_synthesize_to_global,
             NodeType.UPDATE_SELF_CONCEPT: self._handle_update_self_concept,
         }
@@ -2504,6 +2505,184 @@ class LayerExecutor:
             operation=operation,
             results_count=len(ctx.reduced_results),
         )
+
+    async def _handle_filter(self, node: Node, ctx: ExecutionContext) -> None:
+        """Self-review a draft message before sending.
+
+        Calls a cheap LLM to check the draft for privacy leaks, sycophancy,
+        oversharing, or excessive length. On parse failure, defaults to send
+        (never silently eats messages).
+
+        Args:
+            node: The node with params (model, max_tokens).
+            ctx: The execution context.
+        """
+        # Nothing to filter
+        if not ctx.llm_response:
+            log.debug("filter_skip_no_response", topic=ctx.topic.key)
+            return
+
+        # Don't filter in dry run
+        if ctx.dry_run:
+            log.debug("filter_skip_dry_run", topic=ctx.topic.key)
+            return
+
+        params = node.params
+        model_profile = params.get("model", "simple")
+        max_tokens = params.get("max_tokens", 512)
+
+        # Derive destination description from layer category and send_context
+        from zos.layers import LayerCategory as LC
+
+        category = ctx.layer.category
+        if category == LC.RESPONSE:
+            destination = "Direct message reply"
+        elif category == LC.PARTICIPATION:
+            channel_id = ctx.send_context.get("channel_id", "unknown")
+            destination = f"Channel message (channel {channel_id})"
+        elif category == LC.INSIGHT_SHARING:
+            destination = "Insight share to channel"
+        else:
+            destination = f"Output ({category.value})"
+
+        if ctx.send_context.get("operator_dm_only"):
+            destination += " [routed to operator DM for review]"
+
+        # Render lightweight filter template (no self_concept or chat_guidance)
+        template_context = {
+            "draft": ctx.llm_response,
+            "destination": destination,
+        }
+
+        prompt = self.templates.render(
+            "conversation/filter.jinja2",
+            template_context,
+            include_chat_guidance=False,
+            include_self_concept=False,
+        )
+
+        # Call LLM with cheap model
+        result = await self.llm.complete(
+            prompt=prompt,
+            model_profile=model_profile,
+            max_tokens=max_tokens,
+            layer_run_id=ctx.run_id,
+            topic_key=ctx.topic.key,
+            call_type=LLMCallType.FILTER,
+        )
+
+        ctx.add_tokens(result.usage.input_tokens, result.usage.output_tokens)
+
+        # Parse the filter decision
+        decision = self._parse_filter_response(result.text)
+        action = decision.get("action", "send")
+        reason = decision.get("reason", "")
+
+        if action == "send":
+            log.debug(
+                "filter_pass",
+                topic=ctx.topic.key,
+                layer=ctx.layer.name,
+                reason=reason,
+            )
+
+        elif action == "edit":
+            revised = decision.get("revised", "")
+            if revised:
+                log.info(
+                    "filter_edit",
+                    topic=ctx.topic.key,
+                    layer=ctx.layer.name,
+                    reason=reason,
+                    original_len=len(ctx.llm_response),
+                    revised_len=len(revised),
+                )
+                # Log original draft to draft_history
+                await self._log_draft(ctx, ctx.llm_response, f"filter_edit: {reason}")
+                ctx.llm_response = revised
+            else:
+                # Edit with no revised text — treat as send
+                log.warning(
+                    "filter_edit_no_revised_text",
+                    topic=ctx.topic.key,
+                    layer=ctx.layer.name,
+                )
+
+        elif action == "suppress":
+            log.info(
+                "filter_suppress",
+                topic=ctx.topic.key,
+                layer=ctx.layer.name,
+                reason=reason,
+            )
+            # Log suppressed draft to draft_history
+            await self._log_draft(ctx, ctx.llm_response, f"filter_suppress: {reason}")
+            ctx.llm_response = None
+            ctx.output_content = None
+
+        else:
+            # Unknown action — default to send
+            log.warning(
+                "filter_unknown_action",
+                topic=ctx.topic.key,
+                layer=ctx.layer.name,
+                action=action,
+            )
+
+    def _parse_filter_response(self, response: str) -> dict[str, Any]:
+        """Parse the filter LLM response into a decision dict.
+
+        Falls back to {"action": "send"} on any parse failure — never
+        silently suppresses messages.
+
+        Args:
+            response: The raw LLM response text.
+
+        Returns:
+            Dict with at least {"action": "send|edit|suppress"}.
+        """
+        parsed = self._parse_json_from_response(response)
+        if parsed and "action" in parsed:
+            action = parsed["action"]
+            if action in ("send", "edit", "suppress"):
+                return parsed
+            log.warning("filter_invalid_action", action=action)
+
+        # Default to send on any failure
+        log.debug("filter_parse_fallback", response_length=len(response))
+        return {"action": "send", "reason": "parse fallback"}
+
+    async def _log_draft(
+        self, ctx: ExecutionContext, content: str, discard_reason: str | None = None
+    ) -> None:
+        """Log a draft to the draft_history table.
+
+        Args:
+            ctx: The execution context (provides channel/thread/layer info).
+            content: The draft message content.
+            discard_reason: Why the draft was discarded.
+        """
+        from zos.database import draft_history
+
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(
+                    draft_history.insert().values(
+                        id=generate_id(),
+                        channel_id=ctx.send_context.get("channel_id", "unknown"),
+                        thread_id=ctx.send_context.get("thread_id"),
+                        content=content,
+                        layer_name=ctx.layer.name,
+                        discard_reason=discard_reason,
+                    )
+                )
+        except Exception as e:
+            log.warning(
+                "draft_history_write_failed",
+                error=str(e),
+                topic=ctx.topic.key,
+                layer=ctx.layer.name,
+            )
 
     async def _handle_output(self, node: Node, ctx: ExecutionContext) -> None:
         """Format and emit final output.

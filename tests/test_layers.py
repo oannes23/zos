@@ -87,6 +87,8 @@ def test_node_type_values() -> None:
         "synthesize_to_global",
         "update_self_concept",
         "fetch_layer_runs",
+        "fetch_reactions",
+        "filter",
     ]
 
     for type_name in expected_types:

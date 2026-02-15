@@ -35,6 +35,7 @@ class NodeType(str, Enum):
     - store_insight: Persist new understanding
     - reduce: Combine multiple outputs
     - output: Emit to external destination
+    - filter: Self-review draft before sending
 
     Special nodes:
     - synthesize_to_global: Consolidate server-scoped insights to global topic
@@ -50,6 +51,7 @@ class NodeType(str, Enum):
     STORE_INSIGHT = "store_insight"
     REDUCE = "reduce"
     OUTPUT = "output"
+    FILTER = "filter"
     SYNTHESIZE_TO_GLOBAL = "synthesize_to_global"
     UPDATE_SELF_CONCEPT = "update_self_concept"
     FETCH_LAYER_RUNS = "fetch_layer_runs"

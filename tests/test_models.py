@@ -1908,6 +1908,6 @@ class TestEnums:
 
     def test_llm_call_type_values(self) -> None:
         """Test LLM call type enum values."""
-        expected = {"reflection", "vision", "conversation", "synthesis", "other"}
+        expected = {"reflection", "vision", "conversation", "filter", "synthesis", "other"}
         actual = {t.value for t in LLMCallType}
         assert actual == expected

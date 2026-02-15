@@ -27,6 +27,12 @@ nodes:
       max_tokens: 512
       temperature: 0.8
 
+  - name: filter
+    type: filter
+    params:
+      model: simple
+      max_tokens: 512
+
   - name: send
     type: output
     params:

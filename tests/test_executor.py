@@ -2708,3 +2708,216 @@ async def test_named_data_merged_into_template_context(
     call_args = executor.llm.complete.call_args
     prompt = call_args.kwargs.get("prompt", call_args.args[0] if call_args.args else "")
     assert "found 1" in prompt
+
+
+# =============================================================================
+# Filter Node Tests
+# =============================================================================
+
+
+def _make_filter_ctx(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+    llm_response: str | None = "Hello, here is my draft message!",
+    dry_run: bool = False,
+) -> ExecutionContext:
+    """Helper to build an ExecutionContext for filter tests."""
+    layer = Layer(
+        name="test-convo",
+        category=LayerCategory.RESPONSE,
+        nodes=[
+            Node(type=NodeType.LLM_CALL, params={"prompt_template": "t.j2"}),
+            Node(type=NodeType.FILTER, params={"model": "simple"}),
+            Node(type=NodeType.OUTPUT, params={"destination": "send"}),
+        ],
+    )
+    ctx = ExecutionContext(
+        topic=sample_topic,
+        layer=layer,
+        run_id=generate_id(),
+        dry_run=dry_run,
+        send_context={"channel_id": "ch_123"},
+    )
+    ctx.llm_response = llm_response
+    return ctx
+
+
+def _filter_node(**overrides) -> Node:
+    """Build a filter node with optional param overrides."""
+    params = {"model": "simple", "max_tokens": 512}
+    params.update(overrides)
+    return Node(type=NodeType.FILTER, params=params)
+
+
+def _set_llm_filter_response(executor: LayerExecutor, json_text: str) -> None:
+    """Configure the mock LLM to return *json_text* for the next call."""
+    executor.llm.complete = AsyncMock(
+        return_value=CompletionResult(
+            text=json_text,
+            usage=Usage(input_tokens=50, output_tokens=30),
+            model="claude-3-5-haiku-20241022",
+            provider="anthropic",
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_send(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+    templates_dir: Path,
+) -> None:
+    """'send' action passes llm_response through unchanged."""
+    (templates_dir / "conversation").mkdir(exist_ok=True)
+    (templates_dir / "conversation" / "filter.jinja2").write_text("filter: {{ draft }}")
+
+    ctx = _make_filter_ctx(executor, sample_topic)
+    original = ctx.llm_response
+
+    _set_llm_filter_response(executor, '{"action": "send", "reason": "looks good"}')
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    assert ctx.llm_response == original
+    assert ctx.output_content is None  # not touched
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_edit(
+    executor: LayerExecutor,
+    engine,
+    sample_topic: Topic,
+    templates_dir: Path,
+) -> None:
+    """'edit' action replaces llm_response and logs original to draft_history."""
+    (templates_dir / "conversation").mkdir(exist_ok=True)
+    (templates_dir / "conversation" / "filter.jinja2").write_text("filter: {{ draft }}")
+
+    ctx = _make_filter_ctx(executor, sample_topic)
+    original = ctx.llm_response
+
+    _set_llm_filter_response(
+        executor,
+        '{"action": "edit", "reason": "too long", "revised": "Shorter version."}',
+    )
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    assert ctx.llm_response == "Shorter version."
+    assert ctx.llm_response != original
+
+    # Verify draft_history row was written
+    from zos.database import draft_history
+
+    with engine.connect() as conn:
+        rows = conn.execute(draft_history.select()).fetchall()
+    assert len(rows) == 1
+    assert rows[0].content == original
+    assert "filter_edit" in rows[0].discard_reason
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_suppress(
+    executor: LayerExecutor,
+    engine,
+    sample_topic: Topic,
+    templates_dir: Path,
+) -> None:
+    """'suppress' action clears llm_response and output_content, logs to draft_history."""
+    (templates_dir / "conversation").mkdir(exist_ok=True)
+    (templates_dir / "conversation" / "filter.jinja2").write_text("filter: {{ draft }}")
+
+    ctx = _make_filter_ctx(executor, sample_topic)
+    original = ctx.llm_response
+
+    _set_llm_filter_response(
+        executor,
+        '{"action": "suppress", "reason": "privacy leak"}',
+    )
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    assert ctx.llm_response is None
+    assert ctx.output_content is None
+
+    # Verify draft_history row was written
+    from zos.database import draft_history
+
+    with engine.connect() as conn:
+        rows = conn.execute(draft_history.select()).fetchall()
+    assert len(rows) == 1
+    assert rows[0].content == original
+    assert "filter_suppress" in rows[0].discard_reason
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_parse_failure_defaults_to_send(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+    templates_dir: Path,
+) -> None:
+    """Garbage/invalid JSON defaults to send (never silently eats messages)."""
+    (templates_dir / "conversation").mkdir(exist_ok=True)
+    (templates_dir / "conversation" / "filter.jinja2").write_text("filter: {{ draft }}")
+
+    ctx = _make_filter_ctx(executor, sample_topic)
+    original = ctx.llm_response
+
+    _set_llm_filter_response(executor, "This is not JSON at all, just rambling text.")
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    # Response should be untouched — defaults to send
+    assert ctx.llm_response == original
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_skips_no_response(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+) -> None:
+    """Early return when llm_response is None — no LLM call made."""
+    ctx = _make_filter_ctx(executor, sample_topic, llm_response=None)
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    # LLM should NOT have been called
+    executor.llm.complete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_skips_dry_run(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+) -> None:
+    """Early return in dry_run mode — no LLM call made."""
+    ctx = _make_filter_ctx(executor, sample_topic, dry_run=True)
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    # LLM should NOT have been called
+    executor.llm.complete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_edit_no_revised_text(
+    executor: LayerExecutor,
+    sample_topic: Topic,
+    templates_dir: Path,
+) -> None:
+    """Edit with empty 'revised' field falls back to send (response unchanged)."""
+    (templates_dir / "conversation").mkdir(exist_ok=True)
+    (templates_dir / "conversation" / "filter.jinja2").write_text("filter: {{ draft }}")
+
+    ctx = _make_filter_ctx(executor, sample_topic)
+    original = ctx.llm_response
+
+    _set_llm_filter_response(
+        executor,
+        '{"action": "edit", "reason": "too long", "revised": ""}',
+    )
+
+    await executor._handle_filter(_filter_node(), ctx)
+
+    # Response should be unchanged — edit with no revised text falls back to send
+    assert ctx.llm_response == original

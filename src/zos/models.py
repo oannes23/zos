@@ -122,6 +122,7 @@ class LLMCallType(str, Enum):
     REFLECTION = "reflection"
     VISION = "vision"
     CONVERSATION = "conversation"
+    FILTER = "filter"
     SYNTHESIS = "synthesis"
     OTHER = "other"
 
