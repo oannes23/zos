@@ -726,6 +726,169 @@ async def test_fetch_messages_for_channel_topic(
     assert messages[0].content == "Channel message"
 
 
+@pytest.fixture
+def dm_setup(engine):
+    """Create the DM pseudo-server and DM channels for testing."""
+    now = utcnow()
+    with engine.connect() as conn:
+        # DM pseudo-server (mirrors observation.py _ensure_channel)
+        conn.execute(
+            servers_table.insert().values(
+                id="dm",
+                name="Direct Messages",
+                threads_as_topics=False,
+                created_at=now,
+            )
+        )
+        # DM channels
+        for ch_id in ["dm_ch_1", "dm_ch_2", "dm_ch_3"]:
+            conn.execute(
+                channels_table.insert().values(
+                    id=ch_id,
+                    server_id="dm",
+                    name=None,
+                    type="dm",
+                    created_at=now,
+                )
+            )
+        conn.commit()
+
+
+@pytest.mark.asyncio
+async def test_fetch_messages_for_global_user_topic(
+    executor: LayerExecutor,
+    engine,
+    dm_setup,
+) -> None:
+    """Test fetching DM messages for a global user topic (user:<id>)."""
+    now = utcnow()
+    with engine.connect() as conn:
+        for i in range(3):
+            conn.execute(
+                messages_table.insert().values(
+                    id=f"dm_msg_{i}",
+                    channel_id="dm_ch_1",
+                    server_id=None,
+                    author_id="456",
+                    content=f"DM message {i}",
+                    created_at=now - timedelta(hours=i),
+                    visibility_scope=VisibilityScope.DM.value,
+                    has_media=False,
+                    has_links=False,
+                    ingested_at=now,
+                )
+            )
+        conn.commit()
+
+    messages = await executor._get_messages_for_topic(
+        "user:456",
+        since=now - timedelta(hours=48),
+        limit=10,
+    )
+
+    assert len(messages) == 3
+
+
+@pytest.mark.asyncio
+async def test_fetch_messages_for_global_user_topic_includes_both_sides(
+    executor: LayerExecutor,
+    engine,
+    dm_setup,
+) -> None:
+    """Test that global user topic fetches both sides of a DM conversation."""
+    now = utcnow()
+    with engine.connect() as conn:
+        conn.execute(
+            messages_table.insert().values(
+                id="dm_user_msg",
+                channel_id="dm_ch_2",
+                server_id=None,
+                author_id="456",
+                content="Hello Zos",
+                created_at=now - timedelta(minutes=10),
+                visibility_scope=VisibilityScope.DM.value,
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.execute(
+            messages_table.insert().values(
+                id="dm_bot_msg",
+                channel_id="dm_ch_2",
+                server_id=None,
+                author_id="bot_id",
+                content="Hello human",
+                created_at=now - timedelta(minutes=5),
+                visibility_scope=VisibilityScope.DM.value,
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.commit()
+
+    messages = await executor._get_messages_for_topic(
+        "user:456",
+        since=now - timedelta(hours=1),
+        limit=10,
+    )
+
+    assert len(messages) == 2
+    authors = {m.author_id for m in messages}
+    assert authors == {"456", "bot_id"}
+
+
+@pytest.mark.asyncio
+async def test_fetch_messages_for_global_dyad_topic(
+    executor: LayerExecutor,
+    engine,
+    dm_setup,
+) -> None:
+    """Test fetching messages for a global dyad topic (dyad:<a>:<b>)."""
+    now = utcnow()
+    with engine.connect() as conn:
+        conn.execute(
+            messages_table.insert().values(
+                id="dyad_msg_1",
+                channel_id="dm_ch_3",
+                server_id=None,
+                author_id="456",
+                content="Message from user A",
+                created_at=now - timedelta(hours=1),
+                visibility_scope=VisibilityScope.DM.value,
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.execute(
+            messages_table.insert().values(
+                id="dyad_msg_2",
+                channel_id="dm_ch_3",
+                server_id=None,
+                author_id="789",
+                content="Message from user B",
+                created_at=now - timedelta(minutes=30),
+                visibility_scope=VisibilityScope.DM.value,
+                has_media=False,
+                has_links=False,
+                ingested_at=now,
+            )
+        )
+        conn.commit()
+
+    messages = await executor._get_messages_for_topic(
+        "dyad:456:789",
+        since=now - timedelta(hours=48),
+        limit=10,
+    )
+
+    assert len(messages) == 2
+    authors = {m.author_id for m in messages}
+    assert authors == {"456", "789"}
+
+
 # =============================================================================
 # Layer Run Recording Tests
 # =============================================================================

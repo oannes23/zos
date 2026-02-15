@@ -2883,6 +2883,39 @@ Begin the document with "# Self-Concept" and maintain the existing sections wher
                     .order_by(messages_table.c.created_at.desc())
                     .limit(limit)
                 )
+            elif category == "user" and len(parts) == 2:
+                # Global user topic: user:<user_id> — DM messages
+                user_id = parts[1]
+                # Find DM channel(s) for this user (messages stored with server_id IS NULL)
+                channel_stmt = (
+                    select(messages_table.c.channel_id)
+                    .where(
+                        and_(
+                            messages_table.c.author_id == user_id,
+                            messages_table.c.server_id.is_(None),
+                            messages_table.c.deleted_at.is_(None),
+                        )
+                    )
+                    .distinct()
+                )
+                dm_channel_ids = [
+                    r.channel_id for r in conn.execute(channel_stmt).fetchall()
+                ]
+                if not dm_channel_ids:
+                    return []
+                # Fetch all messages from DM channels (both sides of conversation)
+                stmt = (
+                    select(messages_table)
+                    .where(
+                        and_(
+                            messages_table.c.channel_id.in_(dm_channel_ids),
+                            messages_table.c.created_at >= since,
+                            messages_table.c.deleted_at.is_(None),
+                        )
+                    )
+                    .order_by(messages_table.c.created_at.desc())
+                    .limit(limit)
+                )
             elif category == "dyad" and len(parts) >= 5:
                 # server:X:dyad:A:B -> messages between A and B in server X
                 server_id = parts[1]
@@ -2894,6 +2927,22 @@ Begin the document with "# Self-Concept" and maintain the existing sections wher
                     .where(
                         and_(
                             messages_table.c.server_id == server_id,
+                            messages_table.c.author_id.in_([user_a, user_b]),
+                            messages_table.c.created_at >= since,
+                            messages_table.c.deleted_at.is_(None),
+                        )
+                    )
+                    .order_by(messages_table.c.created_at.desc())
+                    .limit(limit)
+                )
+            elif category == "dyad" and len(parts) == 3:
+                # Global dyad topic: dyad:<user_a>:<user_b>
+                user_a = parts[1]
+                user_b = parts[2]
+                stmt = (
+                    select(messages_table)
+                    .where(
+                        and_(
                             messages_table.c.author_id.in_([user_a, user_b]),
                             messages_table.c.created_at >= since,
                             messages_table.c.deleted_at.is_(None),
