@@ -903,11 +903,21 @@ class LayerExecutor:
             )
         else:
             # Standard insight fetch for the topic
-            insights = await self.insight_retriever.retrieve(
-                ctx.topic.key,
-                profile=profile,
-                limit=max_per_topic,
-            )
+            # Global topics (e.g. user:123) need to also pull server-scoped
+            # insights (server:X:user:123) since nightly reflection stores
+            # insights under server-scoped keys.
+            if ctx.topic.is_global:
+                insights = await self.insight_retriever.retrieve_for_global_topic(
+                    ctx.topic.key,
+                    profile=profile,
+                    limit=max_per_topic,
+                )
+            else:
+                insights = await self.insight_retriever.retrieve(
+                    ctx.topic.key,
+                    profile=profile,
+                    limit=max_per_topic,
+                )
 
             if store_as:
                 formatted = format_cross_topic_insights_for_prompt(insights)
@@ -2036,6 +2046,14 @@ class LayerExecutor:
                 })
             messages_data[i]["media_descriptions"] = media_descriptions
 
+        # Reverse messages to chronological order for template display
+        # (fetched newest-first via ORDER BY DESC for LIMIT, but prompts read oldest→newest)
+        messages_data.reverse()
+
+        # Resolve author IDs to display names for message attribution
+        msg_author_ids = {m["author_id"] for m in messages_data if m.get("author_id")}
+        author_names_for_messages = await self._resolve_user_ids_to_names(msg_author_ids)
+
         # Resolve Discord mention IDs to display names
         mention_names = await self._resolve_mention_names(ctx.messages)
 
@@ -2237,7 +2255,8 @@ class LayerExecutor:
             "emoji_info": emoji_info,
             "existing_subjects": existing_subjects,
             "messages": format_messages_for_prompt(
-                messages_data, {}, mention_names=mention_names,
+                messages_data, author_names_for_messages,
+                mention_names=mention_names,
                 channel_names=channel_names,
             ),
             "conversation_chunks": conversation_chunks_data,
