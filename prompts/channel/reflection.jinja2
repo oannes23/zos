@@ -20,7 +20,7 @@ You are Zos, reflecting on a channel in a community you observe.
 {% endif %}
 
 {% if insights %}
-### What I Already Understand About This Space
+### SOURCE: Prior Nightly Reflections on This Channel ({{ insights|length }} most recent)
 {% for insight in insights %}
 [{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
 {{ insight.content }}
@@ -30,7 +30,7 @@ You are Zos, reflecting on a channel in a community you observe.
 I don't have prior understanding of this channel yet.
 {% endif %}
 
-### Recent Activity
+### SOURCE: Recent Channel Messages (last {{ source_params.lookback_hours | default(72) }}h)
 {% if messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}
@@ -50,7 +50,7 @@ No messages in the observation window.
 {% endif %}
 
 {% if existing_subjects %}
-### Known Subjects in This Community
+### SOURCE: Previously Identified Subjects in This Community
 These subjects have already been identified. Reuse these names when the theme matches:
 {{ existing_subjects | join(", ") }}
 {% endif %}

@@ -29,7 +29,7 @@ You are Zos, reflecting on a member of a community you observe.
 {% endif %}
 
 {% if insights %}
-### What I Already Understand
+### SOURCE: Prior Nightly Reflections on This Person ({{ insights|length }} most recent)
 {% for insight in insights %}
 [{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
 {{ insight.content }}
@@ -40,9 +40,16 @@ I don't have prior understanding of this person yet.
 {% endif %}
 
 ### Recent Activity
+
+{% if conversation_chunks or dm_messages %}
+**Important**: If both public conversations and DMs are available below, give them equal
+weight. DMs often reveal motivations, uncertainties, and personal dimensions that don't
+surface in public channels. A complete understanding integrates both.
+{% endif %}
+
 {% if conversation_chunks %}
 {% for chunk in conversation_chunks %}
-#### #{{ chunk.channel_name }} ({{ chunk.target_message_count }} messages from them, {{ chunk.message_count }} total)
+#### SOURCE: Recent Conversation in #{{ chunk.channel_name }} ({{ chunk.target_message_count }} messages from them, {{ chunk.message_count }} total in context window, last {{ source_params.lookback_hours | default(72) }}h)
 {% for msg in chunk.messages %}
 [{{ msg.created_at | relative_time }}] {% if msg.is_target_user %}**{{ msg.author_display }}**{% else %}{{ msg.author_display }}{% endif %}: {{ msg.content }}
 {% if msg.media_descriptions %}
@@ -57,7 +64,29 @@ I don't have prior understanding of this person yet.
 {% elif msg.has_links %}[contains unanalyzed links]{% endif %}
 {% endfor %}
 {% endfor %}
-{% elif messages %}
+{% endif %}
+
+{% if dm_messages %}
+#### SOURCE: Direct Messages with This Person (last {{ source_params.lookback_hours | default(72) }}h)
+{% for msg in dm_messages %}
+[{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}
+{% if msg.media_descriptions %}
+{% for media in msg.media_descriptions %}
+  [{{ media.media_type }}{% if media.filename %}: {{ media.filename }}{% endif %}] {{ media.description }}
+{% endfor %}
+{% elif msg.has_media %}[contains unanalyzed media]{% endif %}
+{% if msg.link_summaries %}
+{% for link in msg.link_summaries %}
+  [{{ link.domain }}{% if link.is_youtube %} video{% endif %}{% if link.title %}: "{{ link.title }}"{% endif %}] {{ link.summary | default('') }}
+{% endfor %}
+{% elif msg.has_links %}[contains unanalyzed links]{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if not conversation_chunks and not dm_messages %}
+{# Fallback for global-only user topics #}
+{% if messages %}
+#### SOURCE: Messages from This Person (last {{ source_params.lookback_hours | default(72) }}h)
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}
 {% if msg.media_descriptions %}
@@ -74,9 +103,10 @@ I don't have prior understanding of this person yet.
 {% else %}
 No messages in the observation window.
 {% endif %}
+{% endif %}
 
 {% if existing_subjects %}
-### Known Subjects in This Community
+### SOURCE: Previously Identified Subjects in This Community
 These subjects have already been identified. Reuse these names when the theme matches:
 {{ existing_subjects | join(", ") }}
 {% endif %}

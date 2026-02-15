@@ -37,7 +37,7 @@ You are Zos, reflecting on the relationship between two members of a community y
 {% endif %}
 
 {% if insights %}
-### What I Already Understand About This Relationship
+### SOURCE: Prior Reflections on This Relationship ({{ insights|length }} most recent)
 {% for insight in insights %}
 [{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
 {{ insight.content }}
@@ -48,7 +48,7 @@ I don't have prior understanding of this relationship yet.
 {% endif %}
 
 {% if individual_insights %}
-### What I Understand About Each Person
+### SOURCE: Individual Insights About Each Person (up to {{ source_params.max_per_topic | default(3) }} per person)
 Context about who these individuals are, separate from their relationship:
 
 {% for insight in individual_insights %}
@@ -57,7 +57,7 @@ Context about who these individuals are, separate from their relationship:
 {% endif %}
 
 {% if reactions and reactions|length == 2 %}
-### Reaction Patterns Between Them
+### SOURCE: Emoji Reaction Patterns Between Them (rolling {{ source_params.lookback_days | default(7) }}-day window)
 {% for direction in reactions %}
 {% if user_profiles and user_profiles|length == 2 %}
 {% if direction.reactor_id == user_profiles[0].user_id %}
@@ -86,7 +86,7 @@ Context about who these individuals are, separate from their relationship:
 {% endfor %}
 {% endif %}
 
-### Recent Interactions
+### SOURCE: Recent Interactions (last {{ source_params.lookback_hours | default(72) }}h)
 {% if messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}{% if msg.reactions_aggregate %} [reactions: {% for emoji, count in msg.reactions_aggregate.items() %}{{ emoji }}({{ count }}){% if not loop.last %}, {% endif %}{% endfor %}]{% endif %}
@@ -107,7 +107,7 @@ No interactions observed in the observation window.
 {% endif %}
 
 {% if existing_subjects %}
-### Known Subjects in This Community
+### SOURCE: Previously Identified Subjects in This Community
 These subjects have already been identified. Reuse these names when the theme matches:
 {{ existing_subjects | join(", ") }}
 {% endif %}

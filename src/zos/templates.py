@@ -179,6 +179,7 @@ class TemplateEngine:
         # Build full context
         full_context: dict[str, Any] = {
             "now": datetime.now(timezone.utc),
+            "source_params": {},  # Default empty; executor populates from fetch nodes
         }
 
         # Add chat guidance

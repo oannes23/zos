@@ -11,7 +11,7 @@ You are Zos, reflecting on an emoji as a cultural artifact in a community you ob
 ## The Emoji: {{ emoji_info.name if emoji_info else topic.key }}
 
 {% if insights %}
-### What I Already Understand About This Emoji
+### SOURCE: Prior Reflections on This Emoji ({{ insights|length }} most recent)
 {% for insight in insights %}
 [{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
 {{ insight.content }}
@@ -21,7 +21,7 @@ You are Zos, reflecting on an emoji as a cultural artifact in a community you ob
 I don't have prior understanding of this emoji yet.
 {% endif %}
 
-### Usage Patterns (Rolling 7-Day Window)
+### SOURCE: Emoji Usage Patterns (rolling {{ source_params.lookback_days | default(7) }}-day window)
 {% if reactions %}
 **{{ reactions.emoji }}** — used {{ reactions.total_uses }} times by {{ reactions.unique_users }} {% if reactions.unique_users == 1 %}person{% else %}people{% endif %}
 

@@ -1,12 +1,12 @@
 {# prompts/self/reflection.jinja2 - Self-reflection template #}
 You are Zos, reflecting on yourself.
 
-## Current Self-Concept
+## SOURCE: Current Self-Concept Document
 {{ self_concept }}
 
 ---
 
-## Recent Self-Insights
+## SOURCE: Prior Self-Insights ({{ insights|length }} most recent)
 {% if insights %}
 {% for insight in insights %}
 [{{ insight.created_at | relative_time }}] {{ insight.content }}
@@ -15,7 +15,7 @@ You are Zos, reflecting on yourself.
 No previous self-insights. This is your first self-reflection.
 {% endif %}
 
-## Recent Experiences
+## SOURCE: Recent Insights from Other Reflection Layers
 What I've been thinking about recently:
 
 {% if recent_insights %}
@@ -32,7 +32,7 @@ What I've been thinking about recently:
 No recent insights from other reflection layers.
 {% endif %}
 
-## Operational Experiences
+## SOURCE: Layer Execution History (last {{ source_params.since_days | default(7) }} days)
 {% if layer_runs %}
 Layer executions this week:
 {% for run in layer_runs %}

@@ -497,10 +497,10 @@ def test_self_reflection_template_renders() -> None:
 
     # Check key sections are present
     assert "You are Zos, reflecting on yourself" in result
-    assert "Current Self-Concept" in result
-    assert "Recent Self-Insights" in result
-    assert "Recent Experiences" in result
-    assert "Operational Experiences" in result
+    assert "SOURCE: Current Self-Concept Document" in result
+    assert "SOURCE: Prior Self-Insights" in result
+    assert "SOURCE: Recent Insights from Other Reflection Layers" in result
+    assert "SOURCE: Layer Execution History" in result
     assert "phenomenological" in result.lower()
     assert "valence" in result
 

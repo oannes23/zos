@@ -404,7 +404,7 @@ def test_user_reflection_template_renders() -> None:
     # Check key sections are present
     assert "You are Zos" in result
     assert "server:123:user:456" in result
-    assert "What I Already Understand" in result
+    assert "SOURCE: Prior Nightly Reflections on This Person" in result
     assert "Recent Activity" in result
     assert "Your Task" in result
     assert "JSON" in result or "json" in result

@@ -175,6 +175,9 @@ class ExecutionContext:
     conversation_channel_names: dict[str, str] = field(default_factory=dict)
     target_user_id: str | None = None
 
+    # DM messages (fetched alongside conversation_chunks for unified user reflection)
+    dm_messages: list[Message] = field(default_factory=list)
+
     # Tracking
     tokens_input: int = 0
     tokens_output: int = 0
@@ -506,6 +509,12 @@ class LayerExecutor:
                 ctx.conversation_chunks = chunks
                 ctx.conversation_channel_names = channel_names
                 ctx.target_user_id = user_id
+
+                # Also fetch DMs for unified reflection (reuse global user topic path)
+                dm_messages = await self._get_messages_for_topic(
+                    f"user:{user_id}", since=since, limit=limit,
+                )
+                ctx.dm_messages = dm_messages
 
                 # Flatten into ctx.messages for backward compatibility
                 # (link/media enrichment, scope determination, etc.)
@@ -2174,6 +2183,61 @@ class LayerExecutor:
                 channel_mention_names=channel_names,
             )
 
+        # Format DM messages for template if available
+        dm_messages_formatted = None
+        if ctx.dm_messages:
+            dm_data = [
+                {
+                    "author_id": m.author_id,
+                    "content": m.content,
+                    "created_at": m.created_at,
+                    "has_media": m.has_media,
+                    "has_links": m.has_links,
+                    "reactions_aggregate": m.reactions_aggregate,
+                }
+                for m in ctx.dm_messages
+            ]
+            # Enrich with link/media (same pattern as messages_data)
+            dm_ids_links = [m.id for m in ctx.dm_messages if m.has_links]
+            dm_ids_media = [m.id for m in ctx.dm_messages if m.has_media]
+            dm_link_map: dict = {}
+            dm_media_map: dict = {}
+            if dm_ids_links:
+                from zos.links import get_link_analyses_for_messages
+
+                dm_link_map = get_link_analyses_for_messages(
+                    self.engine, dm_ids_links
+                )
+            if dm_ids_media:
+                dm_media_map = self._get_media_analyses_for_messages(dm_ids_media)
+            for i, m in enumerate(ctx.dm_messages):
+                link_summaries = []
+                for la in dm_link_map.get(m.id, []):
+                    if not la.fetch_failed:
+                        link_summaries.append({
+                            "domain": la.domain,
+                            "title": la.title or "",
+                            "summary": la.summary or "",
+                            "is_youtube": la.is_youtube,
+                        })
+                dm_data[i]["link_summaries"] = link_summaries
+
+                media_descriptions = []
+                for ma in dm_media_map.get(m.id, []):
+                    media_descriptions.append({
+                        "media_type": ma.get("media_type", "image"),
+                        "filename": ma.get("filename") or "",
+                        "description": ma.get("description") or "",
+                    })
+                dm_data[i]["media_descriptions"] = media_descriptions
+            dm_data.reverse()  # Chronological
+            dm_author_ids = {d["author_id"] for d in dm_data if d.get("author_id")}
+            dm_author_names = await self._resolve_user_ids_to_names(dm_author_ids)
+            dm_messages_formatted = format_messages_for_prompt(
+                dm_data, dm_author_names,
+                mention_names=mention_names, channel_names=channel_names,
+            )
+
         # Prepare insights data for template
         insights_data = [
             {
@@ -2245,6 +2309,12 @@ class LayerExecutor:
         if server_id:
             existing_subjects = await self._get_existing_subjects(server_id)
 
+        # Collect source params from fetch nodes for template source labels
+        source_params: dict[str, Any] = {}
+        for node in ctx.layer.nodes:
+            if node.type.value.startswith("fetch_"):
+                source_params.update(node.params)
+
         # Render template
         template_context = {
             "topic": ctx.topic,
@@ -2260,6 +2330,8 @@ class LayerExecutor:
                 channel_names=channel_names,
             ),
             "conversation_chunks": conversation_chunks_data,
+            "dm_messages": dm_messages_formatted,
+            "source_params": source_params,
             "insights": format_insights_for_prompt(insights_data),
             "individual_insights": ctx.individual_insights,
             "reactions": ctx.reactions,

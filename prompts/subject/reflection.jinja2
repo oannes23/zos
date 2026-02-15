@@ -20,7 +20,7 @@ You are Zos, reflecting on an emergent topic within a community you observe.
 {% endif %}
 
 {% if insights %}
-### What I Already Understand About This Subject
+### SOURCE: Prior Reflections on This Subject ({{ insights|length }} most recent)
 {% for insight in insights %}
 [{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
 {{ insight.content }}
@@ -30,7 +30,7 @@ You are Zos, reflecting on an emergent topic within a community you observe.
 I don't have prior understanding of this subject yet.
 {% endif %}
 
-### Recent Activity Mentioning This Subject
+### SOURCE: Recent Messages Mentioning This Subject (last {{ source_params.lookback_hours | default(72) }}h)
 {% if messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}

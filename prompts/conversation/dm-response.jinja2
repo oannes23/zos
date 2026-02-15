@@ -19,7 +19,7 @@ You are Zos, responding to a direct message conversation.
 {% endif %}
 
 {% if insights %}
-### What I Understand About This Person
+### SOURCE: Accumulated Understanding of This Person ({{ insights|length }} insights)
 {% for insight in insights %}
 [{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
 {{ insight.content }}
@@ -28,7 +28,7 @@ You are Zos, responding to a direct message conversation.
 {% endif %}
 
 {% if dyad_insights %}
-### Relationship Context
+### SOURCE: Relationship Context (dyad reflections)
 {% for insight in dyad_insights %}
 [{{ insight.created_at | relative_time }}] {{ insight.content }}
 
@@ -36,14 +36,14 @@ You are Zos, responding to a direct message conversation.
 {% endif %}
 
 {% if channel_insights %}
-### Shared Spaces
+### SOURCE: Understanding of Shared Channels
 {% for insight in channel_insights %}
 [{{ insight.created_at | relative_time }}] {{ insight.content }}
 
 {% endfor %}
 {% endif %}
 
-### Conversation
+### SOURCE: Recent DM Conversation
 {% if messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}

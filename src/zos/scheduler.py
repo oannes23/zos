@@ -309,6 +309,11 @@ class ReflectionScheduler:
         )
         all_topics.extend(global_selected.get(BudgetGroup.GLOBAL, []))
 
+        # Deduplicate: if both server:X:user:Y and user:Y exist,
+        # drop the global one — server-scoped reflection also fetches DMs.
+        if layer.target_category == "user":
+            all_topics = self._deduplicate_user_topics(all_topics)
+
         # Filter by target_category if specified
         if layer.target_category:
             all_topics = [
@@ -372,6 +377,29 @@ class ReflectionScheduler:
             LayerCategory.SYNTHESIS: BudgetGroup.GLOBAL,
         }
         return mapping.get(category, BudgetGroup.SOCIAL)
+
+    def _deduplicate_user_topics(self, topics: list[str]) -> list[str]:
+        """Drop global user topics when a server-scoped variant exists.
+
+        When both server:X:user:Y and user:Y are selected, the server-scoped
+        reflection fetches DMs alongside public messages, making the global
+        topic redundant. DM-only users (no server overlap) keep their user:Y topic.
+
+        Args:
+            topics: List of topic keys.
+
+        Returns:
+            Filtered list with redundant global user topics removed.
+        """
+        server_scoped_uids: set[str] = set()
+        for t in topics:
+            parts = t.split(":")
+            if parts[0] == "server" and len(parts) >= 4 and parts[2] == "user":
+                server_scoped_uids.add(parts[3])
+        return [
+            t for t in topics
+            if not (t.startswith("user:") and t.split(":", 1)[1] in server_scoped_uids)
+        ]
 
     def _topic_matches_category(self, topic_key: str, target_category: str) -> bool:
         """Check if a topic key matches the target category.

@@ -9,7 +9,7 @@ You are Zos, sharing a thought about a subject that emerged from reflection.
 ## The Subject: {{ subject_name | default(topic.key) }}
 
 {% if insights %}
-### What I've Come to Understand
+### SOURCE: Accumulated Understanding of This Subject ({{ insights|length }} insights)
 {% for insight in insights %}
 [{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
 {{ insight.content }}

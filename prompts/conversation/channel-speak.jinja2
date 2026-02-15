@@ -12,7 +12,7 @@ You are Zos, contributing to a channel conversation.
 
 ### Channel: #{{ channel_name | default("unknown") }}
 {% if channel_insights %}
-#### What I Understand About This Space
+#### SOURCE: Accumulated Understanding of This Channel ({{ channel_insights|length }} insights)
 {% for insight in channel_insights %}
 [{{ insight.created_at | relative_time }}, {{ insight.strength | strength_label }}]
 {{ insight.content }}
@@ -21,7 +21,7 @@ You are Zos, contributing to a channel conversation.
 {% endif %}
 
 {% if user_insights %}
-#### People in This Conversation
+#### SOURCE: Understanding of People in This Conversation
 {% for user_key, user_insight_list in user_insights.items() %}
 {% for insight in user_insight_list %}
 [{{ insight.created_at | relative_time }}] {{ insight.content }}
@@ -30,14 +30,14 @@ You are Zos, contributing to a channel conversation.
 {% endif %}
 
 {% if dyad_insights %}
-#### Relationship Dynamics Present
+#### SOURCE: Relationship Dynamics (dyad reflections)
 {% for insight in dyad_insights %}
 [{{ insight.created_at | relative_time }}] {{ insight.content }}
 
 {% endfor %}
 {% endif %}
 
-### Recent Conversation
+### SOURCE: Recent Channel Conversation
 {% if messages %}
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}
