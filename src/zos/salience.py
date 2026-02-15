@@ -567,14 +567,14 @@ class SalienceLedger:
             "self": caps.self_topic,
         }
 
-        # Global topics have different caps
+        # Global topics have their own caps
         if self.is_global(topic_key):
             if topic_key.startswith("user:"):
-                return float(caps.server_user)  # Use server_user cap for global users
+                return float(caps.global_user)
             if topic_key.startswith("dyad:"):
-                return float(caps.dyad)  # Use dyad cap for global dyads
+                return float(caps.global_dyad)
             if topic_key == "self:zos" or topic_key.startswith("self:"):
-                return float(caps.self_topic)
+                return float(caps.global_self)
 
         return float(cap_map.get(category, 100))  # Default cap
 

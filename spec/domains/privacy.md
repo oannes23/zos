@@ -62,7 +62,7 @@ There is no "revoke DM consent" mechanism. Users who don't want Zos to remember 
 |-------|--------|---------|
 | `public` | Guild channels | Baseline — least sensitive |
 | `dm` | Direct messages | Higher presumptive sensitivity in output filtering |
-| `derived` | Mixed sources or synthesis | Inherits restrictions from inputs |
+| `derived` | Mixed sources or synthesis | 🔴 Deferred — not yet in code. Inherits restrictions from inputs |
 
 ### Scope on Insights
 
@@ -285,7 +285,7 @@ See [User Identity Model](#user-identity-model) above. Cross-server knowledge is
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `privacy.review_pass` | When to run output review | `"private_context"` |
-| `privacy.first_contact_message` | Acknowledgment text for first DM | (see below) |
+| `privacy.first_contact_message` | Acknowledgment text for first DM | `""` (empty string — disabled by default in code) |
 
 ### Per-Server Settings
 

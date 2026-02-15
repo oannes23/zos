@@ -59,8 +59,8 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 | Privacy | [privacy.md](domains/privacy.md) | 🟢 | — |
 | Salience | [salience.md](domains/salience.md) | 🟢 | — |
 | Insights | [insights.md](domains/insights.md) | 🟢 | — |
-| Layers | [layers.md](domains/layers.md) | 🔄 | MVP 1 conversation layers implemented (3 of 4 spec'd) |
-| Chattiness | [chattiness.md](domains/chattiness.md) | 🔄 | MVP 1 implementation simplified impulse model — see Implementation Notes |
+| Layers | [layers.md](domains/layers.md) | 🔄 | MVP 1: 3 of 4 conversation layers; deferred items marked 🔴 |
+| Chattiness | [chattiness.md](domains/chattiness.md) | 🔄 | MVP 1: simplified impulse model; deferred items marked 🔴 |
 | Self-Modification | [self-modification.md](domains/self-modification.md) | 🟢 | Proposal format only; execution deferred to MVP 2+ |
 
 ---
@@ -655,9 +655,8 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-02-13 — MVP 1 Foundation implemented: impulse engine, conversation layers, operator DM mode, conversation heartbeat._
+_2026-02-13 — Spec ↔ Code reconciliation: fixed get_cap() bug, updated caps/budget/retention/config across all specs, added deferred markers, updated last-verified dates._
 
 ## Pending Updates
 
-- **chattiness.md**: Needs 🔄 revision to document simplified per-topic impulse model vs. spec's 6-pool vision. Implementation notes added but full reconciliation deferred.
-- **layers.md**: Needs 🔄 revision to reflect actual conversation layer implementations (3 layers, not 4).
+None — all specs reconciled with code as of 2026-02-13.

@@ -594,19 +594,19 @@ def test_get_cap_emoji(ledger: SalienceLedger) -> None:
 def test_get_cap_global_user(ledger: SalienceLedger) -> None:
     """Test cap for global user topic."""
     cap = ledger.get_cap("user:456")
-    assert cap == 100  # Uses server_user cap
+    assert cap == 150  # Uses global_user cap
 
 
 def test_get_cap_global_dyad(ledger: SalienceLedger) -> None:
     """Test cap for global dyad topic."""
     cap = ledger.get_cap("dyad:111:222")
-    assert cap == 80  # Uses dyad cap
+    assert cap == 100  # Uses global_dyad cap
 
 
 def test_get_cap_self(ledger: SalienceLedger) -> None:
     """Test cap for self topic."""
     cap = ledger.get_cap("self:zos")
-    assert cap == 100  # Default self cap
+    assert cap == 200  # Uses global_self cap
 
 
 # =============================================================================
@@ -803,8 +803,8 @@ async def test_warm_respects_cap(ledger: SalienceLedger) -> None:
     # Try to warm with huge amount
     warmed = await ledger.warm(topic_key, 1000.0)
 
-    # Should be capped
-    assert warmed == 100.0  # Cap for global user
+    # Should be capped at global_user cap
+    assert warmed == 150.0  # Cap for global user
 
 
 # =============================================================================

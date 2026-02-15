@@ -1,8 +1,8 @@
 # Data Model
 
 **Status**: 🟢 Complete
-**Last verified**: —
-**Last synced**: 2026-01-23 (reconciled with observation and chattiness specs)
+**Last verified**: 2026-02-13
+**Last synced**: 2026-02-13 (reconciled spec ↔ code)
 **Depends on**: Observation, Topics, Privacy, Salience, Insights, Layers, Chattiness
 
 ---
@@ -75,7 +75,7 @@ ChattinessLedger (pool × channel × topic impulse tracking)
     "insight": true,
     "conversational": true,
     "curiosity": true,
-    "presence": false
+    "reaction": true
   }
 }
 ```
@@ -340,7 +340,7 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 | topic_key | string | yes | Primary topic this insight is about |
 | category | string | yes | Layer category that produced it (e.g., `user_reflection`, `dyad_observation`, `synthesis`, `self_reflection`) |
 | content | string | yes | The actual understanding (natural language) |
-| sources_scope_max | enum | yes | `public`, `dm`, or `derived` |
+| sources_scope_max | enum | yes | `public`, `dm`, or `derived` (🔴 `derived` deferred — not yet in code) |
 | created_at | timestamp | yes | When generated |
 | layer_run_id | string | yes | Which layer run produced this |
 | supersedes | string | no | ID of insight this updates (not replaces) |
@@ -461,10 +461,10 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | id | string | yes | ULID |
-| pool | enum | yes | `address`, `insight`, `conversational`, `curiosity`, `presence` |
+| pool | enum | yes | `address`, `insight`, `conversational`, `curiosity`, `reaction` |
 | channel_id | string | no | Channel scope (null for global pool-level) |
 | topic_key | string | no | Topic scope (null for channel-level only) |
-| transaction_type | enum | yes | `earn`, `spend`, `decay`, `flood` |
+| transaction_type | enum | yes | `earn`, `spend`, `decay`, `flood`, `reset` |
 | amount | float | yes | Delta (positive for earn/flood, negative for spend/decay) |
 | trigger | string | no | What caused this (message_id, ping, insight_id, etc.) |
 | created_at | timestamp | yes | When |
@@ -482,6 +482,7 @@ ChattinessLedger (pool × channel × topic impulse tracking)
 | `spend` | negative | Speech consumed the impulse |
 | `decay` | negative | Time-based decay |
 | `flood` | positive | Overwhelming trigger (direct ping, DM) |
+| `reset` | negative | Zero out impulse after speaking (MVP 1 simplified model) |
 
 ---
 
@@ -820,7 +821,7 @@ The `category` field on Insight indicates what type of understanding this repres
 - `subject_reflection` — semantic topic understanding
 - `self_reflection` — Zos's self-understanding
 - `synthesis` — consolidated understanding from multiple sources
-- `appreciation` — 🟡 what Zos values, finds meaningful, or is grateful for
+- `appreciation` — 🔴 Deferred — what Zos values, finds meaningful, or is grateful for
 
 ### Social Texture Category (from observation analysis)
 - `social_texture` — expression patterns, emoji usage, reaction tendencies, communication style
@@ -829,4 +830,4 @@ Social texture insights track *how* people communicate, not just *what* they say
 
 ---
 
-_Last updated: 2026-01-28 — Added: expanded valence dimensions (awe, grief, longing, peace, gratitude), open_questions field, appreciation category (all 🟡 Open Issues)_
+_Last updated: 2026-02-13 — Reconciled with code: added reset transaction type, marked derived scope and appreciation as deferred, updated pool enum (presence→reaction)_

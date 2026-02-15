@@ -2,7 +2,7 @@
 
 **Status**: 🟢 Complete
 **Last interrogated**: 2026-01-23 (updated for observation integration, reaction earning, emoji topics, culture budget)
-**Last verified**: —
+**Last verified**: 2026-02-13
 **Depends on**: Topics (need topic keys to track salience against), Observation (reaction/media signals)
 **Depended on by**: Layers (salience determines what gets reflected on), Insights (salience spent on creation)
 
@@ -41,7 +41,7 @@ Topics are organized into budget groups for allocation:
 - **Social**: server-scoped users, dyads, user_in_channel, dyad_in_channel (30%)
 - **Global**: cross-server user/dyad topics (`user:<id>`, `dyad:<a>:<b>`) (15%)
 - **Spaces**: channels, threads (30%)
-- **Semantic**: subjects, roles (20%)
+- **Semantic**: subjects, roles (15%)
 - **Culture**: emoji topics (10%)
 - **Self**: self:zos and server-specific self-topics (separate pool, doesn't compete)
 
@@ -96,9 +96,9 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 
 ### Partial Retention
 
-- **Decision**: After salience is spent, a configurable percentage (default 30%) is retained.
-- **Rationale**: Some momentum should persist. A topic that was important yesterday shouldn't have to earn attention from zero.
-- **Implications**: Retention rate is key tuning parameter; new_balance = old_balance - spent + (spent × retention_rate)
+- **Decision**: After salience is spent, a configurable multiplier (default 1.5×) determines how much is retained. Retention > 1.0 means the retained amount exceeds the cost, giving meaningful seed salience for the next cycle.
+- **Rationale**: The zero-reset design (full balance reset after reflection) means low retention leaves topics with almost no seed salience. A 1.5× multiplier gives meaningful starting balance so reflected-on topics can re-accumulate naturally without being starved.
+- **Implications**: Retention rate is key tuning parameter; retained = cost × retention_rate (e.g., cost 2.0 × 1.5 = 3.0 retained)
 
 ### Separate Self Budget
 
@@ -436,7 +436,7 @@ def reset_after_reflection(topic: Topic, tokens_used: int):
     retained = actual_cost * config.retention_rate
     record_transaction(topic, "retain", retained)
 
-    # Final balance ≈ retained (e.g., 2.0 * 0.3 = 0.6)
+    # Final balance ≈ retained (e.g., 2.0 * 1.5 = 3.0)
 ```
 
 On reflection **failure**, no salience is modified — the topic keeps its full balance
@@ -472,19 +472,19 @@ salience:
     # Server-scoped
     server_user: 100
     channel: 150
-    thread: 75
-    server_dyad: 80
-    user_in_channel: 60
-    dyad_in_channel: 50
-    subject: 100
+    thread: 50
+    dyad: 80
+    user_in_channel: 40
+    dyad_in_channel: 30
+    subject: 60
     role: 80
     emoji: 60          # Lower cap to prevent emoji spam dominance
-    server_self: 150
+    self: 100          # Server-scoped self-topic
 
     # Global
-    global_user: 120      # Slightly higher cap for cross-server accumulation
+    global_user: 150      # Higher cap for cross-server accumulation
     global_dyad: 100
-    self: 200             # Global self has highest cap
+    global_self: 200      # Global self has highest cap
 
   # Earning weights
   weights:
@@ -496,6 +496,7 @@ salience:
     dm_message: 1.5            # DMs earn slightly more (direct engagement)
     emoji_use: 0.5             # Each emoji reaction/usage
     media_boost_factor: 1.2    # Multiplier for messages with media/links
+    self_mention: 5.0          # Extra salience when Zos is directly @mentioned
 
   # Propagation
   propagation_factor: 0.3        # Normal propagation to warm related topics
@@ -506,24 +507,27 @@ salience:
 
   # Spending and retention
   cost_per_token: 0.001    # Salience cost per LLM token
-  retention_rate: 0.3      # 30% retained after spending
+  retention_rate: 1.5      # 150% of cost retained (meaningful seed for next cycle)
 
   # Decay
   decay_threshold_days: 7  # Days of inactivity before decay starts
   decay_rate_per_day: 0.01 # 1% per day once decay starts
+
+  # Reflection eligibility
+  min_reflection_salience: 10.0  # Minimum salience for topic to be eligible for reflection
 
   # Budget allocation per group (percentages, must sum to 1.0)
   budget:
     social: 0.30     # server-scoped users, dyads, user_in_channel, dyad_in_channel (reduced from 0.35)
     global: 0.15     # global users, global dyads
     spaces: 0.30     # channels, threads
-    semantic: 0.20   # subjects, roles
-    culture: 0.10    # emoji topics (new)
+    semantic: 0.15   # subjects, roles
+    culture: 0.10    # emoji topics
     # self has separate budget, not in this allocation
 
   # Self budget (separate pool)
-  self_budget:
-    daily_allocation: 50  # Fixed amount, not percentage
+  self_budget: 20           # Fixed amount, not percentage
+  global_reflection_budget: 15.0  # Budget for global topics (cross-server/DM)
 
 # Per-server overrides (in servers section of config)
 servers:
@@ -593,4 +597,4 @@ GROUP BY topic_key;
 
 ---
 
-_Last updated: 2026-01-23 — Added warm threshold, dyad asymmetry metrics, budget reallocation, cold start, edit earning, global dyad warming decisions_
+_Last updated: 2026-02-13 — Reconciled with code: retention_rate 0.3→1.5, semantic budget 20%→15%, updated caps to match implementation, added self_mention weight, min_reflection_salience, global_reflection_budget, self_budget 50→20_

@@ -513,7 +513,7 @@ servers:
 | `pool` | enum | yes | `address`, `insight`, `conversational`, `curiosity`, `reaction` |
 | `channel_id` | string | no | Channel ID if channel-scoped |
 | `topic_key` | string | no | Topic key if topic-scoped |
-| `transaction_type` | enum | yes | `earn`, `spend`, `decay`, `flood`, `pressure` |
+| `transaction_type` | enum | yes | `earn`, `spend`, `decay`, `flood`, `pressure`, `reset` |
 | `amount` | float | yes | Positive for earn/flood, negative for spend/decay/pressure |
 | `trigger` | string | no | What caused this (message_id, insight_id, ping, etc.) |
 | `created_at` | timestamp | yes | When |
@@ -709,16 +709,16 @@ class ChattinessConfig(BaseModel):
 
 ### What's Deferred to Future Iterations
 
-- Separate impulse pools (address, insight, conversational, curiosity, reaction)
-- Global speech pressure
-- Per-channel tracking within pools
-- Self-adjusting threshold (within operator bounds)
-- Reaction as output modality (emoji reactions)
-- Question/curiosity layer
-- Chaining between conversation layers
-- Output channel routing
-- Per-server pool enable/disable
-- Adaptive voice mechanics
+- 🔴 Separate impulse pools (address, insight, conversational, curiosity, reaction)
+- 🔴 Global speech pressure
+- 🔴 Per-channel tracking within pools
+- 🔴 Self-adjusting threshold (within operator bounds)
+- 🔴 Reaction as output modality (emoji reactions)
+- 🔴 Question/curiosity layer
+- 🔴 Chaining between conversation layers
+- 🔴 Output channel routing
+- 🔴 Per-server pool enable/disable
+- 🔴 Adaptive voice mechanics
 
 ---
 

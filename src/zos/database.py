@@ -358,10 +358,10 @@ chattiness_ledger = Table(
     "chattiness_ledger",
     metadata,
     Column("id", String, primary_key=True),  # ULID
-    Column("pool", String, nullable=False),  # address, insight, conversational, curiosity, presence
+    Column("pool", String, nullable=False),  # address, insight, conversational, curiosity, reaction
     Column("channel_id", String, nullable=True),
     Column("topic_key", String, nullable=True),
-    Column("transaction_type", String, nullable=False),  # earn, spend, decay, flood
+    Column("transaction_type", String, nullable=False),  # earn, spend, decay, flood, reset
     Column("amount", Float, nullable=False),
     Column("trigger", String, nullable=True),
     Column("created_at", DateTime, nullable=False, default=datetime.utcnow),

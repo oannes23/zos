@@ -76,8 +76,8 @@ class ModelsConfig(BaseModel):
 class SalienceCapsConfig(BaseModel):
     """Salience caps per topic type."""
 
+    # Server-scoped
     server_user: int = 100
-    global_user: int = 150
     channel: int = 150
     thread: int = 50
     role: int = 80
@@ -87,6 +87,11 @@ class SalienceCapsConfig(BaseModel):
     subject: int = 60
     emoji: int = 60
     self_topic: int = Field(100, alias="self")
+
+    # Global
+    global_user: int = 150
+    global_dyad: int = 100
+    global_self: int = 200
 
 
 class SalienceWeightsConfig(BaseModel):
