@@ -7,6 +7,9 @@
             <th>Balance</th>
             <th>Cap</th>
             <th>Utilization</th>
+            {% if impulse_enabled %}
+            <th>Impulse</th>
+            {% endif %}
             <th>Last Activity</th>
         </tr>
     </thead>
@@ -32,6 +35,22 @@
                     </div>
                 </div>
             </td>
+            {% if impulse_enabled %}
+            <td>
+                {% if topic.impulse_balance > 0 %}
+                <div class="impulse-indicator">
+                    <div class="progress" style="width: 80px">
+                        <div class="progress-bar progress-impulse"
+                            style="width: {{ (topic.impulse_balance / impulse_threshold * 100) | int }}%">
+                        </div>
+                    </div>
+                    <span class="impulse-value">{{ topic.impulse_balance | round(1) }}</span>
+                </div>
+                {% else %}
+                <span class="text-muted">--</span>
+                {% endif %}
+            </td>
+            {% endif %}
             <td class="text-muted">
                 {% if topic.last_activity %}
                     {{ topic.last_activity | relative_time }}

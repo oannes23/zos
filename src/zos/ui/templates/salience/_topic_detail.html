@@ -20,6 +20,25 @@
         </div>
     </div>
 
+    {% if topic.impulse_enabled %}
+    <div class="impulse-section mt-2">
+        <h3>Impulse</h3>
+        <div class="impulse-detail">
+            <div class="progress" style="height: 16px">
+                <div class="progress-bar progress-impulse"
+                    style="width: {{ (topic.impulse_balance / topic.impulse_threshold * 100) | int }}%"></div>
+            </div>
+            <span class="impulse-detail-text">
+                {% if topic.impulse_balance >= topic.impulse_threshold %}
+                    <strong>{{ topic.impulse_balance | round(1) }} / {{ topic.impulse_threshold }}</strong> -- Ready to speak
+                {% else %}
+                    {{ topic.impulse_balance | round(1) }} / {{ topic.impulse_threshold }} -- {{ (topic.impulse_threshold - topic.impulse_balance) | round(1) }} until threshold
+                {% endif %}
+            </span>
+        </div>
+    </div>
+    {% endif %}
+
     <h3 class="mt-2">Recent Transactions</h3>
     {% if topic.recent_transactions %}
     <table class="transactions-table">

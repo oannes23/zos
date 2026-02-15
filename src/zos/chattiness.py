@@ -73,6 +73,22 @@ class ImpulseEngine:
             )
             return float(result.scalar())
 
+    def get_balances(self, topic_keys: list[str]) -> dict[str, float]:
+        """Get impulse balances for multiple topics efficiently."""
+        if not topic_keys:
+            return {}
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                select(
+                    chattiness_ledger.c.topic_key,
+                    func.coalesce(func.sum(chattiness_ledger.c.amount), 0.0).label("balance"),
+                )
+                .where(chattiness_ledger.c.topic_key.in_(topic_keys))
+                .group_by(chattiness_ledger.c.topic_key)
+            )
+            balances = {row.topic_key: float(row.balance) for row in result}
+        return {key: balances.get(key, 0.0) for key in topic_keys}
+
     def reset(self, topic_key: str, trigger: str | None = None) -> None:
         """Zero out impulse by writing a negative transaction."""
         balance = self.get_balance(topic_key)

@@ -1137,6 +1137,45 @@ a:hover {
     color: white;
 }
 
+/* Impulse indicators */
+.badge-impulse {
+    background: #ff8c00;
+    color: white;
+}
+
+.progress-impulse {
+    background: #ff8c00;
+}
+
+.impulse-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.impulse-value {
+    font-size: 0.8rem;
+    color: #ff8c00;
+    white-space: nowrap;
+}
+
+.impulse-section h3 {
+    color: #ff8c00;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.impulse-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.impulse-detail-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
 .subject-dates {
     display: flex;
     gap: 1.5rem;

@@ -20,6 +20,25 @@
         </div>
     </div>
 
+    {% if subject.impulse_enabled %}
+    <div class="impulse-section mt-1">
+        <h3>Impulse</h3>
+        <div class="impulse-detail">
+            <div class="progress" style="height: 16px">
+                <div class="progress-bar progress-impulse"
+                    style="width: {{ (subject.impulse_balance / subject.impulse_threshold * 100) | int }}%"></div>
+            </div>
+            <span class="impulse-detail-text">
+                {% if subject.impulse_balance >= subject.impulse_threshold %}
+                    <strong>{{ subject.impulse_balance | round(1) }} / {{ subject.impulse_threshold }}</strong> -- Ready to speak
+                {% else %}
+                    {{ subject.impulse_balance | round(1) }} / {{ subject.impulse_threshold }} -- {{ (subject.impulse_threshold - subject.impulse_balance) | round(1) }} until threshold
+                {% endif %}
+            </span>
+        </div>
+    </div>
+    {% endif %}
+
     {% if subject.created_at or subject.last_activity %}
     <div class="subject-dates text-muted mt-1">
         {% if subject.created_at %}

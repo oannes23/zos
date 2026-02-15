@@ -219,6 +219,7 @@ def serve(
             app.state.config = config
             app.state.db = engine
             app.state.ledger = ledger
+            app.state.impulse_engine = impulse_engine if config.chattiness.enabled else None
 
             # Create uvicorn server
             uvicorn_config = UvicornConfig(
@@ -364,6 +365,13 @@ def api(ctx: click.Context, host: str, port: int) -> None:
         app.state.config = cfg
         app.state.db = engine
         app.state.ledger = SalienceLedger(engine, cfg)
+
+        # Impulse engine (only when chattiness enabled)
+        if cfg.chattiness.enabled:
+            from zos.chattiness import ImpulseEngine
+            app.state.impulse_engine = ImpulseEngine(engine, cfg)
+        else:
+            app.state.impulse_engine = None
 
         # Run the server
         server_config = uvicorn.Config(

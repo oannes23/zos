@@ -30,6 +30,9 @@
                     <div class="progress-bar" style="width: {{ (topic.balance / topic.cap * 100) | int }}%"></div>
                 </div>
                 <span class="utilization-text">{{ topic.balance | round(1) }} / {{ topic.cap }}</span>
+                {% if impulse_enabled and topic.impulse_balance > 0 %}
+                <span class="badge badge-impulse" title="Impulse balance">{{ topic.impulse_balance | round(1) }}</span>
+                {% endif %}
             </div>
         </div>
         {% else %}

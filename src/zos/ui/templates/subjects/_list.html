@@ -11,6 +11,9 @@
     </div>
     <div class="card-meta">
         <span class="badge badge-salience" title="Salience balance">{{ subject.salience_balance | round(1) }}</span>
+        {% if impulse_enabled and subject.impulse_balance > 0 %}
+        <span class="badge badge-impulse" title="Impulse balance">{{ subject.impulse_balance | round(1) }}</span>
+        {% endif %}
         <span class="badge badge-info">{{ subject.insight_count }} insight{% if subject.insight_count != 1 %}s{% endif %}</span>
         {% if subject.last_activity_at %}
         <span class="text-muted">{{ subject.last_activity_at | relative_time }}</span>

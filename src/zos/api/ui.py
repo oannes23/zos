@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 
-from zos.api.deps import get_config, get_db, get_ledger
+from zos.api.deps import get_config, get_db, get_impulse_engine, get_ledger
 from zos.api.runs import (
     get_layer_run,
     get_layer_run_stats,
@@ -25,6 +25,7 @@ from zos.salience import BudgetGroup, get_budget_group
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
+    from zos.chattiness import ImpulseEngine
     from zos.config import Config
     from zos.salience import SalienceLedger
 
@@ -1333,6 +1334,7 @@ async def subjects_list_partial(
     limit: int = Query(20, ge=1, le=100, description="Page size"),
     db: "Engine" = Depends(get_db),
     ledger: "SalienceLedger" = Depends(get_ledger),
+    impulse_engine: "ImpulseEngine | None" = Depends(get_impulse_engine),
 ) -> HTMLResponse:
     """Partial for subjects list (htmx).
 
@@ -1351,8 +1353,12 @@ async def subjects_list_partial(
     topic_keys = [s["topic_key"] for s in subjects]
     balances = await ledger.get_balances(topic_keys) if topic_keys else {}
 
+    # Get impulse balances if available
+    impulse_balances = impulse_engine.get_balances(topic_keys) if impulse_engine else {}
+
     for s in subjects:
         s["salience_balance"] = balances.get(s["topic_key"], 0.0)
+        s["impulse_balance"] = impulse_balances.get(s["topic_key"], 0.0)
 
     # Sort by salience balance descending
     subjects.sort(key=lambda s: s["salience_balance"], reverse=True)
@@ -1376,6 +1382,7 @@ async def subjects_list_partial(
             "offset": offset,
             "limit": limit,
             "q": q,
+            "impulse_enabled": impulse_engine is not None,
         },
     )
 
@@ -1386,6 +1393,7 @@ async def subject_detail_partial(
     topic_key: str,
     ledger: "SalienceLedger" = Depends(get_ledger),
     db: "Engine" = Depends(get_db),
+    impulse_engine: "ImpulseEngine | None" = Depends(get_impulse_engine),
 ) -> HTMLResponse:
     """Subject detail partial (htmx modal).
 
@@ -1402,6 +1410,11 @@ async def subject_detail_partial(
 
     # Resolve topic key to human-readable name
     readable_topic_key = await _resolve_topic_key_for_ui(db, topic_key)
+
+    # Impulse data
+    impulse_balance = impulse_engine.get_balance(topic_key) if impulse_engine else 0.0
+    impulse_enabled = impulse_engine is not None
+    impulse_threshold = request.app.state.config.chattiness.threshold if impulse_enabled else None
 
     # Format insights for display
     resolved_names = await _resolve_topic_keys_for_ui(
@@ -1420,6 +1433,9 @@ async def subject_detail_partial(
         "utilization": balance / cap if cap > 0 else 0,
         "created_at": topic.created_at if topic else None,
         "last_activity": topic.last_activity_at if topic else None,
+        "impulse_balance": impulse_balance,
+        "impulse_threshold": impulse_threshold,
+        "impulse_enabled": impulse_enabled,
         "insights": formatted_insights,
         "insight_count": len(insights),
         "recent_transactions": [
@@ -1465,6 +1481,7 @@ async def salience_groups_partial(
     ledger: "SalienceLedger" = Depends(get_ledger),
     config: "Config" = Depends(get_config),
     db: "Engine" = Depends(get_db),
+    impulse_engine: "ImpulseEngine | None" = Depends(get_impulse_engine),
 ) -> HTMLResponse:
     """Budget groups partial (htmx).
 
@@ -1532,15 +1549,22 @@ async def salience_groups_partial(
     # Resolve all topic keys to human-readable names
     resolved_names = await _resolve_topic_keys_for_ui(db, all_topic_keys)
 
-    # Add readable names to top_topics
+    # Get impulse balances for all top topics
+    impulse_balances = impulse_engine.get_balances(all_topic_keys) if impulse_engine else {}
+
+    # Add readable names and impulse to top_topics
     for group_data in groups_data:
         for topic in group_data["top_topics"]:
             topic["readable_topic_key"] = resolved_names.get(topic["topic_key"])
+            topic["impulse_balance"] = impulse_balances.get(topic["topic_key"], 0.0)
 
     return templates.TemplateResponse(
         request=request,
         name="salience/_groups.html",
-        context={"groups": groups_data},
+        context={
+            "groups": groups_data,
+            "impulse_enabled": impulse_engine is not None,
+        },
     )
 
 
@@ -1550,6 +1574,7 @@ async def salience_top_partial(
     limit: int = Query(20, ge=1, le=100),
     ledger: "SalienceLedger" = Depends(get_ledger),
     db: "Engine" = Depends(get_db),
+    impulse_engine: "ImpulseEngine | None" = Depends(get_impulse_engine),
 ) -> HTMLResponse:
     """Top topics partial (htmx).
 
@@ -1565,6 +1590,9 @@ async def salience_top_partial(
     topic_keys = [t.key for t in topics_with_balance]
     resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
 
+    # Get impulse balances if available
+    impulse_balances = impulse_engine.get_balances(topic_keys) if impulse_engine else {}
+
     formatted = [
         {
             "topic_key": t.key,
@@ -1573,14 +1601,22 @@ async def salience_top_partial(
             "cap": ledger.get_cap(t.key),
             "budget_group": get_budget_group(t.key).value,
             "last_activity": t.last_activity_at,
+            "impulse_balance": impulse_balances.get(t.key, 0.0),
         }
         for t in topics_with_balance
     ]
 
+    impulse_enabled = impulse_engine is not None
+    impulse_threshold = request.app.state.config.chattiness.threshold if impulse_enabled else None
+
     return templates.TemplateResponse(
         request=request,
         name="salience/_top.html",
-        context={"topics": formatted},
+        context={
+            "topics": formatted,
+            "impulse_enabled": impulse_enabled,
+            "impulse_threshold": impulse_threshold,
+        },
     )
 
 
@@ -1590,6 +1626,7 @@ async def salience_topic_detail(
     topic_key: str,
     ledger: "SalienceLedger" = Depends(get_ledger),
     db: "Engine" = Depends(get_db),
+    impulse_engine: "ImpulseEngine | None" = Depends(get_impulse_engine),
 ) -> HTMLResponse:
     """Topic detail partial (htmx modal).
 
@@ -1604,6 +1641,11 @@ async def salience_topic_detail(
     # Resolve topic key to human-readable name
     readable_topic_key = await _resolve_topic_key_for_ui(db, topic_key)
 
+    # Impulse data
+    impulse_balance = impulse_engine.get_balance(topic_key) if impulse_engine else 0.0
+    impulse_enabled = impulse_engine is not None
+    impulse_threshold = request.app.state.config.chattiness.threshold if impulse_enabled else None
+
     topic_data = {
         "topic_key": topic_key,
         "readable_topic_key": readable_topic_key,
@@ -1611,6 +1653,9 @@ async def salience_topic_detail(
         "cap": cap,
         "utilization": balance / cap if cap > 0 else 0,
         "last_activity": topic.last_activity_at if topic else None,
+        "impulse_balance": impulse_balance,
+        "impulse_threshold": impulse_threshold,
+        "impulse_enabled": impulse_enabled,
         "recent_transactions": [
             {
                 "created_at": t.created_at,

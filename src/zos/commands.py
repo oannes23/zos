@@ -149,12 +149,19 @@ class OperatorCommands(commands.Cog):
                 topics_with_balance = await ledger.get_top_topics(group=None, limit=5)
 
                 if topics_with_balance:
+                    # Batch-fetch impulse balances if available
+                    impulse_engine = self.bot._impulse_engine
+                    topic_keys = [t.key for t in topics_with_balance]
+                    impulse_balances = impulse_engine.get_balances(topic_keys) if impulse_engine else {}
+
                     lines.append("**Warm Topics:**")
                     for topic_data in topics_with_balance:
                         display_key = topic_data.key
                         if len(display_key) > 40:
                             display_key = display_key[:37] + "..."
-                        lines.append(f"  • `{display_key}` ({topic_data.balance:.1f})")
+                        impulse = impulse_balances.get(topic_data.key, 0.0)
+                        impulse_str = f" | impulse: {impulse:.1f}/{self.config.chattiness.threshold}" if impulse > 0 else ""
+                        lines.append(f"  • `{display_key}` ({topic_data.balance:.1f}){impulse_str}")
                 else:
                     lines.append("**Warm Topics:** None yet")
 
@@ -373,6 +380,11 @@ class OperatorCommands(commands.Cog):
             )
             return
 
+        # Batch-fetch impulse balances if available
+        impulse_engine = self.bot._impulse_engine
+        topic_keys = [t.key for t in topics_with_balance]
+        impulse_balances = impulse_engine.get_balances(topic_keys) if impulse_engine else {}
+
         # Format the response
         lines = ["**Top Topics by Salience**", ""]
         for topic_data in topics_with_balance:
@@ -385,10 +397,13 @@ class OperatorCommands(commands.Cog):
             if len(display_key) > 50:
                 display_key = display_key[:47] + "..."
 
+            impulse = impulse_balances.get(topic_data.key, 0.0)
+            impulse_str = f" • Impulse: {impulse:.1f}/{self.config.chattiness.threshold}" if impulse > 0 else ""
+
             lines.append(
                 f"• `{display_key}`\n"
                 f"  Balance: {topic_data.balance:.1f}/{cap:.1f} ({utilization:.0f}%) • "
-                f"Group: {budget_group.value}"
+                f"Group: {budget_group.value}{impulse_str}"
             )
 
         await interaction.followup.send("\n".join(lines), ephemeral=True)
