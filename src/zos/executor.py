@@ -2344,13 +2344,24 @@ class LayerExecutor:
             if node.type.value.startswith("fetch_"):
                 source_params.update(node.params)
 
+        # Derive convenience names for templates
+        channel_name = None
+        if channel_info and channel_info.get("name"):
+            channel_name = channel_info["name"]
+
+        subject_name = None
+        if subject_info and subject_info.get("display_name"):
+            subject_name = subject_info["display_name"]
+
         # Render template
         template_context = {
             "topic": ctx.topic,
             "user_profile": user_profile,
             "user_profiles": user_profiles,
             "channel_info": channel_info,
+            "channel_name": channel_name,
             "subject_info": subject_info,
+            "subject_name": subject_name,
             "emoji_info": emoji_info,
             "existing_subjects": existing_subjects,
             "messages": format_messages_for_prompt(

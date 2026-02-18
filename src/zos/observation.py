@@ -2265,6 +2265,10 @@ class ZosBot(commands.Bot):
             channel_id = self._resolve_channel_for_topic(topic_key)
             if channel_id:
                 send_context["channel_id"] = channel_id
+                # Resolve channel name from discord.py cache for templates
+                discord_channel = self.get_channel(int(channel_id))
+                if discord_channel and hasattr(discord_channel, "name"):
+                    send_context["channel_name"] = discord_channel.name
 
         log.info(
             "conversation_dispatch",
