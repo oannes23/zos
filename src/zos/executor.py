@@ -2914,6 +2914,12 @@ class LayerExecutor:
         meta_template_path = params.get("prompt_template", "self/meta_reflection.jinja2")
         insights_per_template = params.get("insights_per_template", 5)
 
+        # Fetch the most recent self-reflection insight for grounding context
+        self_insights = get_insights_by_layer_name(
+            self.engine, "weekly-self-reflection", limit=1
+        )
+        latest_self_insight = self_insights[0].content if self_insights else None
+
         # Discover reflection templates from loaded layers
         templates_to_review = self._discover_reflection_templates()
 
@@ -2939,7 +2945,8 @@ class LayerExecutor:
         for template_info in templates_to_review:
             try:
                 result = await self._review_single_template(
-                    template_info, node, ctx, insights_per_template
+                    template_info, node, ctx, insights_per_template,
+                    latest_self_insight=latest_self_insight,
                 )
                 results.append(result)
             except Exception as e:
@@ -3008,6 +3015,7 @@ class LayerExecutor:
         node: Node,
         ctx: ExecutionContext,
         insights_per_template: int = 5,
+        latest_self_insight: str | None = None,
     ) -> dict[str, Any]:
         """Review a single template and optionally rewrite it.
 
@@ -3022,6 +3030,7 @@ class LayerExecutor:
             node: The update_templates node (for model params).
             ctx: The execution context.
             insights_per_template: How many recent insights to include.
+            latest_self_insight: Most recent self-reflection insight content, if any.
 
         Returns:
             Result dict with template_path, layer_name, changed, reasoning.
@@ -3071,6 +3080,7 @@ class LayerExecutor:
             "template_source": template_source,
             "variable_explanations": variable_explanations,
             "recent_insights_text": recent_insights_text,
+            "latest_self_insight": latest_self_insight,
             "layer_name": layer_name,
             "layer_description": template_info.get("description", ""),
         }

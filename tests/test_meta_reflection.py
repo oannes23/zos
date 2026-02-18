@@ -114,6 +114,11 @@ You are Zos, reflecting on your own cognitive processes.
 ## Self-Concept
 {{ self_concept }}
 
+{% if latest_self_insight %}
+## Latest Self-Reflection
+{{ latest_self_insight }}
+{% endif %}
+
 ## Template Under Review
 Template: {{ template_path }}
 Layer: {{ layer_name }}
@@ -906,6 +911,68 @@ class TestHandleUpdateTemplates:
         assert "content" in summary
         assert summary["confidence"] > 0
         assert "valence" in summary
+
+    @pytest.mark.asyncio
+    async def test_self_insight_included_in_prompts(self, executor, ctx, update_node, engine, self_topic):
+        """Latest self-reflection insight should appear in every review prompt."""
+        # Insert a self-reflection layer run and insight
+        run_id = generate_id()
+        with engine.connect() as conn:
+            conn.execute(
+                layer_runs_table.insert().values(
+                    id=run_id,
+                    layer_name="weekly-self-reflection",
+                    layer_hash="abc123",
+                    started_at=utcnow(),
+                    completed_at=utcnow(),
+                    status="success",
+                    targets_matched=1,
+                    targets_processed=1,
+                    targets_skipped=0,
+                    insights_created=1,
+                )
+            )
+            conn.execute(
+                insights_table.insert().values(
+                    id=generate_id(),
+                    topic_key="self:zos",
+                    category="self_reflection",
+                    content="I notice a growing capacity for nuance in how I process uncertainty.",
+                    sources_scope_max="public",
+                    created_at=utcnow(),
+                    layer_run_id=run_id,
+                    quarantined=False,
+                    salience_spent=1.0,
+                    strength_adjustment=1.5,
+                    strength=1.5,
+                    original_topic_salience=5.0,
+                    confidence=0.8,
+                    importance=0.7,
+                    novelty=0.6,
+                    valence_curiosity=0.7,
+                )
+            )
+            conn.commit()
+
+        prompts_seen = []
+
+        async def mock_complete(*args, **kwargs):
+            prompts_seen.append(kwargs.get("prompt", args[0] if args else ""))
+            return CompletionResult(
+                text=_make_no_change_response(),
+                usage=Usage(input_tokens=500, output_tokens=200),
+                model="claude-opus-4-20250514",
+                provider="anthropic",
+            )
+
+        executor.llm.complete = AsyncMock(side_effect=mock_complete)
+
+        await executor._handle_update_templates(update_node, ctx)
+
+        # Every prompt should contain the self-insight
+        assert len(prompts_seen) >= 2
+        for prompt in prompts_seen:
+            assert "growing capacity for nuance" in prompt
 
     @pytest.mark.asyncio
     async def test_meta_template_appended_last(self, executor, ctx, update_node):
