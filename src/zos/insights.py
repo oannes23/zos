@@ -20,7 +20,12 @@ from typing import TYPE_CHECKING
 import structlog
 from sqlalchemy import and_, func, or_, select
 
-from zos.database import generate_id, insights as insights_table, topics as topics_table
+from zos.database import (
+    generate_id,
+    insights as insights_table,
+    layer_runs as layer_runs_table,
+    topics as topics_table,
+)
 from zos.models import Insight, model_to_dict, row_to_model, utcnow
 
 if TYPE_CHECKING:
@@ -849,3 +854,42 @@ def _row_to_insight_static(row) -> Insight:
         conflict_resolved=row.conflict_resolved,
         synthesis_source_ids=row.synthesis_source_ids,
     )
+
+
+def get_insights_by_layer_name(
+    engine: "Engine",
+    layer_name: str,
+    limit: int = 5,
+) -> list[Insight]:
+    """Get recent insights produced by a specific layer.
+
+    Joins insights to layer_runs on layer_run_id to filter by the layer
+    that produced them. Returns the most recent non-quarantined insights.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        layer_name: The layer name to filter by (e.g. "nightly-user-reflection").
+        limit: Maximum number of insights to return.
+
+    Returns:
+        List of Insight models, ordered by created_at descending.
+    """
+    with engine.connect() as conn:
+        stmt = (
+            select(insights_table)
+            .join(
+                layer_runs_table,
+                insights_table.c.layer_run_id == layer_runs_table.c.id,
+            )
+            .where(
+                and_(
+                    layer_runs_table.c.layer_name == layer_name,
+                    insights_table.c.quarantined == False,
+                )
+            )
+            .order_by(insights_table.c.created_at.desc())
+            .limit(limit)
+        )
+
+        rows = conn.execute(stmt).fetchall()
+        return [_row_to_insight_static(r) for r in rows]

@@ -40,6 +40,7 @@ class NodeType(str, Enum):
     Special nodes:
     - synthesize_to_global: Consolidate server-scoped insights to global topic
     - update_self_concept: Update the self-concept.md document
+    - update_templates: Review and evolve reflection templates
     - fetch_layer_runs: Retrieve layer run history for self-reflection
     - fetch_reactions: Retrieve emoji reaction patterns for a user
     """
@@ -54,6 +55,7 @@ class NodeType(str, Enum):
     FILTER = "filter"
     SYNTHESIZE_TO_GLOBAL = "synthesize_to_global"
     UPDATE_SELF_CONCEPT = "update_self_concept"
+    UPDATE_TEMPLATES = "update_templates"
     FETCH_LAYER_RUNS = "fetch_layer_runs"
 
 

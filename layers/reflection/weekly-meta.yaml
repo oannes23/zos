@@ -1,0 +1,32 @@
+# Weekly Meta-Reflection Layer
+#
+# Reviews and evolves reflection templates based on insight quality.
+# Zos examines its own cognitive processes and may modify them.
+# Runs weekly on Sunday at 4:30 AM (after self-reflection at 4 AM).
+#
+# This creates a genuinely recursive loop: the meta-reflection template
+# reviews all other reflection templates, and reviews itself last.
+
+name: weekly-meta-reflection
+category: self
+description: |
+  Review and evolve reflection templates based on insight quality.
+  Zos examines its own cognitive processes and may modify them.
+
+schedule: "30 4 * * 0"  # Sunday 4:30 AM (after self-reflection at 4 AM)
+
+target_category: self
+
+nodes:
+  - name: evolve_templates
+    type: update_templates
+    params:
+      prompt_template: self/meta_reflection.jinja2
+      model: complex
+      max_tokens: 8192
+      insights_per_template: 5
+
+  - name: store_meta_insight
+    type: store_insight
+    params:
+      category: meta_reflection

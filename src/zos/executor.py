@@ -33,7 +33,7 @@ from zos.database import (
     topics as topics_table,
     user_profiles as user_profiles_table,
 )
-from zos.insights import FormattedInsight, InsightRetriever, insert_insight
+from zos.insights import FormattedInsight, InsightRetriever, get_insights_by_layer_name, insert_insight
 from zos.layers import Layer, LayerLoader, Node, NodeType
 from zos.llm import CompletionResult, ModelClient, estimate_cost
 from zos.logging import get_logger
@@ -88,6 +88,33 @@ DEFAULT_METRICS = {
 
 # Maximum retry attempts per topic
 MAX_RETRY_ATTEMPTS = 3
+
+# Conversation layer categories excluded from template discovery
+CONVERSATION_CATEGORIES = {"response", "participation", "insight_sharing"}
+
+# Reference for template variable explanations in meta-reflection
+TEMPLATE_VARIABLE_REFERENCE: dict[str, str] = {
+    "self_concept": "Current self-concept document from data/self-concept.md (auto-injected)",
+    "insights": "Prior insights for this topic (list with content, strength, timestamps)",
+    "messages": "Recent messages relevant to this topic (formatted for prompt display)",
+    "topic": "The Topic model being reflected on (.key, .category)",
+    "user_profile": "User profile data (display_name, bio, roles, etc.) for user reflections",
+    "user_profiles": "List of user profiles for dyad reflections (both participants)",
+    "channel_info": "Channel metadata (name, type, parent) for channel reflections",
+    "subject_info": "Subject metadata (name, display_name) for subject reflections",
+    "emoji_info": "Emoji metadata (name, server_id) for emoji reflections",
+    "conversation_chunks": "Messages grouped by channel for user reflections",
+    "dm_messages": "Direct messages with the user being reflected on",
+    "reactions": "Emoji reaction patterns for the user or dyad",
+    "layer_runs": "Recent layer execution history (for self-reflection)",
+    "recent_insights": "Cross-topic insights from other reflection layers",
+    "existing_subjects": "Known subject topics for naming consistency",
+    "individual_insights": "Per-user insights for dyad reflections",
+    "source_params": "Parameters from fetch nodes (since_days, max_per_topic, etc.)",
+    "chat_guidance": "Standard guidance for handling anonymous users (auto-injected)",
+    "now": "Current UTC timestamp",
+    "llm_response": "Response from a prior LLM call node in the same pipeline",
+}
 
 
 def merge_time_windows(
@@ -290,6 +317,7 @@ class LayerExecutor:
             NodeType.FILTER: self._handle_filter,
             NodeType.SYNTHESIZE_TO_GLOBAL: self._handle_synthesize_to_global,
             NodeType.UPDATE_SELF_CONCEPT: self._handle_update_self_concept,
+            NodeType.UPDATE_TEMPLATES: self._handle_update_templates,
         }
 
     async def execute_layer(
@@ -2845,6 +2873,361 @@ class LayerExecutor:
             source_topic=ctx.topic.key,
             global_topic=global_topic_key,
         )
+
+    # =========================================================================
+    # Meta-Reflection: Template Evolution
+    # =========================================================================
+
+    async def _handle_update_templates(
+        self, node: Node, ctx: ExecutionContext
+    ) -> None:
+        """Review and evolve reflection templates.
+
+        Iterates over all reflection templates discovered from loaded layers,
+        evaluates each against its recent output quality via an LLM call,
+        and may rewrite templates that would benefit from evolution.
+
+        The meta-reflection template itself is always reviewed last, creating
+        a genuinely recursive loop of self-modification.
+
+        Args:
+            node: The node with params (prompt_template, model, max_tokens,
+                  insights_per_template).
+            ctx: The execution context.
+        """
+        if ctx.dry_run:
+            log.debug("update_templates_skipped_dry_run")
+            return
+
+        params = node.params
+        meta_template_path = params.get("prompt_template", "self/meta_reflection.jinja2")
+        insights_per_template = params.get("insights_per_template", 5)
+
+        # Discover reflection templates from loaded layers
+        templates_to_review = self._discover_reflection_templates()
+
+        # Append the meta-reflection template itself at the end
+        meta_already_included = any(
+            t["template_path"] == meta_template_path for t in templates_to_review
+        )
+        if not meta_already_included:
+            templates_to_review.append({
+                "layer_name": ctx.layer.name,
+                "template_path": meta_template_path,
+                "category": "self",
+                "description": ctx.layer.description or "Meta-reflection on cognitive processes",
+            })
+
+        log.info(
+            "update_templates_start",
+            template_count=len(templates_to_review),
+            templates=[t["template_path"] for t in templates_to_review],
+        )
+
+        results = []
+        for template_info in templates_to_review:
+            try:
+                result = await self._review_single_template(
+                    template_info, node, ctx, insights_per_template
+                )
+                results.append(result)
+            except Exception as e:
+                log.error(
+                    "template_review_failed",
+                    template_path=template_info["template_path"],
+                    error=str(e),
+                )
+                results.append({
+                    "template_path": template_info["template_path"],
+                    "layer_name": template_info["layer_name"],
+                    "changed": False,
+                    "reasoning": f"Review failed: {e}",
+                    "error": True,
+                })
+
+        # Build summary as the llm_response for downstream store_insight
+        ctx.llm_response = self._build_meta_reflection_summary(results)
+
+        log.info(
+            "update_templates_complete",
+            total=len(results),
+            modified=sum(1 for r in results if r.get("changed")),
+            errors=sum(1 for r in results if r.get("error")),
+        )
+
+    def _discover_reflection_templates(self) -> list[dict[str, str]]:
+        """Discover reflection templates from all loaded layers.
+
+        Iterates over loaded layers, skipping conversation categories.
+        For each layer, finds llm_call nodes whose prompt_template ends
+        with 'reflection.jinja2'.
+
+        Returns:
+            List of dicts with layer_name, template_path, category, description.
+        """
+        templates = []
+        try:
+            all_layers = self.loader.load_all()
+        except Exception as e:
+            log.error("discover_templates_load_failed", error=str(e))
+            return templates
+
+        for name, layer in sorted(all_layers.items()):
+            # Skip conversation categories
+            if layer.category.value in CONVERSATION_CATEGORIES:
+                continue
+
+            for lnode in layer.nodes:
+                if lnode.type != NodeType.LLM_CALL:
+                    continue
+                tpl_path = lnode.params.get("prompt_template", "")
+                if tpl_path.endswith("reflection.jinja2"):
+                    templates.append({
+                        "layer_name": name,
+                        "template_path": tpl_path,
+                        "category": layer.category.value,
+                        "description": layer.description or "",
+                    })
+
+        return templates
+
+    async def _review_single_template(
+        self,
+        template_info: dict[str, str],
+        node: Node,
+        ctx: ExecutionContext,
+        insights_per_template: int = 5,
+    ) -> dict[str, Any]:
+        """Review a single template and optionally rewrite it.
+
+        1. Reads template source from disk
+        2. Queries recent insights from the template's layer
+        3. Builds variable explanations
+        4. Renders the meta-reflection prompt and calls LLM
+        5. Parses response and conditionally writes updated template
+
+        Args:
+            template_info: Dict with layer_name, template_path, category, description.
+            node: The update_templates node (for model params).
+            ctx: The execution context.
+            insights_per_template: How many recent insights to include.
+
+        Returns:
+            Result dict with template_path, layer_name, changed, reasoning.
+        """
+        params = node.params
+        meta_template_path = params.get("prompt_template", "self/meta_reflection.jinja2")
+        model_profile = params.get("model", "complex")
+        max_tokens = params.get("max_tokens", 8192)
+
+        template_path = template_info["template_path"]
+        layer_name = template_info["layer_name"]
+
+        # Read template source from disk
+        full_path = self.templates.templates_dir / template_path
+        if not full_path.exists():
+            return {
+                "template_path": template_path,
+                "layer_name": layer_name,
+                "changed": False,
+                "reasoning": f"Template file not found: {full_path}",
+            }
+
+        template_source = full_path.read_text()
+
+        # Get recent insights from this layer
+        recent_insights = get_insights_by_layer_name(
+            self.engine, layer_name, limit=insights_per_template
+        )
+
+        # Format insights for display
+        if recent_insights:
+            recent_insights_text = "\n".join(
+                f"[{i + 1}] (strength: {ins.strength:.1f}, confidence: {ins.confidence:.1f})\n{ins.content}\n"
+                for i, ins in enumerate(recent_insights)
+            )
+        else:
+            recent_insights_text = ""
+
+        # Build variable explanations
+        variable_explanations = self._explain_template_variables(
+            template_source, template_info
+        )
+
+        # Render the meta-reflection prompt
+        render_context = {
+            "template_path": template_path,
+            "template_source": template_source,
+            "variable_explanations": variable_explanations,
+            "recent_insights_text": recent_insights_text,
+            "layer_name": layer_name,
+            "layer_description": template_info.get("description", ""),
+        }
+
+        prompt = self.templates.render(meta_template_path, render_context)
+
+        # Call LLM
+        result = await self.llm.complete(
+            prompt=prompt,
+            model_profile=model_profile,
+            max_tokens=max_tokens,
+            layer_run_id=ctx.run_id,
+            topic_key=ctx.topic.key,
+            call_type=LLMCallType.REFLECTION,
+        )
+
+        ctx.add_tokens(result.usage.input_tokens, result.usage.output_tokens)
+
+        # Parse response
+        decision = self._parse_json_from_response(result.text)
+        if not decision:
+            log.warning(
+                "meta_reflection_parse_failed",
+                template_path=template_path,
+            )
+            return {
+                "template_path": template_path,
+                "layer_name": layer_name,
+                "changed": False,
+                "reasoning": "Could not parse LLM response as JSON",
+            }
+
+        should_modify = decision.get("should_modify", False)
+        reasoning = decision.get("reasoning", "No reasoning provided")
+        updated_template = decision.get("updated_template")
+
+        if not should_modify or not updated_template:
+            log.info(
+                "template_no_change",
+                template_path=template_path,
+                reasoning=reasoning,
+            )
+            return {
+                "template_path": template_path,
+                "layer_name": layer_name,
+                "changed": False,
+                "reasoning": reasoning,
+            }
+
+        # Validate Jinja2 syntax before writing
+        try:
+            from jinja2 import Environment
+            Environment().parse(updated_template)
+        except Exception as e:
+            log.error(
+                "template_jinja2_validation_failed",
+                template_path=template_path,
+                error=str(e),
+            )
+            return {
+                "template_path": template_path,
+                "layer_name": layer_name,
+                "changed": False,
+                "reasoning": f"Jinja2 validation failed: {e}. Original preserved.",
+            }
+
+        # Write the updated template
+        full_path.write_text(updated_template)
+
+        log.info(
+            "template_updated",
+            template_path=template_path,
+            reasoning=reasoning,
+        )
+
+        return {
+            "template_path": template_path,
+            "layer_name": layer_name,
+            "changed": True,
+            "reasoning": reasoning,
+        }
+
+    def _explain_template_variables(
+        self, template_source: str, template_info: dict[str, str]
+    ) -> str:
+        """Extract and explain template variables.
+
+        Regex-extracts variable references from {{ var }}, {% for x in var %},
+        and {% if var %} patterns, then looks up each in TEMPLATE_VARIABLE_REFERENCE.
+
+        Args:
+            template_source: The raw template source text.
+            template_info: Template metadata (for context).
+
+        Returns:
+            Formatted string explaining each variable found.
+        """
+        # Extract variable names from Jinja2 syntax
+        patterns = [
+            r"\{\{\s*(\w+)",         # {{ var ... }}
+            r"\{%\s*for\s+\w+\s+in\s+(\w+)",  # {% for x in var %}
+            r"\{%\s*if\s+(\w+)",     # {% if var %}
+        ]
+
+        found_vars: set[str] = set()
+        for pattern in patterns:
+            found_vars.update(re.findall(pattern, template_source))
+
+        # Remove Jinja2 builtins and loop variables
+        builtins = {"true", "false", "none", "loop", "range", "lipsum", "dict", "cycler"}
+        found_vars -= builtins
+
+        if not found_vars:
+            return "No template variables detected."
+
+        lines = []
+        for var in sorted(found_vars):
+            description = TEMPLATE_VARIABLE_REFERENCE.get(var, "(local/loop variable)")
+            lines.append(f"- `{var}`: {description}")
+
+        return "\n".join(lines)
+
+    def _build_meta_reflection_summary(self, results: list[dict[str, Any]]) -> str:
+        """Build a JSON summary of all template reviews for store_insight.
+
+        Args:
+            results: List of per-template review results.
+
+        Returns:
+            JSON string formatted as an insight response.
+        """
+        modified = [r for r in results if r.get("changed")]
+        unchanged = [r for r in results if not r.get("changed") and not r.get("error")]
+        errors = [r for r in results if r.get("error")]
+
+        summary_parts = []
+        summary_parts.append(
+            f"Reviewed {len(results)} reflection templates."
+        )
+
+        if modified:
+            names = ", ".join(r["template_path"] for r in modified)
+            summary_parts.append(f"Modified {len(modified)}: {names}.")
+            for r in modified:
+                summary_parts.append(f"  - {r['template_path']}: {r['reasoning']}")
+
+        if unchanged:
+            summary_parts.append(f"Left {len(unchanged)} unchanged.")
+
+        if errors:
+            names = ", ".join(r["template_path"] for r in errors)
+            summary_parts.append(f"Errors reviewing {len(errors)}: {names}.")
+
+        content = " ".join(summary_parts)
+
+        summary = {
+            "content": content,
+            "confidence": 0.8,
+            "importance": 0.7 if modified else 0.4,
+            "novelty": 0.6 if modified else 0.3,
+            "strength_adjustment": 1.5 if modified else 1.0,
+            "valence": {
+                "curiosity": 0.8,
+                "warmth": 0.3,
+            },
+        }
+
+        return json.dumps(summary)
 
     async def _handle_update_self_concept(
         self, node: Node, ctx: ExecutionContext
