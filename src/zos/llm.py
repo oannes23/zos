@@ -100,15 +100,22 @@ class RateLimiter:
 
 
 # Cost per million tokens (input, output) - approximate prices
+# Includes both alias (undated) and dated model IDs for lookup flexibility.
 MODEL_PRICES: dict[str, tuple[float, float]] = {
+    # Opus
     "claude-opus-4-6": (15.0, 75.0),
     "claude-opus-4-20250514": (15.0, 75.0),
+    # Sonnet
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-sonnet-4-5": (3.0, 15.0),
     "claude-sonnet-4-5-20250929": (3.0, 15.0),
     "claude-sonnet-4-20250514": (3.0, 15.0),
+    "claude-3-5-sonnet-20241022": (3.0, 15.0),
+    # Haiku
+    "claude-haiku-4-5": (0.25, 1.25),
     "claude-haiku-4-5-20251001": (0.25, 1.25),
     "claude-3-5-haiku-20241022": (0.25, 1.25),
     "claude-3-haiku-20240307": (0.25, 1.25),
-    "claude-3-5-sonnet-20241022": (3.0, 15.0),
 }
 
 
@@ -250,7 +257,7 @@ class ModelClient:
         if self.config.models is None:
             # Default to Anthropic Haiku for simple tasks
             provider = "anthropic"
-            model = "claude-haiku-4-5-20251001"
+            model = "claude-haiku-4-5"
         else:
             profile = self.config.models.resolve_profile(model_profile)
             provider = profile.provider
@@ -419,7 +426,7 @@ class ModelClient:
         if self.config.models is None:
             # Default to Anthropic Haiku for vision
             provider = "anthropic"
-            model = "claude-haiku-4-5-20251001"
+            model = "claude-haiku-4-5"
         else:
             profile = self.config.models.resolve_profile(model_profile)
             provider = profile.provider

@@ -31,16 +31,16 @@ database:
 # Each profile defines a provider and model to use
 models:
   profiles:
-    # Base profiles - actual models
+    # Base profiles — use alias (undated) model IDs so they auto-update
     simple:
       provider: anthropic
-      model: claude-3-5-haiku-20241022
+      model: claude-haiku-4-5
     moderate:
       provider: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-4-6
     complex:
       provider: anthropic
-      model: claude-opus-4-20250514
+      model: claude-opus-4-6
 
     # Semantic aliases - reference other profiles
     default: moderate

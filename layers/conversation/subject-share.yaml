@@ -14,6 +14,12 @@ trigger: impulse_threshold
 target_category: subject
 
 nodes:
+  - name: fetch_subject_messages
+    type: fetch_messages
+    params:
+      lookback_hours: 48
+      limit_per_channel: 25
+
   - name: fetch_subject_insights
     type: fetch_insights
     params:
