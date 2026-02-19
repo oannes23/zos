@@ -1639,6 +1639,12 @@ a:hover {
     background: var(--bg-card);
     border-radius: 8px;
     overflow: hidden;
+    table-layout: fixed;
+}
+
+/* Scrollable wrapper for wide tables inside cards */
+.table-scroll {
+    overflow-x: auto;
 }
 
 .data-table th {

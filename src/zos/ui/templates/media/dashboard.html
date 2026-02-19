@@ -5,17 +5,8 @@
 <h1>Media</h1>
 <p class="text-muted">Link analyses, image descriptions, and YouTube summaries</p>
 
-<div class="summary-stats" hx-get="/ui/media/stats?days=30" hx-trigger="load">
+<div hx-get="/ui/media/stats?days=30" hx-trigger="load">
     Loading stats...
-</div>
-
-<div class="card mt-2">
-    <div class="card-header">
-        <span class="card-title">Link Analyses</span>
-    </div>
-    <div id="links-list" hx-get="/ui/media/links" hx-trigger="load">
-        Loading...
-    </div>
 </div>
 
 <div class="card mt-2">
@@ -23,6 +14,15 @@
         <span class="card-title">Image Analyses</span>
     </div>
     <div id="images-list" hx-get="/ui/media/images" hx-trigger="load">
+        Loading...
+    </div>
+</div>
+
+<div class="card mt-2">
+    <div class="card-header">
+        <span class="card-title">Link Analyses</span>
+    </div>
+    <div id="links-list" hx-get="/ui/media/links" hx-trigger="load">
         Loading...
     </div>
 </div>

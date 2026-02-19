@@ -1,13 +1,14 @@
 {% if links %}
+<div class="table-scroll">
 <table class="data-table">
     <thead>
         <tr>
-            <th>Domain</th>
-            <th>Title</th>
-            <th>Summary</th>
-            <th>Type</th>
-            <th>Fetched</th>
-            <th>Status</th>
+            <th style="width: 14%">Domain</th>
+            <th style="width: 22%">Title</th>
+            <th style="width: 30%">Summary</th>
+            <th style="width: 10%">Type</th>
+            <th style="width: 12%">Fetched</th>
+            <th style="width: 12%">Status</th>
         </tr>
     </thead>
     <tbody>
@@ -44,6 +45,7 @@
     {% endfor %}
     </tbody>
 </table>
+</div>
 
 <div class="pagination mt-1">
     {% if offset > 0 %}
