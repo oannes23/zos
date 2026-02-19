@@ -1,0 +1,48 @@
+{% if calls %}
+<table class="budget-table">
+    <thead>
+        <tr>
+            <th>Type</th>
+            <th>Model</th>
+            <th class="text-right">Tokens</th>
+            <th class="text-right">Cost</th>
+            <th class="text-right">Latency</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for call in calls %}
+        <tr class="clickable"
+            hx-get="/ui/budget/calls/{{ call.id }}"
+            hx-target="#run-call-detail-modal"
+            hx-swap="innerHTML">
+            <td>
+                <span class="badge badge-{{ call.call_type }}">{{ call.call_type }}</span>
+            </td>
+            <td>
+                <span class="badge badge-profile-{{ call.model_profile }}">{{ call.model_profile }}</span>
+                <span class="model-name">{{ call.model_name | truncate(25) }}</span>
+            </td>
+            <td class="text-right">
+                <span class="tokens-detail">{{ call.tokens_input | format_number }} / {{ call.tokens_output | format_number }}</span>
+            </td>
+            <td class="text-right">{{ call.estimated_cost_usd | format_cost }}</td>
+            <td class="text-right">
+                {% if call.latency_ms %}{{ call.latency_ms }}ms{% else %}—{% endif %}
+            </td>
+            <td>
+                {% if call.success %}
+                <span class="badge badge-success">OK</span>
+                {% else %}
+                <span class="badge badge-error" title="{{ call.error_message }}">Error</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div id="run-call-detail-modal" class="modal"></div>
+{% else %}
+<p class="text-muted">No LLM calls recorded for this run</p>
+{% endif %}

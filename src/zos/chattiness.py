@@ -109,6 +109,40 @@ class ImpulseEngine:
             )
         log.debug("impulse_reset", topic_key=topic_key, was=balance, trigger=trigger)
 
+    def get_history(self, topic_key: str, limit: int = 20) -> list[dict]:
+        """Get recent impulse transactions for a topic.
+
+        Args:
+            topic_key: The topic key to get history for.
+            limit: Maximum number of transactions to return.
+
+        Returns:
+            List of dicts with created_at, transaction_type, amount, pool.
+        """
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                select(
+                    chattiness_ledger.c.created_at,
+                    chattiness_ledger.c.transaction_type,
+                    chattiness_ledger.c.amount,
+                    chattiness_ledger.c.pool,
+                    chattiness_ledger.c.trigger,
+                )
+                .where(chattiness_ledger.c.topic_key == topic_key)
+                .order_by(chattiness_ledger.c.created_at.desc())
+                .limit(limit)
+            )
+            return [
+                {
+                    "created_at": row.created_at,
+                    "transaction_type": row.transaction_type,
+                    "amount": float(row.amount),
+                    "pool": row.pool,
+                    "trigger": row.trigger,
+                }
+                for row in result
+            ]
+
     def get_topics_above_threshold(self) -> list[tuple[str, float]]:
         """Query all topics where SUM(amount) > threshold. Used by heartbeat."""
         threshold = self.config.chattiness.threshold

@@ -79,43 +79,32 @@ async def seeded_ledger(ledger: SalienceLedger) -> SalienceLedger:
 
 
 class TestSalienceDashboardPage:
-    """Tests for: Budget group overview with allocations."""
+    """Tests for: Salience redirects to unified topics page."""
 
-    def test_salience_page_returns_200(self, client: TestClient) -> None:
-        """Salience dashboard page should return 200 OK."""
+    def test_salience_page_redirects_to_topics(self, client: TestClient) -> None:
+        """Salience dashboard should redirect to unified topics page."""
+        response = client.get("/ui/salience", follow_redirects=False)
+        assert response.status_code == 302
+        assert response.headers["location"] == "/ui/topics"
+
+    def test_salience_redirect_follows_to_200(self, client: TestClient) -> None:
+        """Following the salience redirect should return 200 OK."""
         response = client.get("/ui/salience")
         assert response.status_code == 200
 
-    def test_salience_page_returns_html(self, client: TestClient) -> None:
-        """Salience dashboard page should return HTML."""
+    def test_salience_redirect_lands_on_topics(self, client: TestClient) -> None:
+        """Following the salience redirect should show topics page."""
+        response = client.get("/ui/salience")
+        assert "Topics" in response.text
+
+    def test_salience_redirect_returns_html(self, client: TestClient) -> None:
+        """Following the salience redirect should return HTML."""
         response = client.get("/ui/salience")
         assert "text/html" in response.headers["content-type"]
 
-    def test_salience_page_contains_title(self, client: TestClient) -> None:
-        """Salience dashboard page should contain correct title."""
+    def test_salience_redirect_has_active_nav(self, client: TestClient) -> None:
+        """Topics page should mark topics as active in navigation."""
         response = client.get("/ui/salience")
-        assert "Salience Dashboard" in response.text
-
-    def test_salience_page_contains_description(self, client: TestClient) -> None:
-        """Salience dashboard page should explain its purpose."""
-        response = client.get("/ui/salience")
-        assert "attention" in response.text.lower()
-
-    def test_salience_page_has_groups_htmx(self, client: TestClient) -> None:
-        """Salience dashboard should load groups via htmx."""
-        response = client.get("/ui/salience")
-        assert 'hx-get="/ui/salience/groups"' in response.text
-        assert 'hx-trigger="load"' in response.text
-
-    def test_salience_page_has_top_topics_htmx(self, client: TestClient) -> None:
-        """Salience dashboard should load top topics via htmx."""
-        response = client.get("/ui/salience")
-        assert 'hx-get="/ui/salience/top' in response.text
-
-    def test_salience_page_is_active_in_nav(self, client: TestClient) -> None:
-        """Salience page should mark salience as active in navigation."""
-        response = client.get("/ui/salience")
-        # The active link should have the active class
         assert 'class="active"' in response.text
 
 

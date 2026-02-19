@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Topics — Zos{% endblock %}
+
+{% block content %}
+<h1>Topics</h1>
+<p class="text-muted">Unified view of all entities Zos tracks</p>
+
+<div class="filters">
+    <select id="category-filter"
+            hx-get="/ui/topics/list"
+            hx-target="#topics-list"
+            hx-include="#sort-filter"
+            name="category">
+        <option value="">All Categories</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}" {% if selected_category == cat %}selected{% endif %}>{{ cat | title }}</option>
+        {% endfor %}
+    </select>
+
+    <select id="sort-filter"
+            hx-get="/ui/topics/list"
+            hx-target="#topics-list"
+            hx-include="#category-filter"
+            name="sort">
+        <option value="salience">Sort by Salience</option>
+        <option value="impulse">Sort by Impulse</option>
+    </select>
+</div>
+
+<div id="topics-list" hx-get="/ui/topics/list" hx-trigger="load" hx-swap="innerHTML">
+    Loading...
+</div>
+{% endblock %}

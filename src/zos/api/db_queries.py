@@ -1464,6 +1464,101 @@ async def get_cost_by_call_type(
 
 
 # =============================================================================
+# Unified Topics Query
+# =============================================================================
+
+
+async def list_all_topics_with_stats(
+    engine: "Engine",
+    category: str | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> tuple[list[dict], int]:
+    """List all topics with salience balance and insight count.
+
+    Args:
+        engine: SQLAlchemy database engine.
+        category: Optional filter by topic category (user, channel, subject, etc.).
+        offset: Pagination offset.
+        limit: Maximum results.
+
+    Returns:
+        Tuple of (list of topic dicts, total count).
+    """
+    from zos.database import salience_ledger, topics
+
+    with engine.connect() as conn:
+        # Build category filter
+        conditions = []
+        if category:
+            conditions.append(topics.c.category == category)
+
+        # Count total
+        count_stmt = select(func.count()).select_from(topics)
+        if conditions:
+            count_stmt = count_stmt.where(*conditions)
+        total = conn.execute(count_stmt).scalar() or 0
+
+        # Subquery: salience balance per topic
+        balance_sub = (
+            select(
+                salience_ledger.c.topic_key,
+                func.sum(salience_ledger.c.amount).label("balance"),
+            )
+            .group_by(salience_ledger.c.topic_key)
+            .subquery()
+        )
+
+        # Subquery: insight count per topic
+        insight_sub = (
+            select(
+                insights_table.c.topic_key,
+                func.count().label("insight_count"),
+            )
+            .where(insights_table.c.quarantined == False)
+            .group_by(insights_table.c.topic_key)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                topics.c.key,
+                topics.c.category,
+                topics.c.is_global,
+                topics.c.created_at,
+                topics.c.last_activity_at,
+                func.coalesce(balance_sub.c.balance, 0.0).label("balance"),
+                func.coalesce(insight_sub.c.insight_count, 0).label("insight_count"),
+            )
+            .select_from(
+                topics
+                .outerjoin(balance_sub, topics.c.key == balance_sub.c.topic_key)
+                .outerjoin(insight_sub, topics.c.key == insight_sub.c.topic_key)
+            )
+            .order_by(func.coalesce(balance_sub.c.balance, 0.0).desc())
+        )
+
+        if conditions:
+            stmt = stmt.where(*conditions)
+
+        stmt = stmt.offset(offset).limit(limit)
+
+        results = []
+        for row in conn.execute(stmt).fetchall():
+            results.append({
+                "topic_key": row.key,
+                "category": row.category,
+                "is_global": row.is_global,
+                "created_at": row.created_at,
+                "last_activity_at": row.last_activity_at,
+                "balance": float(row.balance),
+                "insight_count": row.insight_count,
+            })
+
+        return results, total
+
+
+# =============================================================================
 # Subject Queries
 # =============================================================================
 
@@ -1650,6 +1745,7 @@ async def list_llm_calls(
     days: int = 30,
     call_type: str | None = None,
     model_profile: str | None = None,
+    layer_run_id: str | None = None,
     offset: int = 0,
     limit: int = 20,
 ) -> tuple[list[dict], int]:
@@ -1657,9 +1753,10 @@ async def list_llm_calls(
 
     Args:
         engine: SQLAlchemy database engine.
-        days: Number of days to look back (default 30).
+        days: Number of days to look back (default 30, ignored when layer_run_id set).
         call_type: Optional filter by call type.
         model_profile: Optional filter by model profile.
+        layer_run_id: Optional filter by layer run ID (skips days filter).
         offset: Pagination offset.
         limit: Number of results to return.
 
@@ -1670,11 +1767,14 @@ async def list_llm_calls(
 
     from zos.database import llm_calls
 
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-
     with engine.connect() as conn:
         # Build base query conditions
-        conditions = [llm_calls.c.created_at >= since]
+        conditions = []
+        if layer_run_id:
+            conditions.append(llm_calls.c.layer_run_id == layer_run_id)
+        else:
+            since = datetime.now(timezone.utc) - timedelta(days=days)
+            conditions.append(llm_calls.c.created_at >= since)
         if call_type:
             conditions.append(llm_calls.c.call_type == call_type)
         if model_profile:

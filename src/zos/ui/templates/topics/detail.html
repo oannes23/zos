@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{{ topic.readable_topic_key or topic.topic_key }} — Zos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="/ui/topics{% if topic.category %}?category={{ topic.category }}{% endif %}" class="back-link">&larr; All Topics</a>
+        <h1>{{ topic.readable_topic_key or topic.topic_key }}</h1>
+        <span class="badge badge-{{ topic.category }}">{{ topic.category }}</span>
+        {% if topic.budget_group %}
+        <span class="badge badge-{{ topic.budget_group }} ml-1">{{ topic.budget_group }}</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="detail-grid">
+    <div class="detail-main">
+        <!-- Salience Card -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Salience</span>
+            </div>
+            <div class="card-body">
+                <div class="topic-overview">
+                    <div class="big-stat">
+                        <span class="big-value">{{ topic.balance | round(1) }}</span>
+                        <span class="big-label">/ {{ topic.cap }} salience</span>
+                    </div>
+                    <div class="utilization-big">
+                        <div class="progress" style="height: 20px">
+                            <div class="progress-bar
+                                {% if topic.utilization > 0.8 %}progress-high{% endif %}"
+                                style="width: {{ (topic.utilization * 100) | int }}%"></div>
+                        </div>
+                        <span>{{ (topic.utilization * 100) | int }}% utilized</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if topic.impulse_enabled %}
+        <!-- Impulse Card -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title" style="color: #ff8c00">Impulse</span>
+            </div>
+            <div class="card-body">
+                <div class="impulse-detail">
+                    <div class="progress" style="height: 16px">
+                        <div class="progress-bar progress-impulse"
+                            style="width: {{ (topic.impulse_balance / topic.impulse_threshold * 100) | int }}%"></div>
+                    </div>
+                    <span class="impulse-detail-text">
+                        {% if topic.impulse_balance >= topic.impulse_threshold %}
+                            <strong>{{ topic.impulse_balance | round(1) }} / {{ topic.impulse_threshold }}</strong> -- Ready to speak
+                        {% else %}
+                            {{ topic.impulse_balance | round(1) }} / {{ topic.impulse_threshold }} -- {{ (topic.impulse_threshold - topic.impulse_balance) | round(1) }} until threshold
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if topic.category == 'user' and topic.entity_id %}
+        <!-- User Info -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Profile</span>
+            </div>
+            <div hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/user-info" hx-trigger="load" hx-swap="innerHTML">
+                Loading profile...
+            </div>
+        </div>
+        {% endif %}
+
+        {% if topic.category == 'channel' and topic.entity_id %}
+        <!-- Channel Info -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Channel Info</span>
+            </div>
+            <div hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/channel-info" hx-trigger="load" hx-swap="innerHTML">
+                Loading channel info...
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Insights -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Insights</span>
+            </div>
+            <div hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/insights" hx-trigger="load" hx-swap="innerHTML">
+                Loading insights...
+            </div>
+        </div>
+
+        {% if topic.category == 'user' and topic.entity_id %}
+        <!-- Dyad Relationships (user topics only) -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Relationships</span>
+            </div>
+            <div hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/dyads" hx-trigger="load" hx-swap="innerHTML">
+                Loading relationships...
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="detail-sidebar">
+        {% if topic.entity_id and topic.category in ('user', 'channel') %}
+        <!-- Recent Messages -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Recent Messages</span>
+            </div>
+            <div hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/messages" hx-trigger="load" hx-swap="innerHTML">
+                Loading messages...
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Salience Transactions -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Salience History</span>
+            </div>
+            <div hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/salience-history" hx-trigger="load" hx-swap="innerHTML">
+                Loading transactions...
+            </div>
+        </div>
+
+        {% if topic.impulse_enabled %}
+        <!-- Impulse Transactions -->
+        <div class="card mb-2">
+            <div class="card-header">
+                <span class="card-title">Impulse History</span>
+            </div>
+            <div hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/impulse-history" hx-trigger="load" hx-swap="innerHTML">
+                Loading impulse history...
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

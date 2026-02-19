@@ -1,0 +1,86 @@
+{% if topics %}
+<table class="topics-table">
+    <thead>
+        <tr>
+            <th>Topic</th>
+            <th>Category</th>
+            <th>Salience</th>
+            <th>Utilization</th>
+            {% if impulse_enabled %}
+            <th>Impulse</th>
+            {% endif %}
+            <th>Insights</th>
+            <th>Last Activity</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for topic in topics %}
+        <tr class="clickable" onclick="window.location='/ui/topics/{{ topic.topic_key | urlencode }}'">
+            <td>
+                <span class="topic-key truncate-text" title="{{ topic.topic_key }}">{{ topic.readable_topic_key or topic.topic_key }}</span>
+            </td>
+            <td>
+                <span class="badge badge-{{ topic.category }}">{{ topic.category }}</span>
+            </td>
+            <td>{{ topic.balance | round(1) }}</td>
+            <td>
+                {% if topic.cap > 0 %}
+                <div class="progress" style="width: 100px">
+                    <div class="progress-bar
+                        {% if topic.balance / topic.cap > 0.8 %}progress-high{% endif %}"
+                        style="width: {{ (topic.balance / topic.cap * 100) | int }}%">
+                    </div>
+                </div>
+                {% else %}
+                <span class="text-muted">--</span>
+                {% endif %}
+            </td>
+            {% if impulse_enabled %}
+            <td>
+                {% if topic.impulse_balance > 0 %}
+                <div class="impulse-indicator">
+                    <div class="progress" style="width: 80px">
+                        <div class="progress-bar progress-impulse"
+                            style="width: {{ (topic.impulse_balance / impulse_threshold * 100) | int }}%">
+                        </div>
+                    </div>
+                    <span class="impulse-value">{{ topic.impulse_balance | round(1) }}</span>
+                </div>
+                {% else %}
+                <span class="text-muted">--</span>
+                {% endif %}
+            </td>
+            {% endif %}
+            <td>{{ topic.insight_count }}</td>
+            <td class="text-muted">
+                {% if topic.last_activity %}
+                    {{ topic.last_activity | relative_time }}
+                {% else %}
+                    Never
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="pagination">
+    {% if offset > 0 %}
+    <button hx-get="/ui/topics/list?offset={{ offset - limit }}&limit={{ limit }}{% if category %}&category={{ category }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
+            hx-target="#topics-list">
+        Previous
+    </button>
+    {% endif %}
+
+    <span class="page-info">{{ offset + 1 }}-{{ offset + topics|length }} of {{ total }}</span>
+
+    {% if offset + limit < total %}
+    <button hx-get="/ui/topics/list?offset={{ offset + limit }}&limit={{ limit }}{% if category %}&category={{ category }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
+            hx-target="#topics-list">
+        Next
+    </button>
+    {% endif %}
+</div>
+{% else %}
+<p class="text-muted">No topics found</p>
+{% endif %}

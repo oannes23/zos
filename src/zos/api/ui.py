@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 
@@ -144,6 +144,7 @@ def _entity_link_for_topic(topic_key: str) -> str | None:
     """Parse a topic key and return the best URL for navigation.
 
     Registered as a Jinja2 global so templates can generate entity links.
+    All topic types now link to the unified /ui/topics/ page.
 
     Args:
         topic_key: The raw topic key (e.g. server:X:user:Y).
@@ -151,35 +152,21 @@ def _entity_link_for_topic(topic_key: str) -> str | None:
     Returns:
         URL string or None if no linkable entity.
     """
-    parts = topic_key.split(":")
-    if not parts:
+    if not topic_key:
         return None
 
-    # server-scoped topics
-    if parts[0] == "server" and len(parts) >= 4:
-        entity_type = parts[2]
-        entity_id = parts[3]
-        if entity_type == "user":
-            return f"/ui/users/{entity_id}"
-        elif entity_type == "channel":
-            return f"/ui/channels/{entity_id}"
-        elif entity_type == "dyad":
-            # No dyad page — link to salience topic
-            return f"/ui/salience/topic/{topic_key}"
-        elif entity_type == "subject":
-            return f"/ui/subjects/{topic_key}"
-        elif entity_type == "emoji":
-            return None
-        elif entity_type == "thread":
-            return None
+    parts = topic_key.split(":")
 
-    # global topics
-    if parts[0] == "user" and len(parts) >= 2:
-        return f"/ui/users/{parts[1]}"
+    # self topics have no useful detail page
     if parts[0] == "self":
         return None
 
-    return None
+    # emoji/thread topics are low-value for navigation
+    if parts[0] == "server" and len(parts) >= 4:
+        if parts[2] in ("emoji", "thread"):
+            return None
+
+    return f"/ui/topics/{topic_key}"
 
 
 # Register globals after function definitions
@@ -936,17 +923,10 @@ async def message_detail(
 # =============================================================================
 
 
-@router.get("/users", response_class=HTMLResponse)
-async def users_page(request: Request) -> HTMLResponse:
-    """Users browser page.
-
-    Main page for browsing users sorted by insight count.
-    """
-    return templates.TemplateResponse(
-        request=request,
-        name="users/list.html",
-        context={"active": "users", "dev_mode": _get_dev_mode(request)},
-    )
+@router.get("/users")
+async def users_page() -> RedirectResponse:
+    """Redirect old users page to unified topics view."""
+    return RedirectResponse("/ui/topics?category=user", status_code=302)
 
 
 @router.get("/users/list", response_class=HTMLResponse)
@@ -1129,17 +1109,10 @@ async def user_detail(
 # =============================================================================
 
 
-@router.get("/channels", response_class=HTMLResponse)
-async def channels_page(request: Request) -> HTMLResponse:
-    """Channels browser page.
-
-    Main page for browsing channels sorted by message count.
-    """
-    return templates.TemplateResponse(
-        request=request,
-        name="channels/list.html",
-        context={"active": "channels", "dev_mode": _get_dev_mode(request)},
-    )
+@router.get("/channels")
+async def channels_page() -> RedirectResponse:
+    """Redirect old channels page to unified topics view."""
+    return RedirectResponse("/ui/topics?category=channel", status_code=302)
 
 
 @router.get("/channels/list", response_class=HTMLResponse)
@@ -1313,17 +1286,10 @@ async def channel_detail(
 # =============================================================================
 
 
-@router.get("/subjects", response_class=HTMLResponse)
-async def subjects_page(request: Request) -> HTMLResponse:
-    """Subjects browser page.
-
-    Main page for browsing semantic reflection subjects.
-    """
-    return templates.TemplateResponse(
-        request=request,
-        name="subjects/list.html",
-        context={"active": "subjects", "dev_mode": _get_dev_mode(request)},
-    )
+@router.get("/subjects")
+async def subjects_page() -> RedirectResponse:
+    """Redirect old subjects page to unified topics view."""
+    return RedirectResponse("/ui/topics?category=subject", status_code=302)
 
 
 @router.get("/subjects/list", response_class=HTMLResponse)
@@ -1457,22 +1423,422 @@ async def subject_detail_partial(
 
 
 # =============================================================================
+# Topics Browser (Unified)
+# =============================================================================
+
+
+@router.get("/topics", response_class=HTMLResponse)
+async def topics_page(request: Request) -> HTMLResponse:
+    """Unified topics browser page.
+
+    Main page for browsing all topic types with category filtering
+    and sorting by salience or impulse.
+    """
+    from zos.models import TopicCategory
+
+    categories = [c.value for c in TopicCategory]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="topics/list.html",
+        context={
+            "active": "topics",
+            "dev_mode": _get_dev_mode(request),
+            "categories": categories,
+            "selected_category": None,
+        },
+    )
+
+
+@router.get("/topics/list", response_class=HTMLResponse)
+async def topics_list_partial(
+    request: Request,
+    category: Optional[str] = Query(None, description="Filter by topic category"),
+    sort: str = Query("salience", description="Sort by salience or impulse"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(30, ge=1, le=100, description="Page size"),
+    db: "Engine" = Depends(get_db),
+    ledger: "SalienceLedger" = Depends(get_ledger),
+    impulse_engine: "ImpulseEngine | None" = Depends(get_impulse_engine),
+) -> HTMLResponse:
+    """Partial for topics list (htmx).
+
+    Returns HTML partial with paginated, filterable list of all topics
+    with salience, impulse, and insight stats.
+    """
+    from zos.api.db_queries import list_all_topics_with_stats
+
+    # Empty string from form should be treated as None
+    filter_category = category if category else None
+
+    topics_list, total = await list_all_topics_with_stats(
+        db,
+        category=filter_category,
+        offset=offset,
+        limit=limit,
+    )
+
+    # Resolve topic keys to human-readable names
+    topic_keys = [t["topic_key"] for t in topics_list]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    # Get caps and impulse balances
+    impulse_balances = impulse_engine.get_balances(topic_keys) if impulse_engine else {}
+
+    for t in topics_list:
+        t["readable_topic_key"] = resolved_names.get(t["topic_key"])
+        t["cap"] = ledger.get_cap(t["topic_key"])
+        t["impulse_balance"] = impulse_balances.get(t["topic_key"], 0.0)
+        t["last_activity"] = t["last_activity_at"]
+
+    # Sort by impulse if requested (default sort by salience is already done in DB)
+    if sort == "impulse":
+        topics_list.sort(key=lambda t: t["impulse_balance"], reverse=True)
+
+    impulse_enabled = impulse_engine is not None
+    impulse_threshold = request.app.state.config.chattiness.threshold if impulse_enabled else None
+
+    return templates.TemplateResponse(
+        request=request,
+        name="topics/_list.html",
+        context={
+            "topics": topics_list,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "category": filter_category,
+            "sort": sort,
+            "impulse_enabled": impulse_enabled,
+            "impulse_threshold": impulse_threshold,
+        },
+    )
+
+
+def _extract_entity_id(topic_key: str) -> str | None:
+    """Extract the entity ID (user_id or channel_id) from a topic key.
+
+    Returns the Discord snowflake ID for user/channel topics, None otherwise.
+    """
+    parts = topic_key.split(":")
+    # server:X:user:USER_ID or server:X:channel:CHANNEL_ID
+    if parts[0] == "server" and len(parts) >= 4 and parts[2] in ("user", "channel"):
+        return parts[3]
+    # user:USER_ID
+    if parts[0] == "user" and len(parts) >= 2:
+        return parts[1]
+    return None
+
+
+def _extract_category_from_key(topic_key: str) -> str | None:
+    """Extract the topic category from a topic key string."""
+    parts = topic_key.split(":")
+    if parts[0] == "server" and len(parts) >= 4:
+        return parts[2]  # user, channel, dyad, subject, thread, emoji
+    if parts[0] in ("user", "self", "dyad"):
+        return parts[0]
+    return None
+
+
+# NOTE: /topics/list MUST be defined before /topics/{topic_key:path}
+@router.get("/topics/{topic_key:path}/insights", response_class=HTMLResponse)
+async def topic_insights_partial(
+    request: Request,
+    topic_key: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for topic insights (htmx)."""
+    from sqlalchemy import and_, select
+
+    from zos.database import insights as insights_table
+    from zos.insights import _row_to_insight_static
+
+    with db.connect() as conn:
+        stmt = (
+            select(insights_table)
+            .where(
+                and_(
+                    insights_table.c.topic_key == topic_key,
+                    insights_table.c.quarantined == False,
+                )
+            )
+            .order_by(insights_table.c.created_at.desc())
+            .limit(10)
+        )
+        rows = conn.execute(stmt).fetchall()
+        insights = [_row_to_insight_static(r) for r in rows]
+
+    if not insights:
+        return HTMLResponse('<p class="text-muted">No insights yet</p>')
+
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
+
+    html_parts = []
+    for i in formatted:
+        display_name = i["readable_topic_key"] or i["topic_key"]
+        html_parts.append(
+            f'<div class="list-item list-item-truncate">'
+            f'<a href="/ui/insights/{i["id"]}" class="truncate-text" title="{i["topic_key"]}">{display_name}</a>'
+            f'<span class="text-muted ml-1">{i["temporal_marker"]}</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/topics/{topic_key:path}/salience-history", response_class=HTMLResponse)
+async def topic_salience_history_partial(
+    request: Request,
+    topic_key: str,
+    ledger: "SalienceLedger" = Depends(get_ledger),
+) -> HTMLResponse:
+    """Partial for salience transaction history (htmx)."""
+    transactions = await ledger.get_history(topic_key, limit=20)
+
+    formatted = [
+        {
+            "created_at": t.created_at,
+            "transaction_type": t.transaction_type.value,
+            "amount": t.amount,
+            "reason": t.reason,
+        }
+        for t in transactions
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="topics/_salience_history.html",
+        context={"transactions": formatted},
+    )
+
+
+@router.get("/topics/{topic_key:path}/impulse-history", response_class=HTMLResponse)
+async def topic_impulse_history_partial(
+    request: Request,
+    topic_key: str,
+    impulse_engine: "ImpulseEngine | None" = Depends(get_impulse_engine),
+) -> HTMLResponse:
+    """Partial for impulse transaction history (htmx)."""
+    if not impulse_engine:
+        return HTMLResponse('<p class="text-muted">Impulse not enabled</p>')
+
+    transactions = impulse_engine.get_history(topic_key, limit=20)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="topics/_impulse_history.html",
+        context={"transactions": transactions},
+    )
+
+
+@router.get("/topics/{topic_key:path}/user-info", response_class=HTMLResponse)
+async def topic_user_info_partial(
+    request: Request,
+    topic_key: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for user profile info (htmx)."""
+    from zos.api.db_queries import get_user_details
+
+    entity_id = _extract_entity_id(topic_key)
+    if not entity_id:
+        return HTMLResponse('<p class="text-muted">No user data available</p>')
+
+    user = await get_user_details(db, entity_id)
+    if not user:
+        return HTMLResponse('<p class="text-muted">User not found</p>')
+
+    html = '<div class="card-body stats-grid">'
+    html += f'<div class="stat"><span class="stat-value">{format_number(user.get("message_count", 0))}</span><span class="stat-label">Messages</span></div>'
+    if user.get("bio"):
+        html += f'<div class="stat wide"><span class="stat-label">Bio</span><span class="stat-value small">{user["bio"]}</span></div>'
+    if user.get("pronouns"):
+        html += f'<div class="stat"><span class="stat-label">Pronouns</span><span class="stat-value small">{user["pronouns"]}</span></div>'
+    if user.get("joined_at"):
+        html += f'<div class="stat"><span class="stat-label">Joined</span><span class="stat-value small">{relative_time(user["joined_at"])}</span></div>'
+    html += '</div>'
+
+    return HTMLResponse(html)
+
+
+@router.get("/topics/{topic_key:path}/channel-info", response_class=HTMLResponse)
+async def topic_channel_info_partial(
+    request: Request,
+    topic_key: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for channel info (htmx)."""
+    from zos.api.db_queries import get_channel_details
+
+    entity_id = _extract_entity_id(topic_key)
+    if not entity_id:
+        return HTMLResponse('<p class="text-muted">No channel data available</p>')
+
+    channel = await get_channel_details(db, entity_id)
+    if not channel:
+        return HTMLResponse('<p class="text-muted">Channel not found</p>')
+
+    html = '<div class="card-body stats-grid">'
+    html += f'<div class="stat"><span class="stat-value">{format_number(channel.get("message_count", 0))}</span><span class="stat-label">Messages</span></div>'
+    html += f'<div class="stat"><span class="stat-value">{format_number(channel.get("author_count", 0))}</span><span class="stat-label">Active Users</span></div>'
+    if channel.get("type"):
+        html += f'<div class="stat"><span class="stat-label">Type</span><span class="stat-value small">{channel["type"]}</span></div>'
+    html += '</div>'
+
+    return HTMLResponse(html)
+
+
+@router.get("/topics/{topic_key:path}/messages", response_class=HTMLResponse)
+async def topic_messages_partial(
+    request: Request,
+    topic_key: str,
+    limit: int = Query(5, ge=1, le=20),
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for recent messages related to a topic (htmx)."""
+    from zos.api.db_queries import list_messages
+
+    entity_id = _extract_entity_id(topic_key)
+    category = _extract_category_from_key(topic_key)
+
+    if not entity_id or category not in ("user", "channel"):
+        return HTMLResponse('<p class="text-muted">No messages available</p>')
+
+    if category == "user":
+        messages, total = await list_messages(db, author_id=entity_id, limit=limit)
+    else:
+        messages, total = await list_messages(db, channel_id=entity_id, limit=limit)
+
+    if not messages:
+        return HTMLResponse('<p class="text-muted">No messages</p>')
+
+    formatted = _format_messages_batch_for_ui(messages, db)
+
+    html_parts = []
+    for m in formatted:
+        if category == "user":
+            channel = m["channel_name"] or m["channel_id"][:8] + "..."
+            content_preview = m["content"][:80] + "..." if len(m["content"]) > 80 else m["content"]
+            html_parts.append(
+                f'<div class="list-item">'
+                f'<a href="/ui/messages/{m["id"]}" class="truncate-text">{content_preview}</a>'
+                f'<span class="text-muted ml-1">#{channel}</span>'
+                f'</div>'
+            )
+        else:
+            author = m["author_name"] or m["author_id"][:8] + "..."
+            content_preview = m["content"][:80] + "..." if len(m["content"]) > 80 else m["content"]
+            html_parts.append(
+                f'<div class="list-item">'
+                f'<a href="/ui/messages/{m["id"]}" class="truncate-text">{content_preview}</a>'
+                f'<span class="text-muted ml-1">{author}</span>'
+                f'</div>'
+            )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/topics/{topic_key:path}/dyads", response_class=HTMLResponse)
+async def topic_dyads_partial(
+    request: Request,
+    topic_key: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """Partial for user dyad relationships (htmx)."""
+    from zos.api.db_queries import get_user_dyads
+
+    entity_id = _extract_entity_id(topic_key)
+    if not entity_id:
+        return HTMLResponse('<p class="text-muted">No relationship data available</p>')
+
+    insights = await get_user_dyads(db, entity_id)
+
+    if not insights:
+        return HTMLResponse('<p class="text-muted">No relationship insights yet</p>')
+
+    topic_keys = [i.topic_key for i in insights]
+    resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
+
+    formatted = [
+        _format_insight_for_ui(i, resolved_names.get(i.topic_key))
+        for i in insights
+    ]
+
+    html_parts = []
+    for i in formatted:
+        display_name = i["readable_topic_key"] or i["topic_key"]
+        html_parts.append(
+            f'<div class="list-item list-item-truncate">'
+            f'<a href="/ui/insights/{i["id"]}" class="truncate-text" title="{i["topic_key"]}">{display_name}</a>'
+            f'<span class="text-muted ml-1">{i["temporal_marker"]}</span>'
+            f'</div>'
+        )
+
+    return HTMLResponse("".join(html_parts))
+
+
+@router.get("/topics/{topic_key:path}", response_class=HTMLResponse)
+async def topic_detail(
+    request: Request,
+    topic_key: str,
+    ledger: "SalienceLedger" = Depends(get_ledger),
+    db: "Engine" = Depends(get_db),
+    impulse_engine: "ImpulseEngine | None" = Depends(get_impulse_engine),
+) -> HTMLResponse:
+    """Topic detail page.
+
+    Shows salience, impulse, insights, and category-specific info for any topic.
+    """
+    balance = await ledger.get_balance(topic_key)
+    cap = ledger.get_cap(topic_key)
+
+    # Resolve topic key to human-readable name
+    readable_topic_key = await _resolve_topic_key_for_ui(db, topic_key)
+
+    # Impulse data
+    impulse_balance = impulse_engine.get_balance(topic_key) if impulse_engine else 0.0
+    impulse_enabled = impulse_engine is not None
+    impulse_threshold = request.app.state.config.chattiness.threshold if impulse_enabled else None
+
+    # Extract category and entity_id from topic key
+    category = _extract_category_from_key(topic_key) or "unknown"
+    entity_id = _extract_entity_id(topic_key)
+
+    topic_data = {
+        "topic_key": topic_key,
+        "readable_topic_key": readable_topic_key,
+        "category": category,
+        "entity_id": entity_id,
+        "balance": balance,
+        "cap": cap,
+        "utilization": balance / cap if cap > 0 else 0,
+        "budget_group": get_budget_group(topic_key).value,
+        "impulse_balance": impulse_balance,
+        "impulse_threshold": impulse_threshold,
+        "impulse_enabled": impulse_enabled,
+    }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="topics/detail.html",
+        context={"topic": topic_data, "active": "topics", "dev_mode": _get_dev_mode(request)},
+    )
+
+
+# =============================================================================
 # Salience Dashboard (Story 5.7)
 # =============================================================================
 
 
-@router.get("/salience", response_class=HTMLResponse)
-async def salience_page(request: Request) -> HTMLResponse:
-    """Salience dashboard page.
-
-    Main page for visualizing salience balances, budget allocation,
-    and attention flow across topics.
-    """
-    return templates.TemplateResponse(
-        request=request,
-        name="salience/dashboard.html",
-        context={"active": "salience", "dev_mode": _get_dev_mode(request)},
-    )
+@router.get("/salience")
+async def salience_page() -> RedirectResponse:
+    """Redirect old salience dashboard to unified topics view."""
+    return RedirectResponse("/ui/topics", status_code=302)
 
 
 @router.get("/salience/groups", response_class=HTMLResponse)
@@ -1788,6 +2154,27 @@ async def runs_recent(
     html_parts.append('</div>')
 
     return HTMLResponse(''.join(html_parts))
+
+
+@router.get("/runs/{run_id}/calls", response_class=HTMLResponse)
+async def run_calls_partial(
+    request: Request,
+    run_id: str,
+    db: "Engine" = Depends(get_db),
+) -> HTMLResponse:
+    """LLM calls for a specific layer run (htmx partial).
+
+    Returns a compact table of LLM calls made during this run.
+    """
+    from zos.api.db_queries import list_llm_calls
+
+    calls, total = await list_llm_calls(db, layer_run_id=run_id, limit=50)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="runs/_calls.html",
+        context={"calls": calls},
+    )
 
 
 @router.get("/runs/{run_id}", response_class=HTMLResponse)

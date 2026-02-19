@@ -815,12 +815,12 @@ a:hover {
     letter-spacing: 0.05em;
 }
 
-.topics-table th:nth-child(1) { width: 40%; } /* Topic */
-.topics-table th:nth-child(2) { width: 10%; } /* Group */
-.topics-table th:nth-child(3) { width: 10%; } /* Balance */
-.topics-table th:nth-child(4) { width: 8%; }  /* Cap */
-.topics-table th:nth-child(5) { width: 14%; } /* Utilization */
-.topics-table th:nth-child(6) { width: 18%; } /* Last Activity */
+.topics-table th:nth-child(1) { width: 35%; } /* Topic */
+.topics-table th:nth-child(2) { width: 10%; } /* Category */
+.topics-table th:nth-child(3) { width: 9%; }  /* Salience */
+.topics-table th:nth-child(4) { width: 12%; } /* Utilization */
+.topics-table th:nth-child(5) { width: 8%; }  /* Insights */
+.topics-table th:nth-child(6) { width: 14%; } /* Last Activity */
 
 .topics-table td {
     overflow: hidden;
@@ -1528,13 +1528,18 @@ a:hover {
     margin-right: 0.75rem;
 }
 
-/* Layer category badges (reuse existing + add missing) */
+/* Topic category badges */
 .badge-user { background: #3498db; color: #fff; }
 .badge-dyad { background: #9b59b6; color: #fff; }
 .badge-channel { background: #2ecc71; color: #fff; }
 .badge-subject { background: #f39c12; color: #000; }
 .badge-self { background: #e74c3c; color: #fff; }
 .badge-synthesis { background: #1abc9c; color: #fff; }
+.badge-thread { background: #e67e22; color: #fff; }
+.badge-emoji { background: #fd79a8; color: #fff; }
+.badge-role { background: #636e72; color: #fff; }
+.badge-user_in_channel { background: #74b9ff; color: #000; }
+.badge-dyad_in_channel { background: #a29bfe; color: #fff; }
 
 /* Layer config card */
 .config-section {

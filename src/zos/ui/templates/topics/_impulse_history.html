@@ -1,0 +1,28 @@
+{% if transactions %}
+<table class="transactions-table">
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Trigger</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for tx in transactions %}
+        <tr>
+            <td class="text-muted">{{ tx.created_at | relative_time }}</td>
+            <td>
+                <span class="badge badge-{{ tx.transaction_type }}">{{ tx.transaction_type }}</span>
+            </td>
+            <td class="{% if tx.amount >= 0 %}text-success{% else %}text-error{% endif %}">
+                {% if tx.amount >= 0 %}+{% endif %}{{ tx.amount | round(2) }}
+            </td>
+            <td class="text-muted">{{ tx.trigger or '—' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">No impulse transactions recorded</p>
+{% endif %}

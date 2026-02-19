@@ -69,6 +69,11 @@
         </div>
     </div>
 
+    <h3 class="mt-2">LLM Calls</h3>
+    <div hx-get="/ui/runs/{{ run.id }}/calls" hx-trigger="load" hx-swap="innerHTML">
+        Loading LLM calls...
+    </div>
+
     {% if run.errors %}
     <h3 class="mt-2 text-error">Errors ({{ run.errors | length }})</h3>
     <div class="errors-list">

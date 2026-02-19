@@ -81,7 +81,7 @@ class TestUIHomePage:
         """UI home page should contain navigation links."""
         response = client.get("/ui/")
         assert "Insights" in response.text
-        assert "Salience" in response.text
+        assert "Topics" in response.text
         assert "Layer Runs" in response.text
 
     def test_ui_index_contains_htmx_triggers(self, client: TestClient) -> None:
