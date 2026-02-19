@@ -1,5 +1,5 @@
-<div class="budget-stats-cards">
-    <div class="stat-card budget-stat-primary">
+<div class="summary-stats">
+    <div class="stat-card summary-stat-primary">
         <span class="stat-value">{{ stats.links_fetched | format_number }}</span>
         <span class="stat-label">Links Fetched ({{ stats.days }}d)</span>
     </div>
@@ -20,7 +20,7 @@
 {% if stats.top_domains %}
 <div class="mt-2">
     <h4>Top Domains</h4>
-    <table class="table">
+    <table class="data-table">
         <thead>
             <tr>
                 <th>Domain</th>

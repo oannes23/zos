@@ -189,7 +189,7 @@ class TestBudgetDashboardPage:
     def test_budget_page_contains_title(self, client: TestClient) -> None:
         """Budget dashboard page should contain correct title."""
         response = client.get("/ui/budget")
-        assert "Budget Dashboard" in response.text
+        assert "Budget" in response.text
 
     def test_budget_page_contains_description(self, client: TestClient) -> None:
         """Budget dashboard page should explain its purpose."""

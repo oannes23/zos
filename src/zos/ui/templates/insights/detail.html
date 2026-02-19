@@ -2,87 +2,113 @@
 {% block title %}{{ insight.readable_topic_key or insight.topic_key }} — Zos{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb">
-    <a href="/ui/insights">Insights</a> / {{ insight.readable_topic_key or insight.topic_key }}
-</nav>
+<a href="/ui/insights" class="back-link">&larr; All Insights</a>
 
-<div class="card">
-    <div class="card-header">
-        {% if insight.entity_link %}
-        <h1 class="card-title"><a href="{{ insight.entity_link }}">{{ insight.readable_topic_key or insight.topic_key }}</a></h1>
-        {% else %}
-        <h1 class="card-title">{{ insight.readable_topic_key or insight.topic_key }}</h1>
-        {% endif %}
-        <span class="badge badge-{{ insight.category }}">{{ insight.category }}</span>
-    </div>
-
-    <div class="insight-content-full">
-        {{ insight.content }}
-    </div>
-
-    <div class="insight-meta mt-2">
-        <div class="meta-row">
-            <span class="meta-label">Created</span>
-            <span>{{ insight.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
-        </div>
-        <div class="meta-row">
-            <span class="meta-label">Memory</span>
-            <span>{{ insight.temporal_marker }}</span>
-        </div>
-        {% if insight.layer_run_id %}
-        <div class="meta-row">
-            <span class="meta-label">Layer Run</span>
-            <span><a href="#" hx-get="/ui/runs/{{ insight.layer_run_id }}" hx-target="#run-detail-modal" hx-swap="innerHTML">{{ insight.layer_run_id[:12] }}...</a></span>
-        </div>
-        {% endif %}
-        <div class="meta-row">
-            <span class="meta-label">Strength</span>
-            <span>{{ insight.strength | round(1) }}</span>
-        </div>
-    </div>
-
-    <h3 class="mt-2">Metrics</h3>
-    <div class="metrics-grid">
-        <div class="metric">
-            <span class="metric-value">{{ (insight.confidence * 100) | int }}%</span>
-            <span class="metric-label">Confidence</span>
-        </div>
-        <div class="metric">
-            <span class="metric-value">{{ (insight.importance * 100) | int }}%</span>
-            <span class="metric-label">Importance</span>
-        </div>
-        <div class="metric">
-            <span class="metric-value">{{ (insight.novelty * 100) | int }}%</span>
-            <span class="metric-label">Novelty</span>
-        </div>
-    </div>
-
-    <h3 class="mt-2">Emotional Valence</h3>
-    <div class="valence-detail">
-        {% for name, value in insight.valence.items() %}
-        {% if value is not none %}
-        <div class="valence-row">
-            <span class="valence-name">{{ name | capitalize }}</span>
-            <div class="progress" style="width: 200px">
-                <div class="progress-bar valence-{{ name }}" style="width: {{ value * 100 }}%"></div>
-            </div>
-            <span class="valence-value">{{ (value * 100) | int }}%</span>
-        </div>
-        {% endif %}
-        {% endfor %}
-    </div>
-
-    {% if insight.supersedes %}
-    <h3 class="mt-2">Supersedes</h3>
-    <a href="/ui/insights/{{ insight.supersedes }}">View previous insight</a>
+<div class="page-header">
+    {% if insight.entity_link %}
+    <h1><a href="{{ insight.entity_link }}">{{ insight.readable_topic_key or insight.topic_key }}</a></h1>
+    {% else %}
+    <h1>{{ insight.readable_topic_key or insight.topic_key }}</h1>
     {% endif %}
+    <span class="badge badge-{{ insight.category }}">{{ insight.category }}</span>
 </div>
 
-<div class="related-insights mt-2">
-    <h3>Other Insights on This Topic</h3>
-    <div hx-get="/ui/insights/topic/{{ insight.topic_key }}?exclude={{ insight.id }}"
-         hx-trigger="load">
-        Loading...
+<div class="detail-grid">
+    <div class="detail-main">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Content</span>
+            </div>
+            <div class="insight-content-full">
+                {{ insight.content }}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Metrics</span>
+            </div>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <span class="metric-value">{{ (insight.confidence * 100) | int }}%</span>
+                    <span class="metric-label">Confidence</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">{{ (insight.importance * 100) | int }}%</span>
+                    <span class="metric-label">Importance</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">{{ (insight.novelty * 100) | int }}%</span>
+                    <span class="metric-label">Novelty</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Emotional Valence</span>
+            </div>
+            <div class="valence-detail">
+                {% for name, value in insight.valence.items() %}
+                {% if value is not none %}
+                <div class="valence-row">
+                    <span class="valence-name">{{ name | capitalize }}</span>
+                    <div class="progress" style="width: 200px">
+                        <div class="progress-bar valence-{{ name }}" style="width: {{ value * 100 }}%"></div>
+                    </div>
+                    <span class="valence-value">{{ (value * 100) | int }}%</span>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Other Insights on This Topic</span>
+            </div>
+            <div hx-get="/ui/insights/topic/{{ insight.topic_key }}?exclude={{ insight.id }}"
+                 hx-trigger="load">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <div class="detail-sidebar">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Metadata</span>
+            </div>
+            <div class="insight-meta">
+                <div class="meta-row">
+                    <span class="meta-label">Created</span>
+                    <span>{{ insight.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Memory</span>
+                    <span>{{ insight.temporal_marker }}</span>
+                </div>
+                {% if insight.layer_run_id %}
+                <div class="meta-row">
+                    <span class="meta-label">Layer Run</span>
+                    <span><a href="#" hx-get="/ui/runs/{{ insight.layer_run_id }}" hx-target="#run-detail-modal" hx-swap="innerHTML">{{ insight.layer_run_id[:12] }}...</a></span>
+                </div>
+                {% endif %}
+                <div class="meta-row">
+                    <span class="meta-label">Strength</span>
+                    <span>{{ insight.strength | round(1) }}</span>
+                </div>
+            </div>
+        </div>
+
+        {% if insight.supersedes %}
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Supersedes</span>
+            </div>
+            <a href="/ui/insights/{{ insight.supersedes }}">View previous insight</a>
+        </div>
+        {% endif %}
     </div>
 </div>
 

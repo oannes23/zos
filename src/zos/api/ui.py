@@ -2205,7 +2205,10 @@ async def run_detail_partial(
 
 
 @router.get("/budget", response_class=HTMLResponse)
-async def budget_page(request: Request) -> HTMLResponse:
+async def budget_page(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+) -> HTMLResponse:
     """Budget dashboard page.
 
     Main page for viewing cost tracking, token usage,
@@ -2214,7 +2217,7 @@ async def budget_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="budget/dashboard.html",
-        context={"active": "budget", "dev_mode": _get_dev_mode(request)},
+        context={"active": "budget", "dev_mode": _get_dev_mode(request), "days": days},
     )
 
 
@@ -2532,10 +2535,16 @@ async def layers_page(request: Request) -> HTMLResponse:
 
     Main page for browsing configured reflection layers.
     """
+    all_layers = _get_all_layers()
+    categories = sorted({l["category"] for l in all_layers})
     return templates.TemplateResponse(
         request=request,
         name="layers/list.html",
-        context={"active": "layers", "dev_mode": _get_dev_mode(request)},
+        context={
+            "active": "layers",
+            "dev_mode": _get_dev_mode(request),
+            "categories": categories,
+        },
     )
 
 
@@ -2543,12 +2552,16 @@ async def layers_page(request: Request) -> HTMLResponse:
 @router.get("/layers/list", response_class=HTMLResponse)
 async def layers_list_partial(
     request: Request,
+    category: Optional[str] = Query(None, description="Filter by category"),
 ) -> HTMLResponse:
     """Partial for layers card grid (htmx).
 
-    Returns HTML partial with all configured layers as cards.
+    Returns HTML partial with all configured layers as cards,
+    optionally filtered by category.
     """
     layers = _get_all_layers()
+    if category:
+        layers = [l for l in layers if l["category"] == category]
 
     return templates.TemplateResponse(
         request=request,
@@ -2898,6 +2911,13 @@ def _format_message_for_ui(message, db: "Engine") -> dict:
             else:
                 author_name = row.username
 
+    # Build topic keys for entity links
+    author_topic_key = None
+    channel_topic_key = None
+    if message.server_id:
+        author_topic_key = f"server:{message.server_id}:user:{message.author_id}"
+        channel_topic_key = f"server:{message.server_id}:channel:{message.channel_id}"
+
     return {
         "id": message.id,
         "channel_id": message.channel_id,
@@ -2906,6 +2926,8 @@ def _format_message_for_ui(message, db: "Engine") -> dict:
         "server_name": server_name,
         "author_id": message.author_id,
         "author_name": author_name,
+        "author_topic_key": author_topic_key,
+        "channel_topic_key": channel_topic_key,
         "content": message.content,
         "created_at": message.created_at,
         "temporal_marker": relative_time(message.created_at),
@@ -3002,6 +3024,13 @@ def _format_messages_batch_for_ui(messages, db: "Engine") -> list[dict]:
     # Build formatted dicts using resolved names
     results = []
     for message in messages:
+        # Build topic keys for entity links
+        author_topic_key = None
+        channel_topic_key = None
+        if message.server_id:
+            author_topic_key = f"server:{message.server_id}:user:{message.author_id}"
+            channel_topic_key = f"server:{message.server_id}:channel:{message.channel_id}"
+
         results.append({
             "id": message.id,
             "channel_id": message.channel_id,
@@ -3010,6 +3039,8 @@ def _format_messages_batch_for_ui(messages, db: "Engine") -> list[dict]:
             "server_name": server_names.get(message.server_id) if message.server_id else None,
             "author_id": message.author_id,
             "author_name": author_names.get(message.author_id),
+            "author_topic_key": author_topic_key,
+            "channel_topic_key": channel_topic_key,
             "content": message.content,
             "created_at": message.created_at,
             "temporal_marker": relative_time(message.created_at),

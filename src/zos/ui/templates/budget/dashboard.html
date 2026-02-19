@@ -2,53 +2,69 @@
 {% block title %}Budget — Zos{% endblock %}
 
 {% block content %}
-<h1>Budget Dashboard</h1>
-<p class="text-muted">Track API costs, token usage, and spending over time</p>
+<div class="page-header">
+    <div>
+        <h1>Budget</h1>
+        <p class="text-muted">Track API costs, token usage, and spending over time</p>
+    </div>
+</div>
 
-<div class="budget-summary" hx-get="/ui/budget/summary?days=30" hx-trigger="load">
+<div class="filters">
+    <select name="days" onchange="window.location.search='?days='+this.value">
+        <option value="7"{% if days == 7 %} selected{% endif %}>Last 7 days</option>
+        <option value="30"{% if days == 30 %} selected{% endif %}>Last 30 days</option>
+        <option value="90"{% if days == 90 %} selected{% endif %}>Last 90 days</option>
+    </select>
+</div>
+
+<div class="summary-stats" hx-get="/ui/budget/summary?days={{ days }}" hx-trigger="load">
     Loading summary...
 </div>
 
-<div class="budget-grid mt-2">
+<div class="card mt-2">
+    <div class="card-header">
+        <span class="card-title">Daily Costs</span>
+    </div>
+    <div hx-get="/ui/budget/daily?days={{ days }}" hx-trigger="load">
+        Loading...
+    </div>
+</div>
+
+<div class="dashboard-split mt-2">
     <div class="card">
-        <h3>Daily Costs (30 days)</h3>
-        <div hx-get="/ui/budget/daily?days=30" hx-trigger="load">
+        <div class="card-header">
+            <span class="card-title">Cost by Layer</span>
+        </div>
+        <div hx-get="/ui/budget/by-layer?days={{ days }}" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Cost by Model</span>
+        </div>
+        <div hx-get="/ui/budget/by-model?days={{ days }}" hx-trigger="load">
             Loading...
         </div>
     </div>
 </div>
 
-<div class="budget-grid mt-2">
-    <div class="card">
-        <h3>Cost by Layer</h3>
-        <div hx-get="/ui/budget/by-layer?days=30" hx-trigger="load">
-            Loading...
-        </div>
+<div class="card mt-2">
+    <div class="card-header">
+        <span class="card-title">Cost by Call Type</span>
     </div>
-
-    <div class="card">
-        <h3>Cost by Model</h3>
-        <div hx-get="/ui/budget/by-model?days=30" hx-trigger="load">
-            Loading...
-        </div>
+    <div hx-get="/ui/budget/by-call-type?days={{ days }}" hx-trigger="load">
+        Loading...
     </div>
 </div>
 
-<div class="budget-grid mt-2">
-    <div class="card">
-        <h3>Cost by Call Type</h3>
-        <div hx-get="/ui/budget/by-call-type?days=30" hx-trigger="load">
-            Loading...
-        </div>
+<div class="card mt-2">
+    <div class="card-header">
+        <span class="card-title">Recent LLM Calls</span>
     </div>
-</div>
-
-<div class="mt-2">
-    <div class="card">
-        <h3>Recent LLM Calls</h3>
-        <div id="calls-list" hx-get="/ui/budget/calls?days=30" hx-trigger="load">
-            Loading...
-        </div>
+    <div id="calls-list" hx-get="/ui/budget/calls?days={{ days }}" hx-trigger="load">
+        Loading...
     </div>
 </div>
 {% endblock %}

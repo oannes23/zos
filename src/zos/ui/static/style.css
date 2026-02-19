@@ -504,6 +504,7 @@ a:hover {
     margin-bottom: 1.5rem;
 }
 
+/* DEPRECATED: use .summary-stats */
 .stats-cards {
     display: flex;
     gap: 1rem;
@@ -1205,7 +1206,7 @@ a:hover {
    Budget Dashboard Styles
    ============================================================================= */
 
-/* Budget Stats Cards - Summary row */
+/* DEPRECATED: use .summary-stats */
 .budget-stats-cards {
     display: flex;
     gap: 1rem;
@@ -1218,6 +1219,7 @@ a:hover {
     min-width: 140px;
 }
 
+/* DEPRECATED: use .summary-stat-primary */
 .budget-stat-primary {
     border-left: 4px solid var(--accent);
 }
@@ -1624,4 +1626,80 @@ a:hover {
 .entity-link:hover {
     color: var(--accent-hover);
     text-decoration: underline;
+}
+
+/* =============================================================================
+   Unified Base Classes
+   ============================================================================= */
+
+/* .data-table — Base table styling for all tab tables */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-card);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.data-table th {
+    background: var(--bg-secondary);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.data-table tbody tr {
+    transition: background 0.1s;
+}
+
+.data-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+/* .summary-stats — Flex row of stat cards */
+.summary-stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+}
+
+.summary-stats .stat-card {
+    flex: 1;
+    min-width: 140px;
+}
+
+/* .summary-stat-primary — Left accent border + larger value */
+.summary-stat-primary {
+    border-left: 4px solid var(--accent);
+}
+
+.summary-stat-primary .stat-value {
+    color: var(--accent);
+    font-size: 2rem;
+}
+
+/* .message-meta — Semantic alias for run-metrics in message detail */
+.message-meta {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    padding: 0.5rem;
+}
+
+.message-meta .metric-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--bg-card);
+}
+
+.message-meta .metric-row:last-child {
+    border-bottom: none;
 }

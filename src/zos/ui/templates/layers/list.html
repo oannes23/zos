@@ -5,7 +5,19 @@
 <h1>Layers</h1>
 <p class="text-muted">Configured reflection layers and their pipelines</p>
 
-<div id="layers-list" class="mt-2" hx-get="/ui/layers/list" hx-trigger="load">
+<div class="filters">
+    <select name="category"
+            hx-get="/ui/layers/list"
+            hx-trigger="change"
+            hx-target="#layers-list">
+        <option value="">All categories</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}">{{ cat }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<div id="layers-list" hx-get="/ui/layers/list" hx-trigger="load">
     Loading layers...
 </div>
 {% endblock %}

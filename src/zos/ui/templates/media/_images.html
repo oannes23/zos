@@ -22,18 +22,25 @@
 </div>
 <div id="image-detail-modal" class="modal"></div>
 
-{% if total > offset + limit %}
 <div class="pagination mt-1">
-    <button class="btn btn-secondary"
-            hx-get="/ui/media/images?offset={{ offset + limit }}&limit={{ limit }}"
+    {% if offset > 0 %}
+    <button hx-get="/ui/media/images?offset={{ offset - limit }}&limit={{ limit }}"
             hx-target="#images-list"
             hx-swap="innerHTML">
-        Load more ({{ total - offset - limit }} remaining)
+        Previous
     </button>
-</div>
-{% endif %}
+    {% endif %}
 
-<p class="text-muted mt-1">Showing {{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total | format_number }}</p>
+    <span class="page-info">{{ offset + 1 }}&ndash;{{ [offset + limit, total] | min }} of {{ total | format_number }}</span>
+
+    {% if offset + limit < total %}
+    <button hx-get="/ui/media/images?offset={{ offset + limit }}&limit={{ limit }}"
+            hx-target="#images-list"
+            hx-swap="innerHTML">
+        Next
+    </button>
+    {% endif %}
+</div>
 {% else %}
 <p class="text-muted">No image analyses yet</p>
 {% endif %}

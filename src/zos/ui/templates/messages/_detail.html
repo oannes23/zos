@@ -1,8 +1,18 @@
 <div class="modal-content">
     <div class="modal-header">
-        <h2>{{ message.author_name or message.author_id }}</h2>
+        <h2>
+            {% if message.author_topic_key %}
+            <a href="/ui/topics/{{ message.author_topic_key }}" class="entity-link" onclick="event.stopPropagation()">{{ message.author_name or message.author_id }}</a>
+            {% else %}
+            {{ message.author_name or message.author_id }}
+            {% endif %}
+        </h2>
         <div>
+            {% if message.channel_topic_key %}
+            <a href="/ui/topics/{{ message.channel_topic_key }}" class="badge badge-channel entity-link" onclick="event.stopPropagation()">#{{ message.channel_name or message.channel_id }}</a>
+            {% else %}
             <span class="badge badge-channel">#{{ message.channel_name or message.channel_id }}</span>
+            {% endif %}
             <button class="close-btn" onclick="this.closest('.modal').innerHTML = ''">&times;</button>
         </div>
     </div>
@@ -30,7 +40,7 @@
     {% if media %}
     <h3 class="mt-2">Media</h3>
     {% for item in media %}
-    <div class="run-metrics mb-1">
+    <div class="message-meta mb-1">
         <div class="metric-row">
             <span class="metric-label">Type</span>
             <span>{{ item.media_type }}</span>
@@ -60,7 +70,7 @@
     {% if links %}
     <h3 class="mt-2">Links</h3>
     {% for link in links %}
-    <div class="run-metrics mb-1">
+    <div class="message-meta mb-1">
         <div class="metric-row">
             <span class="metric-label">URL</span>
             <span><a href="{{ link.url }}" target="_blank" onclick="event.stopPropagation()">{{ link.domain }}</a></span>
@@ -87,7 +97,7 @@
     {% endfor %}
     {% endif %}
 
-    <div class="run-metrics mt-2">
+    <div class="message-meta mt-2">
         {% if message.server_name or message.server_id %}
         <div class="metric-row">
             <span class="metric-label">Server</span>

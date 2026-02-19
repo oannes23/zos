@@ -1,5 +1,5 @@
 {% if messages %}
-<table class="messages-table">
+<table class="messages-table data-table">
     <thead>
         <tr>
             <th>Author</th>
@@ -16,8 +16,20 @@
             hx-get="/ui/messages/{{ message.id }}/modal"
             hx-target="#message-detail-modal"
             hx-swap="innerHTML">
-            <td>{{ message.author_name or message.author_id }}</td>
-            <td>#{{ message.channel_name or message.channel_id }}</td>
+            <td>
+                {% if message.author_topic_key %}
+                <a href="/ui/topics/{{ message.author_topic_key }}" class="entity-link" onclick="event.stopPropagation()">{{ message.author_name or message.author_id }}</a>
+                {% else %}
+                {{ message.author_name or message.author_id }}
+                {% endif %}
+            </td>
+            <td>
+                {% if message.channel_topic_key %}
+                <a href="/ui/topics/{{ message.channel_topic_key }}" class="entity-link" onclick="event.stopPropagation()">#{{ message.channel_name or message.channel_id }}</a>
+                {% else %}
+                #{{ message.channel_name or message.channel_id }}
+                {% endif %}
+            </td>
             <td class="message-preview">{{ message.content | truncate(80) }}</td>
             <td class="text-muted">{{ message.temporal_marker }}</td>
             <td>
