@@ -1,3 +1,21 @@
+{% if top_domains %}
+<div class="domain-filters mb-1">
+    <a href="#"
+       class="badge {% if not domain %}badge-success{% else %}badge-default{% endif %}"
+       hx-get="/ui/media/links"
+       hx-target="#links-list"
+       hx-swap="innerHTML">All</a>
+    {% for d in top_domains %}
+    <a href="#"
+       class="badge {% if domain == d.domain %}badge-success{% else %}badge-default{% endif %}"
+       hx-get="/ui/media/links?domain={{ d.domain }}"
+       hx-target="#links-list"
+       hx-swap="innerHTML"
+       title="{{ d.count }} links">{{ d.domain }} ({{ d.count }})</a>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% if links %}
 <div class="table-scroll">
 <table class="data-table">
@@ -67,5 +85,5 @@
     {% endif %}
 </div>
 {% else %}
-<p class="text-muted">No link analyses yet</p>
+<p class="text-muted">No link analyses yet{% if domain %} for {{ domain }}{% endif %}</p>
 {% endif %}

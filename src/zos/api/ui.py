@@ -2510,6 +2510,27 @@ async def media_links_partial(
         limit=limit,
     )
 
+    # Fetch top domains for filter chips (lightweight query)
+    from sqlalchemy import func, select as sa_select
+
+    from zos.database import link_analysis
+
+    top_domains: list[dict] = []
+    with db.connect() as conn:
+        stmt = (
+            sa_select(
+                link_analysis.c.domain,
+                func.count().label("count"),
+            )
+            .group_by(link_analysis.c.domain)
+            .order_by(func.count().desc())
+            .limit(10)
+        )
+        top_domains = [
+            {"domain": row.domain, "count": row.count}
+            for row in conn.execute(stmt).fetchall()
+        ]
+
     return templates.TemplateResponse(
         request=request,
         name="media/_links.html",
@@ -2520,6 +2541,7 @@ async def media_links_partial(
             "limit": limit,
             "domain": filter_domain,
             "is_youtube": is_youtube,
+            "top_domains": top_domains,
         },
     )
 

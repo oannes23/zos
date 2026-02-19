@@ -278,9 +278,9 @@ class TestMediaStatsPartial:
         response = client.get("/ui/media/stats")
         assert "Fail" in response.text or "fail" in response.text.lower()
 
-    def test_stats_shows_top_domains(self, client: TestClient, sample_data) -> None:
-        """Stats should show top domains table."""
-        response = client.get("/ui/media/stats")
+    def test_top_domains_in_links_partial(self, client: TestClient, sample_data) -> None:
+        """Top domains should appear as filter chips in links partial."""
+        response = client.get("/ui/media/links")
         assert "example.com" in response.text or "domain" in response.text.lower()
 
     def test_stats_accepts_days_parameter(self, client: TestClient) -> None:

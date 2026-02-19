@@ -1569,6 +1569,22 @@ a:hover {
     font-size: 0.875rem;
 }
 
+/* Domain filter chips */
+.domain-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.domain-filters .badge {
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.domain-filters .badge:hover {
+    opacity: 0.8;
+}
+
 /* =============================================================================
    Media Thumbnail Grid & Image Modal
    ============================================================================= */
