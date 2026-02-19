@@ -1,7 +1,7 @@
 """Tests for the salience ledger operations.
 
 Covers all transaction types, balance computation, topic cap lookup,
-lazy topic creation, and transaction history queries.
+lazy topic creation, transaction history queries, and sibling topic management.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from zos.chattiness import ImpulseEngine
 from zos.config import Config
 from zos.database import create_tables, get_engine, salience_ledger, topics
 from zos.models import TopicCategory, TransactionType, utcnow
@@ -1046,3 +1047,138 @@ async def test_redistribute_bot_user_salience_idempotent(ledger: SalienceLedger)
 
     # Self topic balance unchanged
     assert await ledger.get_balance("server:s1:self:zos") == 15.0
+
+
+# =============================================================================
+# Test: Find Sibling Topics
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_find_sibling_topics_user_server_scoped(ledger: SalienceLedger) -> None:
+    """Server-scoped user finds global user and other server-scoped variants."""
+    await ledger.earn("user:456", 10.0)
+    await ledger.earn("server:aaa:user:456", 10.0)
+    await ledger.earn("server:bbb:user:456", 10.0)
+
+    siblings = ledger._find_sibling_topics("server:aaa:user:456")
+    assert set(siblings) == {"user:456", "server:bbb:user:456"}
+
+
+@pytest.mark.asyncio
+async def test_find_sibling_topics_user_global(ledger: SalienceLedger) -> None:
+    """Global user finds server-scoped variants."""
+    await ledger.earn("user:456", 10.0)
+    await ledger.earn("server:aaa:user:456", 10.0)
+
+    siblings = ledger._find_sibling_topics("user:456")
+    assert siblings == ["server:aaa:user:456"]
+
+
+@pytest.mark.asyncio
+async def test_find_sibling_topics_self(ledger: SalienceLedger) -> None:
+    """self:zos finds server-scoped self variants."""
+    await ledger.earn("self:zos", 10.0)
+    await ledger.earn("server:aaa:self:zos", 10.0)
+    await ledger.earn("server:bbb:self:zos", 10.0)
+
+    siblings = ledger._find_sibling_topics("self:zos")
+    assert set(siblings) == {"server:aaa:self:zos", "server:bbb:self:zos"}
+
+
+@pytest.mark.asyncio
+async def test_find_sibling_topics_self_server_scoped(ledger: SalienceLedger) -> None:
+    """Server-scoped self finds global self and other server variants."""
+    await ledger.earn("self:zos", 10.0)
+    await ledger.earn("server:aaa:self:zos", 10.0)
+
+    siblings = ledger._find_sibling_topics("server:aaa:self:zos")
+    assert siblings == ["self:zos"]
+
+
+@pytest.mark.asyncio
+async def test_find_sibling_topics_channel_returns_empty(ledger: SalienceLedger) -> None:
+    """Channels have no siblings."""
+    await ledger.earn("server:aaa:channel:123", 10.0)
+
+    siblings = ledger._find_sibling_topics("server:aaa:channel:123")
+    assert siblings == []
+
+
+@pytest.mark.asyncio
+async def test_find_sibling_topics_excludes_zero_balance(ledger: SalienceLedger) -> None:
+    """Siblings with zero balance (already reset) are excluded."""
+    # Global user has positive balance
+    await ledger.earn("user:456", 10.0)
+    # Server-scoped variant: earn then decay to exactly zero
+    await ledger.earn("server:aaa:user:456", 10.0)
+    await ledger.decay("server:aaa:user:456", 10.0, reason="test")
+
+    siblings = ledger._find_sibling_topics("user:456")
+    assert siblings == []  # server:aaa:user:456 has zero balance
+
+
+# =============================================================================
+# Test: Reset Siblings After Reflection
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_reset_siblings_after_reflection(ledger: SalienceLedger) -> None:
+    """Sibling topics get zeroed; primary is untouched."""
+    # Earn salience on primary and sibling
+    await ledger.earn("server:aaa:user:456", 50.0)
+    await ledger.earn("user:456", 30.0)
+
+    # Reset siblings of the server-scoped topic
+    count = await ledger.reset_siblings_after_reflection(
+        "server:aaa:user:456",
+        reason="sibling_reflection:run123",
+    )
+
+    assert count == 1
+
+    # Primary should be untouched
+    assert await ledger.get_balance("server:aaa:user:456") == 50.0
+
+    # Sibling should be zeroed
+    assert await ledger.get_balance("user:456") == 0.0
+
+
+@pytest.mark.asyncio
+async def test_reset_siblings_no_siblings(ledger: SalienceLedger) -> None:
+    """When no siblings exist, reset returns 0."""
+    await ledger.earn("server:aaa:channel:123", 50.0)
+
+    count = await ledger.reset_siblings_after_reflection(
+        "server:aaa:channel:123",
+        reason="test",
+    )
+
+    assert count == 0
+
+
+# =============================================================================
+# Test: Impulse Threshold Includes Equal
+# =============================================================================
+
+
+def test_threshold_includes_equal(engine, test_config: Config) -> None:
+    """Impulse exactly at threshold should be returned by get_topics_above_threshold."""
+    impulse = ImpulseEngine(engine, test_config)
+    threshold = test_config.chattiness.threshold  # default 25
+
+    # Earn exactly threshold amount
+    impulse.earn("server:aaa:channel:123", threshold, trigger="test")
+
+    topics_ready = impulse.get_topics_above_threshold()
+    topic_keys = [t[0] for t in topics_ready]
+
+    assert "server:aaa:channel:123" in topic_keys
+
+    # Also verify that below threshold is NOT returned
+    impulse.earn("server:aaa:channel:999", threshold - 1, trigger="test")
+    topics_ready = impulse.get_topics_above_threshold()
+    topic_keys = [t[0] for t in topics_ready]
+
+    assert "server:aaa:channel:999" not in topic_keys

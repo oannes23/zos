@@ -2454,6 +2454,12 @@ class LayerExecutor:
             reason=f"reflection:{ctx.run_id}",
         )
 
+        # Reset sibling topics (e.g., global user when server-scoped user reflected)
+        await self.ledger.reset_siblings_after_reflection(
+            ctx.topic.key,
+            reason=f"sibling_reflection:{ctx.run_id}",
+        )
+
         # Determine scope from messages
         sources_scope = self._determine_scope(ctx.messages)
 

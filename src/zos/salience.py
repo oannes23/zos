@@ -256,6 +256,95 @@ class SalienceLedger:
 
         return actual_cost
 
+    def _find_sibling_topics(self, topic_key: str) -> list[str]:
+        """Find sibling topics — same entity, different scope.
+
+        Only applies to 'user' and 'self' categories. For example:
+        - server:X:user:Y → finds user:Y and server:*:user:Y variants
+        - user:Y → finds server:*:user:Y variants
+        - server:X:self:zos → finds self:zos and server:*:self:zos variants
+        - self:zos → finds server:*:self:zos variants
+
+        Channels, subjects, dyads, etc. have no siblings (returns empty).
+
+        Args:
+            topic_key: The primary topic key.
+
+        Returns:
+            List of sibling topic keys (excluding the primary).
+        """
+        category = self.extract_category(topic_key)
+        if category not in ("user", "self"):
+            return []
+
+        # Extract the entity portion (e.g., "user:Y" or "self:zos")
+        parts = topic_key.split(":")
+        if parts[0] == "server":
+            # server:X:user:Y → entity = "user:Y" (everything after server:X:)
+            entity = ":".join(parts[2:])
+        else:
+            # Already global: user:Y or self:zos
+            entity = topic_key
+
+        global_key = entity
+        server_pattern = f"server:%:{entity}"
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                select(salience_ledger.c.topic_key)
+                .where(
+                    or_(
+                        salience_ledger.c.topic_key == global_key,
+                        salience_ledger.c.topic_key.like(server_pattern),
+                    )
+                )
+                .group_by(salience_ledger.c.topic_key)
+                .having(func.sum(salience_ledger.c.amount) > 0)
+            )
+            all_keys = [row.topic_key for row in result]
+
+        return [k for k in all_keys if k != topic_key]
+
+    async def reset_siblings_after_reflection(
+        self,
+        topic_key: str,
+        reason: str | None = None,
+    ) -> int:
+        """Reset salience on sibling topics after the primary was reflected on.
+
+        When a topic like server:X:user:Y gets reflected on, the global user:Y
+        (and any other server-scoped variants) should also be reset, since the
+        reflection already captured the entity's context.
+
+        Args:
+            topic_key: The primary topic that was just reflected on.
+            reason: Audit trail reason.
+
+        Returns:
+            Number of sibling topics reset.
+        """
+        siblings = self._find_sibling_topics(topic_key)
+        reset_count = 0
+
+        for sibling in siblings:
+            balance = await self.get_balance(sibling)
+            if balance > 0:
+                await self.record_transaction(
+                    topic_key=sibling,
+                    transaction_type=TransactionType.RESET,
+                    amount=-balance,
+                    reason=reason,
+                )
+                reset_count += 1
+                log.debug(
+                    "sibling_salience_reset",
+                    primary=topic_key,
+                    sibling=sibling,
+                    amount=balance,
+                )
+
+        return reset_count
+
     async def decay(
         self,
         topic_key: str,

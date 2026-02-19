@@ -144,7 +144,7 @@ class ImpulseEngine:
             ]
 
     def get_topics_above_threshold(self) -> list[tuple[str, float]]:
-        """Query all topics where SUM(amount) > threshold. Used by heartbeat."""
+        """Query all topics where SUM(amount) >= threshold. Used by heartbeat."""
         threshold = self.config.chattiness.threshold
 
         with self.engine.connect() as conn:
@@ -155,7 +155,7 @@ class ImpulseEngine:
                 )
                 .where(chattiness_ledger.c.topic_key.isnot(None))
                 .group_by(chattiness_ledger.c.topic_key)
-                .having(func.sum(chattiness_ledger.c.amount) > threshold)
+                .having(func.sum(chattiness_ledger.c.amount) >= threshold)
             )
             return [(row.topic_key, float(row.balance)) for row in result]
 
