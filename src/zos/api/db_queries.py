@@ -1473,6 +1473,7 @@ async def list_all_topics_with_stats(
     category: str | None = None,
     offset: int = 0,
     limit: int = 50,
+    sort_by: str = "salience",
 ) -> tuple[list[dict], int]:
     """List all topics with salience balance and insight count.
 
@@ -1481,6 +1482,8 @@ async def list_all_topics_with_stats(
         category: Optional filter by topic category (user, channel, subject, etc.).
         offset: Pagination offset.
         limit: Maximum results.
+        sort_by: Sort mode — "salience" applies DB ORDER BY + pagination,
+            any other value returns all matching rows unsorted (caller paginates).
 
     Returns:
         Tuple of (list of topic dicts, total count).
@@ -1535,13 +1538,16 @@ async def list_all_topics_with_stats(
                 .outerjoin(balance_sub, topics.c.key == balance_sub.c.topic_key)
                 .outerjoin(insight_sub, topics.c.key == insight_sub.c.topic_key)
             )
-            .order_by(func.coalesce(balance_sub.c.balance, 0.0).desc())
         )
+
+        if sort_by == "salience":
+            stmt = stmt.order_by(func.coalesce(balance_sub.c.balance, 0.0).desc())
 
         if conditions:
             stmt = stmt.where(*conditions)
 
-        stmt = stmt.offset(offset).limit(limit)
+        if sort_by == "salience":
+            stmt = stmt.offset(offset).limit(limit)
 
         results = []
         for row in conn.execute(stmt).fetchall():

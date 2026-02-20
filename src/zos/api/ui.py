@@ -1476,6 +1476,7 @@ async def topics_list_partial(
         category=filter_category,
         offset=offset,
         limit=limit,
+        sort_by=sort,
     )
 
     # Resolve topic keys to human-readable names
@@ -1491,9 +1492,10 @@ async def topics_list_partial(
         t["impulse_balance"] = impulse_balances.get(t["topic_key"], 0.0)
         t["last_activity"] = t["last_activity_at"]
 
-    # Sort by impulse if requested (default sort by salience is already done in DB)
+    # Sort by impulse globally then paginate (DB returned all rows unsorted)
     if sort == "impulse":
         topics_list.sort(key=lambda t: t["impulse_balance"], reverse=True)
+        topics_list = topics_list[offset:offset + limit]
 
     impulse_enabled = impulse_engine is not None
     impulse_threshold = request.app.state.config.chattiness.threshold if impulse_enabled else None
