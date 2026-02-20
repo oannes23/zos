@@ -107,7 +107,9 @@ No messages in the observation window.
 
 {% if existing_subjects %}
 ### SOURCE: Previously Identified Subjects in This Community
-These subjects have already been identified. Reuse these names when the theme matches:
+These subjects already exist. If you identify a subject that clearly matches one below,
+use the existing name rather than creating a duplicate. But don't force a match — if
+none fit, either use a new specific name or (more likely) identify no subjects at all.
 {{ existing_subjects | join(", ") }}
 {% endif %}
 
@@ -130,7 +132,11 @@ Consider:
 
 Write an insight that captures your current understanding. Be specific. Avoid generic observations.
 
-**Subjects**: If recurring themes or topics stand out in the activity, list them as `identified_subjects`. Use short, lowercase_underscore names (e.g., "api_redesign", "weekend_gaming"). Only include genuinely significant themes — not every passing mention. **If a theme matches a known subject listed above, use the existing name.** Empty list if nothing stands out.
+**Subjects**: If a specific, concrete topic keeps coming up, you may list it as an `identified_subjects` entry. A subject should be something members of this community would recognize by name — a specific project, event, shared activity, ongoing debate, or recurring concern. Name it plainly, the way someone in the community would refer to it.
+
+Use short, lowercase_underscore names. **Good**: "shavian_alphabet", "friday_game_night", "rust_rewrite_debate", "vegas_trip". **Bad**: "collaborative_creativity", "consciousness_media", "community_integration", "information_processing" — these are abstract categories, not subjects. If a name sounds like it could title a sociology paper, it's too abstract.
+
+Most reflections should identify zero subjects. Only name one if it's genuinely specific and prominent. **If a theme matches a known subject listed above, use the existing name.** Cap at one per reflection unless two are clearly distinct and concrete.
 
 **Important**: Include your metrics as JSON:
 
