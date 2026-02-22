@@ -108,6 +108,26 @@ class SalienceWeightsConfig(BaseModel):
     self_mention: float = 5.0  # Extra salience when Zos is directly mentioned
 
 
+class SalienceCategoryMultipliersConfig(BaseModel):
+    """Per-category multipliers for salience earning.
+
+    Scales all salience gains (earn, propagation, spillover) for topics
+    of a given category. Default 1.0 = normal rate. Use 0.5 to halve
+    accumulation, 2.0 to double it, etc.
+    """
+
+    user: float = 1.0
+    channel: float = 1.0
+    thread: float = 1.0
+    role: float = 1.0
+    dyad: float = 1.0
+    user_in_channel: float = 1.0
+    dyad_in_channel: float = 1.0
+    subject: float = 1.0
+    emoji: float = 1.0
+    self_topic: float = Field(1.0, alias="self")
+
+
 class SalienceBudgetConfig(BaseModel):
     """Salience budget allocation per group."""
 
@@ -132,6 +152,9 @@ class SalienceConfig(BaseModel):
 
     caps: SalienceCapsConfig = Field(default_factory=SalienceCapsConfig)
     weights: SalienceWeightsConfig = Field(default_factory=SalienceWeightsConfig)
+    category_multipliers: SalienceCategoryMultipliersConfig = Field(
+        default_factory=SalienceCategoryMultipliersConfig
+    )
     propagation_factor: float = 0.3
     global_propagation_factor: float = 0.3
     spillover_factor: float = 0.5

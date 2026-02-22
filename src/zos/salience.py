@@ -101,6 +101,9 @@ class SalienceLedger:
         Returns:
             Tuple of (new balance, overflow amount).
         """
+        # Apply category multiplier
+        amount *= self.get_category_multiplier(topic_key)
+
         # Ensure topic exists (lazy creation)
         await self.ensure_topic(topic_key)
 
@@ -411,6 +414,9 @@ class SalienceLedger:
             )
             return 0.0
 
+        # Apply category multiplier
+        amount *= self.get_category_multiplier(topic_key)
+
         # Ensure topic exists
         await self.ensure_topic(topic_key)
 
@@ -457,6 +463,9 @@ class SalienceLedger:
         Returns:
             Amount actually spilled (respects cap).
         """
+        # Apply category multiplier
+        amount *= self.get_category_multiplier(topic_key)
+
         # Check if topic is warm
         balance = await self.get_balance(topic_key)
         if balance <= self.config.salience.warm_threshold:
@@ -683,6 +692,36 @@ class SalienceLedger:
         if parts[0] == "server":
             return parts[2]  # server:X:category:...
         return parts[0]  # global topic
+
+    def get_category_multiplier(self, topic_key: str) -> float:
+        """Get the category multiplier for a topic's category.
+
+        Used to scale salience earning rates per category (e.g., dial down
+        dyad accumulation to 0.5, boost emoji to 3.0).
+
+        Args:
+            topic_key: The topic key string.
+
+        Returns:
+            The multiplier (default 1.0 if category not recognized).
+        """
+        category = self.extract_category(topic_key)
+        multipliers = self.config.salience.category_multipliers
+
+        multiplier_map = {
+            "user": multipliers.user,
+            "channel": multipliers.channel,
+            "thread": multipliers.thread,
+            "role": multipliers.role,
+            "dyad": multipliers.dyad,
+            "user_in_channel": multipliers.user_in_channel,
+            "dyad_in_channel": multipliers.dyad_in_channel,
+            "subject": multipliers.subject,
+            "emoji": multipliers.emoji,
+            "self": multipliers.self_topic,
+        }
+
+        return multiplier_map.get(category, 1.0)
 
     def is_global(self, topic_key: str) -> bool:
         """Check if topic is global (not server-scoped).

@@ -770,3 +770,148 @@ class TestServerFocusMultiplier:
 
         assert balance_srv1 == earning.weights.message * 3.0
         assert balance_srv2 == earning.weights.message * 0.5
+
+
+class TestCategoryMultipliers:
+    """Tests for per-category salience multipliers."""
+
+    @pytest.mark.asyncio
+    async def test_default_multiplier_is_one(self, earning: EarningCoordinator):
+        """Default category multipliers don't change earning."""
+        msg = create_message(author_id="user1", server_id="srv1")
+        await earning.process_message(msg)
+
+        balance = await earning.ledger.get_balance("server:srv1:user:user1")
+        assert balance == earning.weights.message
+
+    @pytest.mark.asyncio
+    async def test_user_multiplier_halves_earning(self, engine):
+        """User category multiplier of 0.5 halves user topic earning."""
+        config = Config()
+        config.salience.category_multipliers.user = 0.5
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="user1", server_id="srv1")
+        await earning.process_message(msg, propagate=False)
+
+        balance = await earning.ledger.get_balance("server:srv1:user:user1")
+        assert balance == earning.weights.message * 0.5
+
+    @pytest.mark.asyncio
+    async def test_dyad_multiplier_reduces_dyad_earning(self, engine):
+        """Dyad category multiplier scales dyad topic earning."""
+        config = Config()
+        config.salience.category_multipliers.dyad = 0.3
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        dyad_topic = await earning.earn_dyad("srv1", "a", "b", 10.0, "test")
+        balance = await ledger.get_balance(dyad_topic)
+        assert balance == 10.0 * 0.3
+
+    @pytest.mark.asyncio
+    async def test_emoji_multiplier_boosts_emoji_earning(self, engine):
+        """Emoji category multiplier of 3.0 triples emoji topic earning."""
+        config = Config()
+        config.salience.category_multipliers.emoji = 3.0
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="author1", server_id="srv1")
+        reaction = create_reaction(
+            user_id="reactor1",
+            emoji=":fire:",
+            is_custom=True,
+            server_id="srv1",
+        )
+
+        await earning.process_reaction(reaction, msg, propagate=False)
+
+        balance = await ledger.get_balance("server:srv1:emoji::fire:")
+        assert balance == earning.weights.reaction * 3.0
+
+    @pytest.mark.asyncio
+    async def test_channel_multiplier_independent_of_user(self, engine):
+        """Channel and user multipliers apply independently."""
+        config = Config()
+        config.salience.category_multipliers.channel = 2.0
+        config.salience.category_multipliers.user = 0.5
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="user1", server_id="srv1", channel_id="ch1")
+        await earning.process_message(msg, propagate=False)
+
+        user_balance = await ledger.get_balance("server:srv1:user:user1")
+        channel_balance = await ledger.get_balance("server:srv1:channel:ch1")
+
+        assert user_balance == earning.weights.message * 0.5
+        assert channel_balance == earning.weights.message * 2.0
+
+    @pytest.mark.asyncio
+    async def test_zero_multiplier_blocks_earning(self, engine):
+        """A multiplier of 0.0 blocks all earning for that category."""
+        config = Config()
+        config.salience.category_multipliers.dyad = 0.0
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        dyad_topic = await earning.earn_dyad("srv1", "a", "b", 10.0, "test")
+        balance = await ledger.get_balance(dyad_topic)
+        assert balance == 0.0
+
+    @pytest.mark.asyncio
+    async def test_multiplier_applies_to_direct_earn(self, engine):
+        """Category multiplier applies to ledger.earn() directly."""
+        config = Config()
+        config.salience.category_multipliers.subject = 2.0
+
+        ledger = SalienceLedger(engine, config)
+
+        new_balance, overflow = await ledger.earn("server:srv1:subject:python", 5.0)
+        assert new_balance == 10.0  # 5.0 * 2.0
+
+    @pytest.mark.asyncio
+    async def test_multiplier_stacks_with_server_focus(self, engine):
+        """Category multiplier stacks multiplicatively with server focus."""
+        from zos.config import ServerOverrideConfig
+
+        config = Config()
+        config.salience.category_multipliers.user = 0.5
+        config.servers = {"srv1": ServerOverrideConfig(focus=2.0)}
+
+        ledger = SalienceLedger(engine, config)
+        earning = EarningCoordinator(ledger, config)
+
+        msg = create_message(author_id="user1", server_id="srv1")
+        await earning.process_message(msg, propagate=False)
+
+        # focus(2.0) * base(1.0) -> 2.0 passed to earn() -> 2.0 * category(0.5) = 1.0
+        balance = await ledger.get_balance("server:srv1:user:user1")
+        assert balance == earning.weights.message * 2.0 * 0.5
+
+    @pytest.mark.asyncio
+    async def test_multiplier_config_from_yaml(self):
+        """Category multipliers can be configured via dict (simulating YAML)."""
+        config = Config.model_validate({
+            "salience": {
+                "category_multipliers": {
+                    "dyad": 0.5,
+                    "emoji": 3.0,
+                    "self": 0.8,
+                }
+            }
+        })
+
+        assert config.salience.category_multipliers.dyad == 0.5
+        assert config.salience.category_multipliers.emoji == 3.0
+        assert config.salience.category_multipliers.self_topic == 0.8
+        # Unset values remain at 1.0
+        assert config.salience.category_multipliers.user == 1.0
+        assert config.salience.category_multipliers.channel == 1.0
