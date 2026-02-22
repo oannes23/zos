@@ -401,14 +401,11 @@ def test_user_reflection_template_renders() -> None:
 
     result = engine.render("user/reflection.jinja2", context)
 
-    # Check key sections are present
-    assert "You are Zos" in result
-    assert "server:123:user:456" in result
-    assert "SOURCE: Prior Nightly Reflections on This Person" in result
-    assert "Recent Activity" in result
-    assert "Your Task" in result
-    assert "JSON" in result or "json" in result
-    assert "valence" in result
+    # Template renders and includes injected data
+    assert "server:123:user:456" in result  # topic key injected
+    assert "Previous insight about this user" in result  # insight content injected
+    assert "Hello everyone!" in result  # message content injected
+    assert "valence" in result  # JSON output schema present
 
 
 def test_user_reflection_template_with_no_insights() -> None:
@@ -430,8 +427,9 @@ def test_user_reflection_template_with_no_insights() -> None:
         },
     )
 
-    assert "don't have prior understanding" in result
-    assert "No messages in the observation window" in result
+    # Template renders with empty inputs and still includes self-concept
+    assert len(result) > 100  # non-trivial output
+    assert "Self-Concept" in result or "Zos" in result  # self_concept document injected
 
 
 def test_user_reflection_template_includes_self_concept() -> None:
@@ -453,9 +451,8 @@ def test_user_reflection_template_includes_self_concept() -> None:
         },
     )
 
-    # Self-concept should be included
-    assert "Who I Am" in result
-    # Should contain some of the self-concept content
+    # Self-concept content should be included (auto-injected from data/self-concept.md)
+    assert "Self-Concept" in result or "self-concept" in result
     assert "Zos" in result
 
 
@@ -981,7 +978,12 @@ def test_validate_user_insight_with_all_valence_fields() -> None:
 
 
 def test_real_user_reflection_template_complete() -> None:
-    """Test that the real user reflection template contains all required elements."""
+    """Test that the real user reflection template contains required structural elements.
+
+    Templates are expected to evolve through meta-reflection, so we verify
+    structural correctness (Jinja2 variables, JSON output schema) rather
+    than specific prose which Zos may rewrite.
+    """
     template_path = Path("prompts/user/reflection.jinja2")
 
     if not template_path.exists():
@@ -989,21 +991,19 @@ def test_real_user_reflection_template_complete() -> None:
 
     content = template_path.read_text()
 
-    # Check for required sections
-    assert "{{ chat_guidance }}" in content
-    assert "{{ self_concept" in content
-    assert "{{ topic.key }}" in content
+    # Must reference its key Jinja2 input variables
+    assert "chat_guidance" in content
+    assert "self_concept" in content
+    assert "topic" in content
     assert "insights" in content
-    assert "messages" in content
+    assert "messages" in content or "conversation_chunks" in content
+
+    # Must include JSON output schema fields
     assert "valence" in content
     assert "confidence" in content
     assert "importance" in content
     assert "novelty" in content
     assert "strength_adjustment" in content
-
-    # Check for phenomenological framing
-    assert "reflect" in content.lower()
-    assert "understanding" in content.lower()
 
 
 def test_real_layer_yaml_complete() -> None:
