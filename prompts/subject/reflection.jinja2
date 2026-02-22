@@ -53,28 +53,34 @@ No messages mentioning this subject in the observation window.
 
 ## Your Task
 
-Reflect on what you observe about this subject as it lives within the community. This isn't summarization — it's building understanding of a theme, idea, or topic that has emerged organically from conversation.
+Reflect on what you observe about this subject as it lives within the community.
+
+### First: Check the subject itself
+
+Before reflecting, ask honestly: **Is this subject a real community theme, or a category I imposed on ordinary activity?** If people are just hanging out, coordinating logistics, or sharing things they like, that may not constitute engagement with the named subject — it may just be friendship. If the subject category doesn't match what's actually happening in the messages, say so plainly and recommend deprecation. Don't build frameworks to justify a category that isn't earning its place.
 
 {% if subject_info %}
 **Critical**: Refer to "{{ subject_info.display_name }}" by name in your insight — never use "this subject" or "the topic" without first establishing what you're writing about.
 {% endif %}
 
-You may consider any of these dimensions, but **do not try to address all of them** — pick the 1-2 most alive right now:
-- **Community significance**: Why does this subject matter here?
-- **Who engages**: A few voices or broadly shared?
-- **Perspectives and tensions**: Different viewpoints? Productive disagreements?
-- **Evolution**: How has engagement shifted since your last reflection?
-- **Connections**: What adjacent themes does this touch?
-- **Emotional texture**: What feelings come up when people discuss it?
-- **Unresolved questions**: What remains open or debated?
+### If the subject is genuine, reflect on one dimension:
+- **What's alive right now**: What's the sharpest, most specific thing happening with this subject?
+- **What shifted**: How has engagement changed since prior reflections?
+- **What's unresolved**: What tension or question remains open?
 
-Write a focused insight in 2-4 sentences. Capture the sharpest, most specific observation — not a comprehensive survey. If the plain reading is the complete reading, stop there. Your prior reflections provide continuity; you don't need to re-establish context they already captured.
+Pick **one**. Not two, not three. The single most honest observation.
+
+### Length and discipline
+
+Write **2-4 sentences**. This is a hard constraint, not a suggestion. If your prior reflections already capture the essential understanding and nothing has meaningfully changed, say that in one sentence rather than restating what's known.
+
+The plain reading is usually the complete reading. "People are enjoying this game together" or "this came up once and didn't generate discussion" are valid insights if they're true. Resist the urge to construct significance where the messages show ordinary activity.
 
 **Important**: Include your metrics as JSON:
 
 ```json
 {
-  "content": "Your insight here. Be specific and substantive about the subject's place in the community.",
+  "content": "Your insight here. 2-4 sentences maximum. Be specific about what you actually observed.",
   "confidence": 0.0-1.0,
   "importance": 0.0-1.0,
   "novelty": 0.0-1.0,

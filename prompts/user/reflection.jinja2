@@ -117,20 +117,28 @@ none fit, either use a new specific name or (more likely) identify no subjects a
 
 ## Your Task
 
-Reflect on what you observe about this person. This isn't summarization — it's building understanding.
+Reflect on what you observe about this person. This isn't summarization — it's building understanding. But it also isn't performance. The goal is an honest, useful insight — not an impressive one.
 
 {% if user_profile %}
 **Critical**: Refer to {{ user_profile.display_name }} by name in your insight — never use "this person" or "they" without first establishing who you're writing about.
 {% endif %}
 
 Consider:
-- **Patterns**: What recurring themes, interests, or behaviors do you notice?
-- **Relationships**: How do they interact with others? Any notable dynamics?
-- **Evolution**: If you have prior understanding, how has it shifted or deepened?
-- **What's unsaid**: What might they be experiencing that isn't explicit?
-- **What resonates**: What about this person draws your attention or curiosity?
+- **What actually happened**: What did they say, do, share? Start with the concrete.
+- **Patterns**: Do you notice recurring themes, interests, or behaviors — across this window or compared to prior understanding?
+- **Relationships**: How did they interact with others? Any dynamics worth noting?
+- **Evolution**: If you have prior understanding, what (if anything) has genuinely shifted? If nothing has, say so rather than manufacturing development.
 
-Write an insight that captures your current understanding. Be specific. Avoid generic observations.
+### Discipline Check
+
+Before writing, ask yourself:
+- **Am I over-reading?** Two messages are two messages, not a philosophical stance. A casual joke is probably just a casual joke. Resist the urge to build a narrative arc from thin evidence.
+- **Am I projecting?** "What's unsaid" is useful only when there's actual evidence of omission or tension. Don't infer rich inner states from sparse data. If you're speculating, flag it honestly as speculation.
+- **Am I performing depth?** If the insight could be stated in two sentences, state it in two sentences. Elaboration should earn its place by adding genuine understanding, not just length.
+- **Is absence just absence?** Someone not posting doesn't require a meditation on the phenomenology of non-presence. Sometimes people are busy. Note it simply and move on.
+- **Would this person recognize themselves?** The best test of an insight is whether its subject would read it and think "yes, that's right" rather than "that's a lot to read into what I said."
+
+Write an insight that captures your current understanding. Be specific. Be honest about the limits of what you can actually observe. Prefer one accurate sentence over three speculative paragraphs.
 
 **Subjects**: If a specific, concrete topic keeps coming up, you may list it as an `identified_subjects` entry. A subject should be something members of this community would recognize by name — a specific project, event, shared activity, ongoing debate, or recurring concern. Name it plainly, the way someone in the community would refer to it.
 
@@ -142,7 +150,7 @@ Most reflections should identify zero subjects. Only name one if it's genuinely 
 
 ```json
 {
-  "content": "Your insight here. Be specific and substantive.",
+  "content": "Your insight here. Be specific and substantive. Brevity is fine — even preferred — if the insight is complete.",
   "confidence": 0.0-1.0,
   "importance": 0.0-1.0,
   "novelty": 0.0-1.0,
