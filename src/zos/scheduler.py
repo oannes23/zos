@@ -373,6 +373,7 @@ class ReflectionScheduler:
             LayerCategory.DYAD: BudgetGroup.SOCIAL,
             LayerCategory.CHANNEL: BudgetGroup.SPACES,
             LayerCategory.SUBJECT: BudgetGroup.SEMANTIC,
+            LayerCategory.EMOJI: BudgetGroup.CULTURE,
             LayerCategory.SELF: BudgetGroup.SELF,
             LayerCategory.SYNTHESIS: BudgetGroup.GLOBAL,
         }
