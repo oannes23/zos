@@ -273,6 +273,7 @@ class ServerOverrideConfig(BaseModel):
     focus: float = 1.0
     reflection_budget: float = 100.0  # Per-server reflection budget
     speech_channel: str | None = None  # Route all public speech to this channel
+    speech_channel_impulse_modifier: float = 1.0  # Multiplier for channel impulse earning
 
 
 class Config(BaseModel):

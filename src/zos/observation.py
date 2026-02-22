@@ -1005,7 +1005,8 @@ class ZosBot(commands.Bot):
                 and self._impulse_engine is not None
             ):
                 channel_topic = f"server:{server_id}:channel:{channel_id}"
-                amount = messages_stored * self.config.chattiness.channel_impulse_per_message
+                server_config = self.config.get_server_config(server_id)
+                amount = messages_stored * self.config.chattiness.channel_impulse_per_message * server_config.speech_channel_impulse_modifier
                 self._impulse_engine.earn(
                     channel_topic,
                     amount,
@@ -1643,7 +1644,8 @@ class ZosBot(commands.Bot):
 
         channel_id = str(message.channel.id)
         channel_topic = f"server:{server_id}:channel:{channel_id}"
-        amount = self.config.chattiness.channel_impulse_per_reaction
+        server_config = self.config.get_server_config(server_id)
+        amount = self.config.chattiness.channel_impulse_per_reaction * server_config.speech_channel_impulse_modifier
         self._impulse_engine.earn(
             channel_topic,
             amount,

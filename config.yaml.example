@@ -135,6 +135,8 @@ scheduler:
 #   "123456789012345678":
 #     privacy_gate_role: "987654321098765432"
 #     threads_as_topics: false
+#     speech_channel: "channel-name"
+#     speech_channel_impulse_modifier: 2.0  # Boost impulse earning (default 1.0)
 #     chattiness:
 #       threshold_min: 30
 #       threshold_max: 80
