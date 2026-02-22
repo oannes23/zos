@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from zos.api import create_app
 from zos.config import Config
-from zos.database import create_tables, generate_id, get_engine, layer_runs
+from zos.database import create_tables, generate_id, get_engine, layer_runs, llm_calls
 from zos.migrations import migrate
 from zos.salience import SalienceLedger
 
@@ -166,6 +166,29 @@ def sample_runs(engine):
     with engine.connect() as conn:
         for run in runs_data:
             conn.execute(layer_runs.insert().values(**run))
+
+        # Insert corresponding llm_calls so budget queries (which source
+        # cost/tokens from llm_calls) return the correct totals.
+        for run in runs_data:
+            if run["tokens_total"] is not None:
+                conn.execute(llm_calls.insert().values(
+                    id=generate_id(),
+                    layer_run_id=run["id"],
+                    topic_key="test:topic",
+                    call_type="reflection",
+                    model_profile=run["model_profile"],
+                    model_provider=run["model_provider"],
+                    model_name=run["model_name"],
+                    prompt="test prompt",
+                    response="test response",
+                    tokens_input=run["tokens_input"],
+                    tokens_output=run["tokens_output"],
+                    tokens_total=run["tokens_total"],
+                    estimated_cost_usd=run["estimated_cost_usd"],
+                    latency_ms=100,
+                    success=True,
+                    created_at=run["started_at"],
+                ))
         conn.commit()
 
     return runs_data

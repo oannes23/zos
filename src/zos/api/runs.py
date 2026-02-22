@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, func, select
 
 from zos.api.deps import get_db
-from zos.database import layer_runs
+from zos.database import layer_runs, llm_calls
 from zos.models import LayerRun, LayerRunStatus, row_to_model
 
 if TYPE_CHECKING:
@@ -167,6 +167,46 @@ def _format_run_detail(run: LayerRun) -> LayerRunDetail:
     )
 
 
+def _enrich_with_call_costs(conn, runs: list[LayerRun]) -> None:
+    """Replace run-level cost/token estimates with sum of actual llm_calls.
+
+    The layer_runs.estimated_cost_usd is computed once at the end of a run
+    using the last model seen, which is inaccurate when multiple models are
+    used (e.g. simple for filter + complex for main call).  This function
+    patches each run in-place with the correct per-call totals.
+    """
+    if not runs:
+        return
+
+    run_ids = [r.id for r in runs]
+    stmt = (
+        select(
+            llm_calls.c.layer_run_id,
+            func.sum(llm_calls.c.estimated_cost_usd).label("cost"),
+            func.sum(llm_calls.c.tokens_total).label("tokens"),
+            func.sum(llm_calls.c.tokens_input).label("tokens_in"),
+            func.sum(llm_calls.c.tokens_output).label("tokens_out"),
+        )
+        .where(llm_calls.c.layer_run_id.in_(run_ids))
+        .group_by(llm_calls.c.layer_run_id)
+    )
+
+    costs = {
+        row.layer_run_id: row
+        for row in conn.execute(stmt).fetchall()
+    }
+
+    for run in runs:
+        if run.id in costs:
+            c = costs[run.id]
+            run.estimated_cost_usd = float(c.cost or 0.0)
+            run.tokens_total = int(c.tokens or 0)
+            run.tokens_input = int(c.tokens_in or 0)
+            run.tokens_output = int(c.tokens_out or 0)
+        else:
+            run.estimated_cost_usd = 0.0
+
+
 # =============================================================================
 # Database Operations
 # =============================================================================
@@ -242,6 +282,9 @@ def list_layer_runs(
             for row in rows
         ]
 
+        # Enrich with accurate per-call costs from llm_calls
+        _enrich_with_call_costs(conn, runs)
+
         return runs, total
 
 
@@ -262,7 +305,7 @@ def get_layer_run(db: "Engine", run_id: str) -> LayerRun | None:
         if not row:
             return None
 
-        return LayerRun(
+        run = LayerRun(
             id=row.id,
             layer_name=row.layer_name,
             layer_hash=row.layer_hash,
@@ -283,6 +326,11 @@ def get_layer_run(db: "Engine", run_id: str) -> LayerRun | None:
             errors=row.errors,
         )
 
+        # Enrich with accurate per-call costs from llm_calls
+        _enrich_with_call_costs(conn, [run])
+
+        return run
+
 
 def get_layer_run_stats(db: "Engine", since: datetime) -> dict:
     """Get aggregate statistics for layer runs.
@@ -295,22 +343,37 @@ def get_layer_run_stats(db: "Engine", since: datetime) -> dict:
         Dictionary with aggregate statistics.
     """
     with db.connect() as conn:
-        # Aggregate query
-        stmt = select(
-            func.count().label("total"),
-            func.sum(
-                case((layer_runs.c.status == "success", 1), else_=0)
-            ).label("successful"),
-            func.sum(
-                case((layer_runs.c.status == "failed", 1), else_=0)
-            ).label("failed"),
-            func.sum(
-                case((layer_runs.c.status == "dry", 1), else_=0)
-            ).label("dry"),
-            func.sum(layer_runs.c.insights_created).label("insights"),
-            func.sum(layer_runs.c.tokens_total).label("tokens"),
-            func.sum(layer_runs.c.estimated_cost_usd).label("cost"),
-        ).where(layer_runs.c.started_at >= since)
+        # Subquery: aggregate llm_calls cost per layer_run
+        calls_agg = (
+            select(
+                llm_calls.c.layer_run_id,
+                func.sum(llm_calls.c.estimated_cost_usd).label("cost"),
+                func.sum(llm_calls.c.tokens_total).label("tokens"),
+            )
+            .where(llm_calls.c.layer_run_id.isnot(None))
+            .group_by(llm_calls.c.layer_run_id)
+        ).subquery("calls_agg")
+
+        # Aggregate query with accurate per-call costs
+        stmt = (
+            select(
+                func.count().label("total"),
+                func.sum(
+                    case((layer_runs.c.status == "success", 1), else_=0)
+                ).label("successful"),
+                func.sum(
+                    case((layer_runs.c.status == "failed", 1), else_=0)
+                ).label("failed"),
+                func.sum(
+                    case((layer_runs.c.status == "dry", 1), else_=0)
+                ).label("dry"),
+                func.sum(layer_runs.c.insights_created).label("insights"),
+                func.coalesce(func.sum(calls_agg.c.tokens), 0).label("tokens"),
+                func.coalesce(func.sum(calls_agg.c.cost), 0.0).label("cost"),
+            )
+            .outerjoin(calls_agg, calls_agg.c.layer_run_id == layer_runs.c.id)
+            .where(layer_runs.c.started_at >= since)
+        )
 
         row = conn.execute(stmt).fetchone()
 
