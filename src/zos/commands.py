@@ -214,6 +214,7 @@ class OperatorCommands(commands.Cog):
         app_commands.Choice(name="all", value="all"),
         app_commands.Choice(name="nightly", value="nightly"),
         app_commands.Choice(name="weekly", value="weekly"),
+        app_commands.Choice(name="conversation", value="conversation"),
     ])
     async def reflect_now(
         self, interaction: discord.Interaction, scope: str = "all"
@@ -264,10 +265,15 @@ class OperatorCommands(commands.Cog):
             )
 
             # Filter by scope
+            send_context: dict[str, str] | None = None
             if scope == "nightly":
                 scheduled_layers = [(n, l) for n, l in scheduled_layers if n.startswith("nightly-")]
             elif scope == "weekly":
                 scheduled_layers = [(n, l) for n, l in scheduled_layers if n.startswith("weekly-")]
+            elif scope == "conversation":
+                # Only run meta-reflection, scoped to conversation templates
+                scheduled_layers = [(n, l) for n, l in scheduled_layers if n == "weekly-meta-reflection"]
+                send_context = {"template_scope": "conversation"}
 
             if not scheduled_layers:
                 await interaction.followup.send(
@@ -279,7 +285,9 @@ class OperatorCommands(commands.Cog):
             # Trigger each scheduled layer sequentially
             results = []
             for layer_name, layer in scheduled_layers:
-                run = await self.bot.scheduler.trigger_now(layer_name)
+                run = await self.bot.scheduler.trigger_now(
+                    layer_name, send_context=send_context
+                )
                 if run:
                     results.append((layer_name, run))
 

@@ -1,11 +1,11 @@
 # Weekly Meta-Reflection Layer
 #
-# Reviews and evolves reflection templates based on insight quality.
-# Zos examines its own cognitive processes and may modify them.
+# Reviews and evolves reflection AND conversation templates based on output quality.
+# Zos examines its own cognitive processes and speech patterns, and may modify them.
 # Runs weekly on Sunday at 4:30 AM (after self-reflection at 4 AM).
 #
 # This creates a genuinely recursive loop: the meta-reflection template
-# reviews all other reflection templates, and reviews itself last.
+# reviews all other templates (reflection + conversation), and reviews itself last.
 
 name: weekly-meta-reflection
 category: self
@@ -25,6 +25,7 @@ nodes:
       model: complex
       max_tokens: 8192
       insights_per_template: 5
+      template_scope: all
 
   - name: store_meta_insight
     type: store_insight

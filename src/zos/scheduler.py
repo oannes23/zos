@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -497,13 +497,18 @@ class ReflectionScheduler:
 
             return result or 0
 
-    async def trigger_now(self, layer_name: str) -> LayerRun | None:
+    async def trigger_now(
+        self,
+        layer_name: str,
+        send_context: dict[str, Any] | None = None,
+    ) -> LayerRun | None:
         """Manually trigger a layer execution.
 
         Bypasses the schedule and executes the layer immediately.
 
         Args:
             layer_name: Name of the layer to trigger.
+            send_context: Optional context dict forwarded to execute_layer.
 
         Returns:
             LayerRun if successful, None if layer not found, no topics, or error.
@@ -526,7 +531,9 @@ class ReflectionScheduler:
             return None
 
         try:
-            return await self.executor.execute_layer(layer, topics)
+            return await self.executor.execute_layer(
+                layer, topics, send_context=send_context
+            )
         except Exception as e:
             log.error(
                 "manual_trigger_execution_failed",

@@ -2898,18 +2898,23 @@ class LayerExecutor:
     async def _handle_update_templates(
         self, node: Node, ctx: ExecutionContext
     ) -> None:
-        """Review and evolve reflection templates.
+        """Review and evolve reflection and/or conversation templates.
 
-        Iterates over all reflection templates discovered from loaded layers,
-        evaluates each against its recent output quality via an LLM call,
-        and may rewrite templates that would benefit from evolution.
+        Iterates over templates discovered from loaded layers, evaluates each
+        against its recent output quality via an LLM call, and may rewrite
+        templates that would benefit from evolution.
 
-        The meta-reflection template itself is always reviewed last, creating
-        a genuinely recursive loop of self-modification.
+        Template scope (from send_context or node params):
+        - "reflection": Only reflection templates (default, backward compat)
+        - "conversation": Only conversation templates
+        - "all": Both reflection and conversation templates
+
+        The meta-reflection template itself is always reviewed last when
+        scope includes reflection, creating a genuinely recursive loop.
 
         Args:
             node: The node with params (prompt_template, model, max_tokens,
-                  insights_per_template).
+                  insights_per_template, template_scope).
             ctx: The execution context.
         """
         if ctx.dry_run:
@@ -2920,26 +2925,37 @@ class LayerExecutor:
         meta_template_path = params.get("prompt_template", "self/meta_reflection.jinja2")
         insights_per_template = params.get("insights_per_template", 5)
 
+        # Determine scope: send_context overrides node params
+        template_scope = (
+            ctx.send_context.get("template_scope")
+            or params.get("template_scope", "reflection")
+        )
+
         # Fetch the most recent self-reflection insight for grounding context
         self_insights = get_insights_by_layer_name(
             self.engine, "weekly-self-reflection", limit=1
         )
         latest_self_insight = self_insights[0].content if self_insights else None
 
-        # Discover reflection templates from loaded layers
-        templates_to_review = self._discover_reflection_templates()
+        # Discover templates based on scope
+        templates_to_review = []
+        if template_scope in ("reflection", "all"):
+            templates_to_review.extend(self._discover_reflection_templates())
+        if template_scope in ("conversation", "all"):
+            templates_to_review.extend(self._discover_conversation_templates())
 
-        # Append the meta-reflection template itself at the end
-        meta_already_included = any(
-            t["template_path"] == meta_template_path for t in templates_to_review
-        )
-        if not meta_already_included:
-            templates_to_review.append({
-                "layer_name": ctx.layer.name,
-                "template_path": meta_template_path,
-                "category": "self",
-                "description": ctx.layer.description or "Meta-reflection on cognitive processes",
-            })
+        # Append the meta-reflection template itself at the end (only when reviewing reflection)
+        if template_scope in ("reflection", "all"):
+            meta_already_included = any(
+                t["template_path"] == meta_template_path for t in templates_to_review
+            )
+            if not meta_already_included:
+                templates_to_review.append({
+                    "layer_name": ctx.layer.name,
+                    "template_path": meta_template_path,
+                    "category": "self",
+                    "description": ctx.layer.description or "Meta-reflection on cognitive processes",
+                })
 
         log.info(
             "update_templates_start",
@@ -3015,6 +3031,111 @@ class LayerExecutor:
 
         return templates
 
+    def _discover_conversation_templates(self) -> list[dict[str, str | bool]]:
+        """Discover conversation templates from all loaded layers.
+
+        Iterates over loaded layers, including only conversation categories.
+        For each layer, finds llm_call nodes with a prompt_template.
+
+        Returns:
+            List of dicts with layer_name, template_path, category, description,
+            and is_conversation=True flag.
+        """
+        templates = []
+        try:
+            all_layers = self.loader.load_all()
+        except Exception as e:
+            log.error("discover_conversation_templates_load_failed", error=str(e))
+            return templates
+
+        for name, layer in sorted(all_layers.items()):
+            # Only include conversation categories
+            if layer.category.value not in CONVERSATION_CATEGORIES:
+                continue
+
+            for lnode in layer.nodes:
+                if lnode.type != NodeType.LLM_CALL:
+                    continue
+                tpl_path = lnode.params.get("prompt_template", "")
+                if tpl_path:
+                    templates.append({
+                        "layer_name": name,
+                        "template_path": tpl_path,
+                        "category": layer.category.value,
+                        "description": layer.description or "",
+                        "is_conversation": True,
+                    })
+
+        return templates
+
+    def _fetch_conversation_history(
+        self,
+        layer_name: str,
+        limit_sent: int = 5,
+        limit_drafts: int = 3,
+    ) -> tuple[str, str]:
+        """Fetch recent sent messages and suppressed drafts for a conversation layer.
+
+        Args:
+            layer_name: The layer name to filter by.
+            limit_sent: Max number of sent messages to fetch.
+            limit_drafts: Max number of suppressed drafts to fetch.
+
+        Returns:
+            Tuple of (recent_output_text, recent_drafts_text).
+        """
+        from zos.database import conversation_log, draft_history
+
+        recent_output_text = ""
+        recent_drafts_text = ""
+
+        try:
+            with self.engine.connect() as conn:
+                # Recent sent messages
+                sent_rows = conn.execute(
+                    select(
+                        conversation_log.c.content,
+                        conversation_log.c.created_at,
+                    )
+                    .where(conversation_log.c.layer_name == layer_name)
+                    .order_by(conversation_log.c.created_at.desc())
+                    .limit(limit_sent)
+                ).fetchall()
+
+                if sent_rows:
+                    lines = []
+                    for i, row in enumerate(sent_rows):
+                        lines.append(
+                            f"[{i + 1}] ({row.created_at.strftime('%Y-%m-%d %H:%M')})\n{row.content}\n"
+                        )
+                    recent_output_text = "\n".join(lines)
+
+                # Recent suppressed drafts
+                draft_rows = conn.execute(
+                    select(
+                        draft_history.c.content,
+                        draft_history.c.discard_reason,
+                        draft_history.c.created_at,
+                    )
+                    .where(draft_history.c.layer_name == layer_name)
+                    .order_by(draft_history.c.created_at.desc())
+                    .limit(limit_drafts)
+                ).fetchall()
+
+                if draft_rows:
+                    lines = []
+                    for i, row in enumerate(draft_rows):
+                        reason = row.discard_reason or "no reason recorded"
+                        lines.append(
+                            f"[{i + 1}] ({row.created_at.strftime('%Y-%m-%d %H:%M')}, suppressed: {reason})\n{row.content}\n"
+                        )
+                    recent_drafts_text = "\n".join(lines)
+
+        except Exception as e:
+            log.error("fetch_conversation_history_failed", layer=layer_name, error=str(e))
+
+        return recent_output_text, recent_drafts_text
+
     async def _review_single_template(
         self,
         template_info: dict[str, str],
@@ -3061,19 +3182,26 @@ class LayerExecutor:
 
         template_source = full_path.read_text()
 
-        # Get recent insights from this layer
-        recent_insights = get_insights_by_layer_name(
-            self.engine, layer_name, limit=insights_per_template
-        )
+        is_conversation = template_info.get("is_conversation", False)
+        recent_insights_text = ""
+        recent_output_text = ""
+        recent_drafts_text = ""
 
-        # Format insights for display
-        if recent_insights:
-            recent_insights_text = "\n".join(
-                f"[{i + 1}] (strength: {ins.strength:.1f}, confidence: {ins.confidence:.1f})\n{ins.content}\n"
-                for i, ins in enumerate(recent_insights)
+        if is_conversation:
+            # Query conversation_log for recent messages sent by this layer
+            recent_output_text, recent_drafts_text = self._fetch_conversation_history(
+                layer_name, limit_sent=5, limit_drafts=3
             )
         else:
-            recent_insights_text = ""
+            # Get recent insights from this layer (existing behavior)
+            recent_insights = get_insights_by_layer_name(
+                self.engine, layer_name, limit=insights_per_template
+            )
+            if recent_insights:
+                recent_insights_text = "\n".join(
+                    f"[{i + 1}] (strength: {ins.strength:.1f}, confidence: {ins.confidence:.1f})\n{ins.content}\n"
+                    for i, ins in enumerate(recent_insights)
+                )
 
         # Build variable explanations
         variable_explanations = self._explain_template_variables(
@@ -3089,6 +3217,9 @@ class LayerExecutor:
             "latest_self_insight": latest_self_insight,
             "layer_name": layer_name,
             "layer_description": template_info.get("description", ""),
+            "is_conversation_template": is_conversation,
+            "recent_output_text": recent_output_text,
+            "recent_drafts_text": recent_drafts_text,
         }
 
         prompt = self.templates.render(meta_template_path, render_context)
