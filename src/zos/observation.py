@@ -969,6 +969,7 @@ class ZosBot(commands.Bot):
 
         messages_stored = 0
         last_message_at: datetime | None = None
+        pinged = False
 
         # Phase 1: Fetch new messages since last poll
         async for message in channel.history(
@@ -979,6 +980,10 @@ class ZosBot(commands.Bot):
             await self._store_message(message, server_id)
             messages_stored += 1
             last_message_at = message.created_at
+
+            # Detect if Zos was directly pinged
+            if self.user and self.user in message.mentions:
+                pinged = True
 
             # Sync reactions for this message
             if message.reactions:
@@ -1006,6 +1011,14 @@ class ZosBot(commands.Bot):
                     amount,
                     trigger=f"poll:{messages_stored}_msgs",
                 )
+
+                # Ping saturates impulse to guarantee next heartbeat fires
+                if pinged:
+                    self._impulse_engine.earn(
+                        channel_topic,
+                        self.config.chattiness.threshold,
+                        trigger=f"ping:{channel_id}",
+                    )
 
         # Phase 2: Re-sync reactions by checking stored messages from database
         # This catches reactions added to older messages after they were first polled

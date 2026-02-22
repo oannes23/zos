@@ -462,3 +462,146 @@ class TestBackfillConfiguration:
     def test_default_media_queue_max_size(self, test_config: Config) -> None:
         """Default config should have media queue max size set."""
         assert test_config.observation.media_queue_max_size == 100
+
+
+# =============================================================================
+# Ping Impulse Saturation Tests
+# =============================================================================
+
+
+class TestPingImpulseSaturation:
+    """Tests for @Zos ping triggering impulse saturation."""
+
+    @pytest.mark.asyncio
+    async def test_ping_earns_threshold_impulse(self, tmp_path: Path) -> None:
+        """When a message mentions Zos, _poll_channel earns threshold-amount impulse."""
+        from zos.chattiness import ImpulseEngine
+        from zos.database import chattiness_ledger
+
+        config = Config(
+            data_dir=tmp_path,
+            log_level="DEBUG",
+            chattiness={"enabled": True, "threshold": 25},
+        )
+        eng = get_engine(config)
+        create_tables(eng)
+
+        bot = ZosBot(config, eng)
+        impulse_engine = ImpulseEngine(eng, config)
+        bot._impulse_engine = impulse_engine
+
+        # Mock bot.user (read-only property on discord.Client)
+        mock_bot_user = MagicMock()
+        mock_bot_user.id = 999999999
+
+        # Setup server and channel
+        mock_guild = MagicMock()
+        mock_guild.id = 111111111
+        mock_guild.name = "Test Server"
+        mock_guild.me = MagicMock()
+        await bot._ensure_server(mock_guild)
+
+        mock_channel = MagicMock()
+        mock_channel.id = 222222222
+        mock_channel.name = "test-channel"
+        await bot._ensure_channel(mock_channel, "111111111")
+
+        # Create a message that mentions the bot
+        mock_message = MagicMock()
+        mock_message.id = 777777777
+        mock_message.channel = mock_channel
+        mock_message.author = create_mock_author(888888888)
+        mock_message.content = "Hey @Zos what do you think?"
+        mock_message.created_at = datetime.now(timezone.utc)
+        mock_message.attachments = []
+        mock_message.embeds = []
+        mock_message.reference = None
+        mock_message.thread = None
+        mock_message.reactions = []
+        mock_message.mentions = [mock_bot_user]  # Bot is mentioned
+
+        mock_channel.history = MagicMock(return_value=MockAsyncIterator([mock_message]))
+
+        with patch.object(type(bot), "user", new_callable=lambda: property(lambda self: mock_bot_user)):
+            count = await bot._poll_channel(mock_channel, "111111111")
+
+        assert count == 1
+
+        # Check impulse ledger for ping trigger
+        channel_topic = "server:111111111:channel:222222222"
+        with eng.connect() as conn:
+            rows = conn.execute(
+                select(
+                    chattiness_ledger.c.amount,
+                    chattiness_ledger.c.trigger,
+                ).where(
+                    chattiness_ledger.c.topic_key == channel_topic
+                )
+            ).fetchall()
+
+        triggers = {r.trigger: r.amount for r in rows}
+        assert "ping:222222222" in triggers
+        assert triggers["ping:222222222"] == config.chattiness.threshold
+
+    @pytest.mark.asyncio
+    async def test_no_ping_no_extra_impulse(self, tmp_path: Path) -> None:
+        """When no mention, no ping impulse is earned."""
+        from zos.chattiness import ImpulseEngine
+        from zos.database import chattiness_ledger
+
+        config = Config(
+            data_dir=tmp_path,
+            log_level="DEBUG",
+            chattiness={"enabled": True, "threshold": 25},
+        )
+        eng = get_engine(config)
+        create_tables(eng)
+
+        bot = ZosBot(config, eng)
+        impulse_engine = ImpulseEngine(eng, config)
+        bot._impulse_engine = impulse_engine
+
+        mock_bot_user = MagicMock()
+        mock_bot_user.id = 999999999
+
+        mock_guild = MagicMock()
+        mock_guild.id = 111111111
+        mock_guild.name = "Test Server"
+        mock_guild.me = MagicMock()
+        await bot._ensure_server(mock_guild)
+
+        mock_channel = MagicMock()
+        mock_channel.id = 222222222
+        mock_channel.name = "test-channel"
+        await bot._ensure_channel(mock_channel, "111111111")
+
+        # Message without mention
+        mock_message = MagicMock()
+        mock_message.id = 777777777
+        mock_message.channel = mock_channel
+        mock_message.author = create_mock_author(888888888)
+        mock_message.content = "Just a normal message"
+        mock_message.created_at = datetime.now(timezone.utc)
+        mock_message.attachments = []
+        mock_message.embeds = []
+        mock_message.reference = None
+        mock_message.thread = None
+        mock_message.reactions = []
+        mock_message.mentions = []  # No mentions
+
+        mock_channel.history = MagicMock(return_value=MockAsyncIterator([mock_message]))
+
+        with patch.object(type(bot), "user", new_callable=lambda: property(lambda self: mock_bot_user)):
+            await bot._poll_channel(mock_channel, "111111111")
+
+        # Check no ping trigger in ledger
+        channel_topic = "server:111111111:channel:222222222"
+        with eng.connect() as conn:
+            rows = conn.execute(
+                select(chattiness_ledger.c.trigger).where(
+                    chattiness_ledger.c.topic_key == channel_topic
+                )
+            ).fetchall()
+
+        triggers = [r.trigger for r in rows]
+        assert not any(t.startswith("ping:") for t in triggers)
