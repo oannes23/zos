@@ -2256,6 +2256,15 @@ class ZosBot(commands.Bot):
 
         # Build send context for output routing
         send_context: dict[str, Any] = {}
+
+        # Extract server_id for server-scoped topics
+        server_id = None
+        if topic_key.startswith("server:"):
+            parts = topic_key.split(":")
+            if len(parts) >= 2:
+                server_id = parts[1]
+            send_context["server_id"] = server_id
+
         if self.config.chattiness.operator_dm_only:
             send_context["operator_dm"] = True
         elif category == "user":
@@ -2269,6 +2278,20 @@ class ZosBot(commands.Bot):
                 discord_channel = self.get_channel(int(channel_id))
                 if discord_channel and hasattr(discord_channel, "name"):
                     send_context["channel_name"] = discord_channel.name
+        # (subject topics intentionally get no routing here — handled below)
+
+        # Speech channel override: funnel all server public speech to one channel
+        if server_id and not self.config.chattiness.operator_dm_only:
+            server_config = self.config.get_server_config(server_id)
+            if server_config.speech_channel and category in ("channel", "subject"):
+                # Preserve source channel name before overwriting
+                if "channel_name" in send_context:
+                    send_context["source_channel_name"] = send_context["channel_name"]
+                send_context["channel_id"] = server_config.speech_channel
+                send_context["speech_channel"] = True
+                speech_ch = self.get_channel(int(server_config.speech_channel))
+                if speech_ch and hasattr(speech_ch, "name"):
+                    send_context["channel_name"] = speech_ch.name
 
         log.info(
             "conversation_dispatch",

@@ -66,6 +66,11 @@ Contribute to this conversation as Zos. You are a community member, not a modera
 **Note**: You are in operator DM mode. Instead of posting in the channel, this
 message will be sent to operators as a preview of what you would say. Frame it
 as: "In #{{ channel_name | default("channel") }}, I'd say something like:" followed by your message.
+{% elif speech_channel and source_channel_name %}
+**Note**: Your impulse to speak comes from activity in #{{ source_channel_name }},
+but you're posting in #{{ channel_name }}. Naturally reference which channel you're
+responding to (e.g., "Over in #{{ source_channel_name }}..." or "re: something in
+#{{ source_channel_name }}") so people have context.
 {% endif %}
 
 **Voice guidance**:

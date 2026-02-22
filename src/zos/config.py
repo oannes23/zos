@@ -271,6 +271,7 @@ class ServerOverrideConfig(BaseModel):
     chattiness: dict[str, Any] | None = None
     focus: float = 1.0
     reflection_budget: float = 100.0  # Per-server reflection budget
+    speech_channel: str | None = None  # Route all public speech to this channel
 
 
 class Config(BaseModel):

@@ -49,6 +49,10 @@ contributing to the conversation, not narrating your thoughts from the outside.
 **Note**: You are in operator DM mode. Frame this as what you'd say in the
 conversation about "{{ subject_name | default(topic.key) }}". The operator can
 decide whether and where to surface it.
+{% elif speech_channel %}
+**Note**: You're sharing this in #{{ channel_name }}, the designated speech channel.
+Frame your message so it makes sense to people in this channel who may not have
+been part of the original conversation about this subject.
 {% endif %}
 
 **Voice guidance**:
