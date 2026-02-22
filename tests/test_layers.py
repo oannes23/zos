@@ -231,10 +231,10 @@ def test_layer_valid_cron() -> None:
     """Test that valid cron expressions are accepted."""
     valid_crons = [
         "0 3 * * *",  # Every day at 3 AM
-        "0 4 * * 0",  # Every Sunday at 4 AM
+        "0 4 * * sun",  # Every Sunday at 4 AM
         "*/5 * * * *",  # Every 5 minutes
         "0 0 1 * *",  # First of each month
-        "30 8 * * 1-5",  # Weekdays at 8:30
+        "30 8 * * mon-fri",  # Weekdays at 8:30
     ]
 
     for cron in valid_crons:

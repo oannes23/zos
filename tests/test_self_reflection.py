@@ -367,7 +367,7 @@ def test_weekly_self_layer_validates() -> None:
 
     assert layer.name == "weekly-self-reflection"
     assert layer.category == LayerCategory.SELF
-    assert layer.schedule == "0 4 * * 0"  # Sunday at 4 AM
+    assert layer.schedule == "0 4 * * sun"  # Sunday at 4 AM
     assert layer.trigger_threshold == 10
     assert layer.target_category == "self"
 
@@ -437,8 +437,8 @@ def test_weekly_self_layer_cron_schedule() -> None:
     with open(layer_path) as f:
         data = yaml.safe_load(f)
 
-    # "0 4 * * 0" = minute 0, hour 4, any day of month, any month, Sunday
-    assert data["schedule"] == "0 4 * * 0"
+    # "0 4 * * sun" = minute 0, hour 4, any day of month, any month, Sunday
+    assert data["schedule"] == "0 4 * * sun"
 
 
 # =============================================================================
@@ -1048,7 +1048,7 @@ def test_layer_yaml_complete() -> None:
 
     assert data["name"] == "weekly-self-reflection"
     assert data["category"] == "self"
-    assert data["schedule"] == "0 4 * * 0"
+    assert data["schedule"] == "0 4 * * sun"
     assert data["trigger_threshold"] == 10
     assert data["target_category"] == "self"
 

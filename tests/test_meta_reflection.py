@@ -251,7 +251,7 @@ def layers_dir(tmp_path: Path) -> Path:
         "name": "weekly-self-reflection",
         "category": "self",
         "description": "Weekly self-reflection",
-        "schedule": "0 4 * * 0",
+        "schedule": "0 4 * * sun",
         "target_category": "self",
         "nodes": [
             {"name": "reflect", "type": "llm_call", "params": {
@@ -281,7 +281,7 @@ def layers_dir(tmp_path: Path) -> Path:
         "name": "weekly-meta-reflection",
         "category": "self",
         "description": "Meta-reflection",
-        "schedule": "30 4 * * 0",
+        "schedule": "30 4 * * sun",
         "target_category": "self",
         "nodes": [
             {"name": "evolve", "type": "update_templates", "params": {
@@ -369,7 +369,7 @@ class TestLayerYAML:
         assert meta_layer.category == LayerCategory.SELF
 
     def test_layer_schedule(self, meta_layer: Layer):
-        assert meta_layer.schedule == "30 4 * * 0"
+        assert meta_layer.schedule == "30 4 * * sun"
 
     def test_layer_has_correct_nodes(self, meta_layer: Layer):
         assert len(meta_layer.nodes) == 2

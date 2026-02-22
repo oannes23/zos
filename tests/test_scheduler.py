@@ -138,7 +138,7 @@ def sample_self_layer_yaml() -> str:
 name: self-reflection
 category: self
 description: Periodic self-reflection
-schedule: "0 6 * * 0"
+schedule: "0 6 * * sun"
 trigger_threshold: 50
 max_targets: 1
 

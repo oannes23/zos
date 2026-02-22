@@ -209,7 +209,15 @@ class OperatorCommands(commands.Cog):
     @app_commands.command(
         name="reflect-now", description="Trigger reflection immediately"
     )
-    async def reflect_now(self, interaction: discord.Interaction) -> None:
+    @app_commands.describe(scope="Which layers to run (default: all)")
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="all", value="all"),
+        app_commands.Choice(name="nightly", value="nightly"),
+        app_commands.Choice(name="weekly", value="weekly"),
+    ])
+    async def reflect_now(
+        self, interaction: discord.Interaction, scope: str = "all"
+    ) -> None:
         """Manually trigger reflection cycle.
 
         This bypasses the scheduled reflection timing and runs
@@ -230,7 +238,7 @@ class OperatorCommands(commands.Cog):
             )
             return
 
-        log.info("reflect_now_command", user=str(interaction.user))
+        log.info("reflect_now_command", user=str(interaction.user), scope=scope)
 
         # Get all scheduled layers, ordered so self-reflection runs last
         # (mirroring the cron schedule where entity layers run at 3 AM
@@ -255,9 +263,15 @@ class OperatorCommands(commands.Cog):
                 key=lambda pair: _CATEGORY_ORDER.get(pair[1].category, 1),
             )
 
+            # Filter by scope
+            if scope == "nightly":
+                scheduled_layers = [(n, l) for n, l in scheduled_layers if n.startswith("nightly-")]
+            elif scope == "weekly":
+                scheduled_layers = [(n, l) for n, l in scheduled_layers if n.startswith("weekly-")]
+
             if not scheduled_layers:
                 await interaction.followup.send(
-                    "No scheduled reflection layers found.",
+                    f"No scheduled reflection layers found for scope '{scope}'.",
                     ephemeral=True,
                 )
                 return
@@ -271,7 +285,8 @@ class OperatorCommands(commands.Cog):
 
             # Format results
             if not results:
-                message = "✅ Reflection triggered, but no topics had sufficient salience."
+                scope_label = f" ({scope})" if scope != "all" else ""
+                message = f"✅ Reflection{scope_label} triggered, but no topics had sufficient salience."
             else:
                 lines = ["✅ Reflection completed:\n"]
                 for layer_name, run in results:

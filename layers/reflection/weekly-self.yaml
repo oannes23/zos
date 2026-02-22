@@ -12,7 +12,7 @@ description: |
   Reflect on accumulated experience and maintain self-concept.
   Runs weekly on Sunday, or when 10+ self-relevant insights accumulate.
 
-schedule: "0 4 * * 0"  # Sunday at 4 AM
+schedule: "0 4 * * sun"  # Sunday at 4 AM
 trigger_threshold: 10   # Or when 10+ new self-insights
 
 target_category: self

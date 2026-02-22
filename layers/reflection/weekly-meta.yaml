@@ -13,7 +13,7 @@ description: |
   Review and evolve reflection templates based on insight quality.
   Zos examines its own cognitive processes and may modify them.
 
-schedule: "30 4 * * 0"  # Sunday 4:30 AM (after self-reflection at 4 AM)
+schedule: "30 4 * * sun"  # Sunday 4:30 AM (after self-reflection at 4 AM)
 
 target_category: self
 

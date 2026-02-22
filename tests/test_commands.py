@@ -320,7 +320,7 @@ class TestPlaceholderCommands:
         interaction = MockInteraction(user_id="123456", command_name="reflect-now")
 
         with patch("zos.commands.log"):
-            await cog.reflect_now.callback(cog, interaction)  # type: ignore[arg-type]
+            await cog.reflect_now.callback(cog, interaction, scope="all")  # type: ignore[arg-type]
 
         response_text = interaction.followup.send.call_args[0][0]
         assert "reflection not available" in response_text.lower()
