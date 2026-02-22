@@ -1207,6 +1207,9 @@ async def get_budget_summary(
     """Get overall budget summary.
 
     Returns total cost, tokens, runs, and insights for the specified period.
+    Cost and token data are sourced from individual llm_calls records for
+    accuracy (layer_runs aggregate cost can be inaccurate when a run uses
+    multiple models).
 
     Args:
         engine: SQLAlchemy database engine.
@@ -1223,12 +1226,25 @@ async def get_budget_summary(
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     with engine.connect() as conn:
-        # Get layer runs stats
+        # Get cost and tokens from llm_calls (authoritative per-call costs)
+        cost_stmt = (
+            select(
+                func.coalesce(func.sum(llm_calls.c.estimated_cost_usd), 0.0).label("total_cost"),
+                func.coalesce(func.sum(llm_calls.c.tokens_total), 0).label("total_tokens"),
+                func.count().label("total_calls"),
+            )
+            .where(llm_calls.c.created_at >= since)
+        )
+        cost_row = conn.execute(cost_stmt).fetchone()
+
+        total_cost = cost_row.total_cost or 0.0
+        total_tokens = cost_row.total_tokens or 0
+        total_calls = cost_row.total_calls or 0
+
+        # Get runs and insights from layer_runs
         runs_stmt = (
             select(
                 func.count().label("total_runs"),
-                func.coalesce(func.sum(layer_runs.c.tokens_total), 0).label("total_tokens"),
-                func.coalesce(func.sum(layer_runs.c.estimated_cost_usd), 0.0).label("total_cost"),
                 func.coalesce(func.sum(layer_runs.c.insights_created), 0).label("total_insights"),
             )
             .where(layer_runs.c.started_at >= since)
@@ -1236,19 +1252,9 @@ async def get_budget_summary(
         runs_row = conn.execute(runs_stmt).fetchone()
 
         total_runs = runs_row.total_runs or 0
-        total_tokens = runs_row.total_tokens or 0
-        total_cost = runs_row.total_cost or 0.0
         total_insights = runs_row.total_insights or 0
 
         avg_cost_per_run = total_cost / total_runs if total_runs > 0 else 0.0
-
-        # Get LLM calls count
-        calls_stmt = (
-            select(func.count())
-            .select_from(llm_calls)
-            .where(llm_calls.c.created_at >= since)
-        )
-        total_calls = conn.execute(calls_stmt).scalar() or 0
 
         return {
             "total_cost_usd": total_cost,
@@ -1267,7 +1273,8 @@ async def get_daily_costs(
 ) -> list[dict]:
     """Get daily cost breakdown for visualization.
 
-    Returns cost and token data grouped by day.
+    Returns cost and token data grouped by day.  Cost and token data are
+    sourced from individual llm_calls records for accuracy.
 
     Args:
         engine: SQLAlchemy database engine.
@@ -1278,20 +1285,32 @@ async def get_daily_costs(
     """
     from datetime import timedelta
 
-    from zos.database import layer_runs
+    from zos.database import layer_runs, llm_calls
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     with engine.connect() as conn:
-        # Group by date - SQLite specific date function
+        # Subquery: aggregate llm_calls cost per layer_run
+        calls_agg = (
+            select(
+                llm_calls.c.layer_run_id,
+                func.sum(llm_calls.c.estimated_cost_usd).label("cost"),
+                func.sum(llm_calls.c.tokens_total).label("tokens"),
+            )
+            .where(llm_calls.c.layer_run_id.isnot(None))
+            .group_by(llm_calls.c.layer_run_id)
+        ).subquery("calls_agg")
+
+        # Main query: layer_runs left join per-run call costs
         stmt = (
             select(
                 func.date(layer_runs.c.started_at).label("date"),
-                func.coalesce(func.sum(layer_runs.c.estimated_cost_usd), 0.0).label("cost_usd"),
-                func.coalesce(func.sum(layer_runs.c.tokens_total), 0).label("tokens"),
+                func.coalesce(func.sum(calls_agg.c.cost), 0.0).label("cost_usd"),
+                func.coalesce(func.sum(calls_agg.c.tokens), 0).label("tokens"),
                 func.count().label("runs"),
                 func.coalesce(func.sum(layer_runs.c.insights_created), 0).label("insights"),
             )
+            .outerjoin(calls_agg, calls_agg.c.layer_run_id == layer_runs.c.id)
             .where(layer_runs.c.started_at >= since)
             .group_by(func.date(layer_runs.c.started_at))
             .order_by(func.date(layer_runs.c.started_at))
@@ -1316,6 +1335,11 @@ async def get_cost_by_layer(
 ) -> list[dict]:
     """Get cost breakdown by layer name.
 
+    Cost and token data are sourced from individual llm_calls records
+    (joined via layer_run_id) for accuracy.  The layer_runs aggregate
+    cost can be inaccurate when a single run uses multiple models (e.g.
+    filter with 'simple' + main call with 'complex').
+
     Args:
         engine: SQLAlchemy database engine.
         days: Number of days to look back (default 30).
@@ -1326,24 +1350,39 @@ async def get_cost_by_layer(
     """
     from datetime import timedelta
 
-    from zos.database import layer_runs
+    from zos.database import layer_runs, llm_calls
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     with engine.connect() as conn:
+        # Subquery: aggregate llm_calls cost per layer_run (1:1 with runs)
+        calls_agg = (
+            select(
+                llm_calls.c.layer_run_id,
+                func.sum(llm_calls.c.estimated_cost_usd).label("cost"),
+                func.sum(llm_calls.c.tokens_total).label("tokens"),
+                func.sum(llm_calls.c.tokens_input).label("tokens_in"),
+                func.sum(llm_calls.c.tokens_output).label("tokens_out"),
+            )
+            .where(llm_calls.c.layer_run_id.isnot(None))
+            .group_by(llm_calls.c.layer_run_id)
+        ).subquery("calls_agg")
+
+        # Main query: layer_runs left join per-run call costs
         stmt = (
             select(
                 layer_runs.c.layer_name,
-                func.coalesce(func.sum(layer_runs.c.estimated_cost_usd), 0.0).label("cost_usd"),
-                func.coalesce(func.sum(layer_runs.c.tokens_total), 0).label("tokens"),
-                func.coalesce(func.sum(layer_runs.c.tokens_input), 0).label("tokens_input"),
-                func.coalesce(func.sum(layer_runs.c.tokens_output), 0).label("tokens_output"),
+                func.coalesce(func.sum(calls_agg.c.cost), 0.0).label("cost_usd"),
+                func.coalesce(func.sum(calls_agg.c.tokens), 0).label("tokens"),
+                func.coalesce(func.sum(calls_agg.c.tokens_in), 0).label("tokens_input"),
+                func.coalesce(func.sum(calls_agg.c.tokens_out), 0).label("tokens_output"),
                 func.count().label("runs"),
                 func.coalesce(func.sum(layer_runs.c.insights_created), 0).label("insights"),
             )
+            .outerjoin(calls_agg, calls_agg.c.layer_run_id == layer_runs.c.id)
             .where(layer_runs.c.started_at >= since)
             .group_by(layer_runs.c.layer_name)
-            .order_by(func.sum(layer_runs.c.estimated_cost_usd).desc())
+            .order_by(func.sum(calls_agg.c.cost).desc())
         )
 
         results = []
