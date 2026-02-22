@@ -181,6 +181,7 @@ class ChattinessConfig(BaseModel):
 
     # Earning rates per topic category
     channel_impulse_per_message: float = 1.0
+    channel_impulse_per_reaction: float = 0.5
     dm_impulse_per_message: float = 100.0  # Floods past threshold
     subject_impulse_per_insight: float = 10.0
 

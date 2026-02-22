@@ -19,9 +19,11 @@ import discord
 import pytest
 from sqlalchemy import select
 
+from zos.chattiness import ImpulseEngine
 from zos.config import Config
 from zos.database import (
     channels,
+    chattiness_ledger,
     create_tables,
     get_engine,
     messages,
@@ -1165,3 +1167,261 @@ class TestUserToMemberResolution:
                 )
             ).fetchall()
             assert len(result) == 0
+
+
+# =============================================================================
+# Reaction Impulse Earning Tests
+# =============================================================================
+
+
+class TestReactionImpulse:
+    """Tests for channel impulse earning from reactions."""
+
+    async def _setup_impulse_bot(self, tmp_path, chattiness_overrides=None):
+        """Create a bot with impulse engine wired up."""
+        chat_config = {"enabled": True, "threshold": 25}
+        if chattiness_overrides:
+            chat_config.update(chattiness_overrides)
+
+        config = Config(
+            data_dir=tmp_path,
+            log_level="DEBUG",
+            chattiness=chat_config,
+        )
+        eng = get_engine(config)
+        create_tables(eng)
+
+        bot = ZosBot(config, eng)
+        impulse_engine = ImpulseEngine(eng, config)
+        bot._impulse_engine = impulse_engine
+
+        # Setup server and channel
+        mock_guild = MagicMock()
+        mock_guild.id = 111111111
+        mock_guild.name = "Test Server"
+        await bot._ensure_server(mock_guild)
+
+        mock_channel_obj = MagicMock(spec=["id", "name"])
+        mock_channel_obj.id = 222222222
+        mock_channel_obj.name = "test-channel"
+        await bot._ensure_channel(mock_channel_obj, "111111111")
+
+        # Insert test message
+        from zos.models import model_to_dict
+
+        msg_obj = Message(
+            id="444444444",
+            channel_id="222222222",
+            server_id="111111111",
+            author_id="555555555",
+            content="Test message",
+            created_at=datetime.now(timezone.utc),
+            visibility_scope=VisibilityScope.PUBLIC,
+            has_media=False,
+            has_links=False,
+        )
+        with eng.connect() as conn:
+            conn.execute(messages.insert().values(**model_to_dict(msg_obj)))
+            conn.commit()
+
+        return bot, eng, config
+
+    def _make_channel_message(self, msg_id=444444444, channel_id=222222222):
+        """Create a mock Discord message with a proper channel (not DM)."""
+        mock_channel = MagicMock(spec=discord.TextChannel)
+        mock_channel.id = channel_id
+        mock_message = MagicMock()
+        mock_message.id = msg_id
+        mock_message.guild = None
+        mock_message.channel = mock_channel
+        return mock_message
+
+    def _get_impulse_rows(self, eng, topic_key):
+        """Get all impulse ledger rows for a topic."""
+        with eng.connect() as conn:
+            return conn.execute(
+                select(
+                    chattiness_ledger.c.amount,
+                    chattiness_ledger.c.trigger,
+                ).where(chattiness_ledger.c.topic_key == topic_key)
+            ).fetchall()
+
+    @pytest.mark.asyncio
+    async def test_new_reaction_earns_channel_impulse(self, tmp_path) -> None:
+        """A new reaction should earn channel impulse at the configured rate."""
+        bot, eng, config = await self._setup_impulse_bot(tmp_path)
+
+        mock_user = create_mock_author(user_id=666666666)
+        mock_user.roles = None
+
+        mock_reaction = MagicMock()
+        mock_reaction.emoji = "👍"
+        mock_reaction.count = 1
+
+        async def mock_users():
+            yield mock_user
+
+        mock_reaction.users = mock_users
+
+        mock_message = self._make_channel_message()
+        mock_message.reactions = [mock_reaction]
+
+        await bot._sync_reactions(mock_message, "111111111")
+
+        rows = self._get_impulse_rows(eng, "server:111111111:channel:222222222")
+        assert len(rows) == 1
+        assert rows[0].amount == 0.5  # default channel_impulse_per_reaction
+        assert rows[0].trigger == "reaction:222222222"
+
+    @pytest.mark.asyncio
+    async def test_dm_reaction_does_not_earn_impulse(self, tmp_path) -> None:
+        """Reactions on DM messages should NOT earn channel impulse."""
+        bot, eng, config = await self._setup_impulse_bot(tmp_path)
+
+        # Call _earn_reaction_impulse directly with a DM channel
+        mock_dm_channel = MagicMock(spec=discord.DMChannel)
+        mock_dm_channel.id = 333333333
+        mock_message = MagicMock()
+        mock_message.channel = mock_dm_channel
+
+        bot._earn_reaction_impulse(mock_message, None)
+
+        # No impulse ledger entries should exist
+        with eng.connect() as conn:
+            rows = conn.execute(select(chattiness_ledger)).fetchall()
+            assert len(rows) == 0
+
+    @pytest.mark.asyncio
+    async def test_duplicate_reaction_no_double_impulse(self, tmp_path) -> None:
+        """Re-syncing the same reaction should not earn impulse twice."""
+        bot, eng, config = await self._setup_impulse_bot(tmp_path)
+
+        mock_user = create_mock_author(user_id=666666666)
+        mock_user.roles = None
+
+        mock_reaction = MagicMock()
+        mock_reaction.emoji = "👍"
+        mock_reaction.count = 1
+
+        async def mock_users():
+            yield mock_user
+
+        mock_reaction.users = mock_users
+
+        mock_message = self._make_channel_message()
+        mock_message.reactions = [mock_reaction]
+
+        # First sync
+        await bot._sync_reactions(mock_message, "111111111")
+
+        # Second sync (same reaction — already stored)
+        mock_reaction2 = MagicMock()
+        mock_reaction2.emoji = "👍"
+        mock_reaction2.count = 1
+
+        async def mock_users2():
+            yield mock_user
+
+        mock_reaction2.users = mock_users2
+
+        mock_message2 = self._make_channel_message()
+        mock_message2.reactions = [mock_reaction2]
+
+        await bot._sync_reactions(mock_message2, "111111111")
+
+        rows = self._get_impulse_rows(eng, "server:111111111:channel:222222222")
+        assert len(rows) == 1  # Only one earn, not two
+
+    @pytest.mark.asyncio
+    async def test_chattiness_disabled_no_impulse(self, tmp_path) -> None:
+        """When chattiness is disabled, reactions should not earn impulse."""
+        bot, eng, config = await self._setup_impulse_bot(
+            tmp_path, {"enabled": False}
+        )
+
+        mock_user = create_mock_author(user_id=666666666)
+        mock_user.roles = None
+
+        mock_reaction = MagicMock()
+        mock_reaction.emoji = "👍"
+        mock_reaction.count = 1
+
+        async def mock_users():
+            yield mock_user
+
+        mock_reaction.users = mock_users
+
+        mock_message = self._make_channel_message()
+        mock_message.reactions = [mock_reaction]
+
+        await bot._sync_reactions(mock_message, "111111111")
+
+        with eng.connect() as conn:
+            rows = conn.execute(select(chattiness_ledger)).fetchall()
+            assert len(rows) == 0
+
+    @pytest.mark.asyncio
+    async def test_custom_rate_respected(self, tmp_path) -> None:
+        """Custom channel_impulse_per_reaction rate should be used."""
+        bot, eng, config = await self._setup_impulse_bot(
+            tmp_path, {"channel_impulse_per_reaction": 1.5}
+        )
+
+        mock_user = create_mock_author(user_id=666666666)
+        mock_user.roles = None
+
+        mock_reaction = MagicMock()
+        mock_reaction.emoji = "🎉"
+        mock_reaction.count = 1
+
+        async def mock_users():
+            yield mock_user
+
+        mock_reaction.users = mock_users
+
+        mock_message = self._make_channel_message()
+        mock_message.reactions = [mock_reaction]
+
+        await bot._sync_reactions(mock_message, "111111111")
+
+        rows = self._get_impulse_rows(eng, "server:111111111:channel:222222222")
+        assert len(rows) == 1
+        assert rows[0].amount == 1.5
+
+    @pytest.mark.asyncio
+    async def test_multiple_reactions_accumulate(self, tmp_path) -> None:
+        """Multiple different reactions should each earn impulse."""
+        bot, eng, config = await self._setup_impulse_bot(tmp_path)
+
+        mock_user1 = create_mock_author(user_id=666666666)
+        mock_user1.roles = None
+        mock_user2 = create_mock_author(user_id=777777777)
+        mock_user2.roles = None
+
+        mock_reaction1 = MagicMock()
+        mock_reaction1.emoji = "👍"
+        mock_reaction1.count = 1
+
+        async def mock_users1():
+            yield mock_user1
+
+        mock_reaction1.users = mock_users1
+
+        mock_reaction2 = MagicMock()
+        mock_reaction2.emoji = "🎉"
+        mock_reaction2.count = 1
+
+        async def mock_users2():
+            yield mock_user2
+
+        mock_reaction2.users = mock_users2
+
+        mock_message = self._make_channel_message()
+        mock_message.reactions = [mock_reaction1, mock_reaction2]
+
+        await bot._sync_reactions(mock_message, "111111111")
+
+        rows = self._get_impulse_rows(eng, "server:111111111:channel:222222222")
+        assert len(rows) == 2
+        total = sum(r.amount for r in rows)
+        assert total == 1.0  # 2 * 0.5 default rate

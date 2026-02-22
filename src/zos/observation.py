@@ -1428,6 +1428,7 @@ class ZosBot(commands.Bot):
                                     is_custom=is_custom,
                                     server_id=server_id,
                                 )
+                                self._earn_reaction_impulse(message, server_id)
                         continue
 
                     current_reactions.add((user_id, emoji_str))
@@ -1454,6 +1455,7 @@ class ZosBot(commands.Bot):
                             is_custom=is_custom,
                             server_id=server_id,
                         )
+                        self._earn_reaction_impulse(message, server_id)
             except discord.errors.Forbidden:
                 log.warning(
                     "reaction_users_forbidden",
@@ -1617,6 +1619,36 @@ class ZosBot(commands.Bot):
                 error=str(e),
             )
             # Don't fail reaction storage if earning fails
+
+    def _earn_reaction_impulse(
+        self,
+        message: discord.Message,
+        server_id: str | None,
+    ) -> None:
+        """Earn channel impulse for a reaction.
+
+        Reactions are genuine engagement signals that should contribute
+        to conversational pressure alongside messages.
+
+        Args:
+            message: Discord message the reaction is on.
+            server_id: Server ID (None for DMs — skipped).
+        """
+        if not self.config.chattiness.enabled:
+            return
+        if self._impulse_engine is None:
+            return
+        if isinstance(message.channel, discord.DMChannel):
+            return
+
+        channel_id = str(message.channel.id)
+        channel_topic = f"server:{server_id}:channel:{channel_id}"
+        amount = self.config.chattiness.channel_impulse_per_reaction
+        self._impulse_engine.earn(
+            channel_topic,
+            amount,
+            trigger=f"reaction:{channel_id}",
+        )
 
     def _get_reactions_for_message(self, message_id: str) -> list[Reaction]:
         """Get all reactions for a message.

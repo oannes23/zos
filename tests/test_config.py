@@ -596,6 +596,7 @@ def test_chattiness_config_defaults() -> None:
     assert chat.operator_dm_only is True
     assert chat.threshold == 25
     assert chat.channel_impulse_per_message == 1.0
+    assert chat.channel_impulse_per_reaction == 0.5
     assert chat.dm_impulse_per_message == 100.0
     assert chat.subject_impulse_per_insight == 10.0
     assert chat.heartbeat_interval_seconds == 30
@@ -612,6 +613,7 @@ def test_chattiness_config_custom(tmp_path: Path) -> None:
             "operator_dm_only": False,
             "threshold": 50,
             "channel_impulse_per_message": 2.0,
+            "channel_impulse_per_reaction": 0.75,
             "dm_impulse_per_message": 50.0,
             "heartbeat_interval_seconds": 15,
             "decay_threshold_hours": 2.5,
@@ -628,6 +630,7 @@ def test_chattiness_config_custom(tmp_path: Path) -> None:
     assert config.chattiness.operator_dm_only is False
     assert config.chattiness.threshold == 50
     assert config.chattiness.channel_impulse_per_message == 2.0
+    assert config.chattiness.channel_impulse_per_reaction == 0.75
     assert config.chattiness.dm_impulse_per_message == 50.0
     assert config.chattiness.heartbeat_interval_seconds == 15
     assert config.chattiness.decay_threshold_hours == 2.5
