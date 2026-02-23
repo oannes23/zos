@@ -1820,10 +1820,8 @@ class EarningCoordinator:
 
         topics_earned: list[str] = []
 
-        # Skip anonymous users for individual earning
-        # Channels still earn from anonymous activity
-        if message.author_id.startswith("<chat"):
-            await self.earn_channel(message, propagate=propagate)
+        # Anonymous users and bot's own messages: no salience earning at all
+        if message.author_id.startswith("<chat") or message.author_id == self.bot_user_id:
             return topics_earned
 
         server_id = message.server_id
@@ -1971,17 +1969,8 @@ class EarningCoordinator:
             server_config = self.ledger.config.get_server_config(server_id)
             base_amount *= server_config.focus
 
-        # Anonymous reactors: skip user/dyad salience, earn emoji topic only
+        # Anonymous reactors: no salience earning at all
         if reaction.user_id.startswith("<chat"):
-            if reaction.is_custom and server_id:
-                emoji_topic = f"server:{server_id}:emoji:{reaction.emoji}"
-                await self.ledger.earn_with_propagation(
-                    emoji_topic,
-                    base_amount,
-                    reason=f"reaction:{reaction.id}",
-                    propagate=propagate,
-                )
-                topics_earned.append(emoji_topic)
             return topics_earned
 
         # 1. Message author earns (attention received)

@@ -146,15 +146,32 @@ class TestMessageEarning:
         assert balance == 0
 
     @pytest.mark.asyncio
-    async def test_channel_earns_from_anonymous(self, earning: EarningCoordinator):
-        """Channel still earns from anonymous user messages."""
+    async def test_anonymous_no_earning(self, earning: EarningCoordinator):
+        """Anonymous users earn no salience at all — not even channel."""
         msg = create_message(author_id="<chat_123>", server_id="srv1", channel_id="ch1")
 
-        await earning.process_message(msg)
+        topics = await earning.process_message(msg)
 
-        # Channel topic should still earn
+        assert len(topics) == 0
+        # Channel topic should NOT earn from anonymous
         balance = await earning.ledger.get_balance("server:srv1:channel:ch1")
-        assert balance == earning.weights.message
+        assert balance == 0
+
+    @pytest.mark.asyncio
+    async def test_bot_own_message_no_earning(self, earning: EarningCoordinator):
+        """Bot's own messages (author_id == bot_user_id) earn no salience."""
+        # Set bot_user_id on the coordinator
+        earning.bot_user_id = "bot_999"
+        msg = create_message(author_id="bot_999", server_id="srv1", channel_id="ch1")
+
+        topics = await earning.process_message(msg)
+
+        assert len(topics) == 0
+        # No user or channel earning
+        user_balance = await earning.ledger.get_balance("server:srv1:user:bot_999")
+        channel_balance = await earning.ledger.get_balance("server:srv1:channel:ch1")
+        assert user_balance == 0
+        assert channel_balance == 0
 
 
 class TestDMEarning:
@@ -294,6 +311,24 @@ class TestReactionEarning:
 
         # No topics earned
         assert len(topics) == 0
+
+    @pytest.mark.asyncio
+    async def test_anonymous_reactor_custom_emoji_no_earning(self, earning: EarningCoordinator):
+        """Anonymous reactors with custom emoji earn no salience."""
+        msg = create_message(author_id="author1", server_id="srv1")
+        reaction = create_reaction(
+            user_id="<chat_456>",
+            emoji=":pepe_sad:",
+            is_custom=True,
+            server_id="srv1",
+        )
+
+        topics = await earning.process_reaction(reaction, msg)
+
+        # No topics earned — not even emoji topic
+        assert len(topics) == 0
+        emoji_balance = await earning.ledger.get_balance("server:srv1:emoji::pepe_sad:")
+        assert emoji_balance == 0
 
     @pytest.mark.asyncio
     async def test_reaction_to_anonymous_author(self, earning: EarningCoordinator):

@@ -968,6 +968,7 @@ class ZosBot(commands.Bot):
             )
 
         messages_stored = 0
+        opted_in_messages = 0
         last_message_at: datetime | None = None
         pinged = False
 
@@ -977,9 +978,14 @@ class ZosBot(commands.Bot):
             limit=100,  # Default batch size
             oldest_first=True,
         ):
-            await self._store_message(message, server_id)
+            author_id = await self._store_message(message, server_id)
             messages_stored += 1
             last_message_at = message.created_at
+
+            # Only count opted-in, non-bot messages for impulse
+            bot_id = str(self.user.id) if self.user else None
+            if not author_id.startswith("<chat") and author_id != bot_id:
+                opted_in_messages += 1
 
             # Detect if Zos was directly pinged
             if self.user and self.user in message.mentions:
@@ -999,14 +1005,15 @@ class ZosBot(commands.Bot):
                 messages_stored=messages_stored,
             )
 
-            # Earn channel impulse for new messages
+            # Earn channel impulse for opted-in, non-bot messages only
             if (
                 self.config.chattiness.enabled
                 and self._impulse_engine is not None
+                and opted_in_messages > 0
             ):
                 channel_topic = f"server:{server_id}:channel:{channel_id}"
                 server_config = self.config.get_server_config(server_id)
-                amount = messages_stored * self.config.chattiness.channel_impulse_per_message * server_config.speech_channel_impulse_modifier
+                amount = opted_in_messages * self.config.chattiness.channel_impulse_per_message * server_config.speech_channel_impulse_modifier
                 self._impulse_engine.earn(
                     channel_topic,
                     amount,
@@ -1161,12 +1168,15 @@ class ZosBot(commands.Bot):
         self,
         message: discord.Message,
         server_id: str | None,
-    ) -> None:
+    ) -> str:
         """Store a Discord message in the database.
 
         Args:
             message: Discord message to store.
             server_id: Server ID, or None for DMs.
+
+        Returns:
+            The resolved author_id (may be anonymized ``<chat_...>`` token).
         """
         # Determine visibility scope
         is_dm = isinstance(message.channel, discord.DMChannel)
@@ -1248,6 +1258,8 @@ class ZosBot(commands.Bot):
         # Queue links for analysis
         if has_links and message.content:
             await self._queue_links_for_analysis(message, author_id)
+
+        return author_id
 
     # =========================================================================
     # Privacy Gate
@@ -1410,26 +1422,17 @@ class ZosBot(commands.Bot):
                     # Skip anonymous users for individual tracking
                     # Per spec: only opted-in users' reactions tracked individually
                     if user_id.startswith("<chat"):
-                        # Custom emoji usage is community cultural data —
-                        # track emoji salience without tracking the user
+                        # Store custom emoji reactions for data completeness,
+                        # but no salience or impulse earning for anonymous users
                         if is_custom:
                             current_reactions.add((user_id, emoji_str))
-                            is_new = await self._store_reaction(
+                            await self._store_reaction(
                                 message_id=message_id,
                                 user_id=user_id,
                                 emoji=emoji_str,
                                 is_custom=is_custom,
                                 server_id=server_id,
                             )
-                            if is_new:
-                                await self._earn_reaction_salience(
-                                    discord_message=message,
-                                    user_id=user_id,
-                                    emoji=emoji_str,
-                                    is_custom=is_custom,
-                                    server_id=server_id,
-                                )
-                                self._earn_reaction_impulse(message, server_id)
                         continue
 
                     current_reactions.add((user_id, emoji_str))
