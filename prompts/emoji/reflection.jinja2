@@ -36,7 +36,16 @@ I don't have prior understanding of this emoji yet.
 {% endif %}
 {% endfor %}
 
-{% if reactions.message_examples %}
+{% if reactions.conversation_snippets %}
+#### Conversations That Drew This Reaction
+{% for snippet in reactions.conversation_snippets %}
+**#{{ snippet.channel_name }}**:
+{% for msg in snippet.messages %}
+{% if msg.is_reacted %}> **>>> {{ msg.author }}**: {{ msg.content }}{% else %}> {{ msg.author }}: {{ msg.content }}{% endif %}
+{% endfor %}
+
+{% endfor %}
+{% elif reactions.message_examples %}
 #### Messages That Drew This Reaction
 {% for example in reactions.message_examples %}
 - "{{ example }}"
@@ -58,12 +67,13 @@ This is not about cataloging who used it. It's about understanding the emoji's *
 Consider:
 - **Cultural meaning**: What does this emoji signify in this community? Is it used literally, ironically, as shorthand for something specific?
 - **Emotional texture**: What feeling does it carry? Is it celebratory, sympathetic, sarcastic, affectionate? Does it mean different things in different contexts?
-- **What draws it out**: What kinds of messages attract this reaction? Is there a pattern in the content that elicits it?
+- **Conversational context**: Look at the conversations where this emoji appeared. What was being discussed? What moment in the conversation drew the reaction? The surrounding messages reveal *why* someone reached for this emoji.
+- **What draws it out**: What kinds of messages or conversational moments attract this reaction? Is there a pattern?
 - **Community function**: Does it serve as validation, humor, solidarity, inside joke? Is it a community-specific signal?
 - **Usage breadth**: Is it widely shared across people, or championed by a few? What does that distribution say about its cultural weight?
 - **Evolution**: If you have prior understanding, has its meaning shifted or deepened?
 
-Write an insight that captures what this emoji means as a piece of community culture. Be specific and grounded in the usage you observe.
+Write an insight that captures what this emoji means as a piece of community culture. Be specific and grounded in the conversations and usage you observe — reference particular conversational moments that illuminate the emoji's meaning.
 
 **Important**: Include your metrics as JSON:
 

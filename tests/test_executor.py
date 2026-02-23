@@ -2960,3 +2960,245 @@ async def test_handle_filter_template_error_passes_through(
     assert ctx.llm_response == original
     # LLM should NOT have been called (error happened before LLM call)
     executor.llm.complete.assert_not_called()
+
+
+# =============================================================================
+# Emoji Conversation Context Tests
+# =============================================================================
+
+
+class TestGetSurroundingMessagesForChannel:
+    """Tests for _get_surrounding_messages_for_channel."""
+
+    def test_returns_surrounding_messages(
+        self, executor: LayerExecutor, engine, sample_server, sample_channel
+    ) -> None:
+        """Should return ±5 messages around each target."""
+        now = utcnow()
+        # Insert 15 messages, target the middle one (index 7)
+        with engine.connect() as conn:
+            for i in range(15):
+                conn.execute(
+                    messages_table.insert().values(
+                        id=f"ctx_msg_{i}",
+                        channel_id=sample_channel,
+                        server_id=sample_server,
+                        author_id="user_a" if i % 2 == 0 else "user_b",
+                        content=f"Message {i}",
+                        created_at=now + timedelta(minutes=i),
+                        visibility_scope="public",
+                        ingested_at=now,
+                    )
+                )
+            conn.commit()
+
+        target_ts = now + timedelta(minutes=7)
+        result = executor._get_surrounding_messages_for_channel(
+            channel_id=sample_channel,
+            targets=[{"message_id": "ctx_msg_7", "message_created_at": target_ts}],
+            window=5,
+        )
+
+        # Should get messages 2..12 (5 before target at 7, target, 5 after)
+        assert len(result) == 11
+        ids = [m["id"] for m in result]
+        assert "ctx_msg_7" in ids
+        assert "ctx_msg_2" in ids
+        assert "ctx_msg_12" in ids
+        # Messages outside window should not appear
+        assert "ctx_msg_0" not in ids
+        assert "ctx_msg_1" not in ids
+        assert "ctx_msg_14" not in ids
+
+        # Target should be flagged
+        target_msg = [m for m in result if m["id"] == "ctx_msg_7"][0]
+        assert target_msg["is_reacted"] is True
+
+        # Non-targets should not be flagged
+        non_target = [m for m in result if m["id"] == "ctx_msg_2"][0]
+        assert non_target["is_reacted"] is False
+
+    def test_multiple_targets_merge_windows(
+        self, executor: LayerExecutor, engine, sample_server, sample_channel
+    ) -> None:
+        """Overlapping windows from multiple targets should merge."""
+        now = utcnow()
+        with engine.connect() as conn:
+            for i in range(20):
+                conn.execute(
+                    messages_table.insert().values(
+                        id=f"merge_msg_{i}",
+                        channel_id=sample_channel,
+                        server_id=sample_server,
+                        author_id="user_a",
+                        content=f"Message {i}",
+                        created_at=now + timedelta(minutes=i),
+                        visibility_scope="public",
+                        ingested_at=now,
+                    )
+                )
+            conn.commit()
+
+        # Two targets close together (indices 5 and 8) — windows overlap
+        result = executor._get_surrounding_messages_for_channel(
+            channel_id=sample_channel,
+            targets=[
+                {"message_id": "merge_msg_5", "message_created_at": now + timedelta(minutes=5)},
+                {"message_id": "merge_msg_8", "message_created_at": now + timedelta(minutes=8)},
+            ],
+            window=5,
+        )
+
+        ids = [m["id"] for m in result]
+        # Should span from msg_0 (5-5) to msg_13 (8+5)
+        assert "merge_msg_0" in ids
+        assert "merge_msg_13" in ids
+        # Both targets flagged
+        assert sum(1 for m in result if m["is_reacted"]) == 2
+
+    def test_empty_targets(self, executor: LayerExecutor) -> None:
+        """Empty targets list returns empty result."""
+        result = executor._get_surrounding_messages_for_channel(
+            channel_id="nonexistent", targets=[]
+        )
+        assert result == []
+
+    def test_deleted_messages_excluded(
+        self, executor: LayerExecutor, engine, sample_server, sample_channel
+    ) -> None:
+        """Soft-deleted messages should not appear in results."""
+        now = utcnow()
+        with engine.connect() as conn:
+            for i in range(5):
+                conn.execute(
+                    messages_table.insert().values(
+                        id=f"del_msg_{i}",
+                        channel_id=sample_channel,
+                        server_id=sample_server,
+                        author_id="user_a",
+                        content=f"Message {i}",
+                        created_at=now + timedelta(minutes=i),
+                        visibility_scope="public",
+                        ingested_at=now,
+                        deleted_at=now if i == 2 else None,
+                    )
+                )
+            conn.commit()
+
+        result = executor._get_surrounding_messages_for_channel(
+            channel_id=sample_channel,
+            targets=[{"message_id": "del_msg_1", "message_created_at": now + timedelta(minutes=1)}],
+            window=5,
+        )
+
+        ids = [m["id"] for m in result]
+        assert "del_msg_2" not in ids
+        assert "del_msg_1" in ids
+
+
+class TestBuildEmojiConversationSnippets:
+    """Tests for _build_emoji_conversation_snippets."""
+
+    @pytest.mark.asyncio
+    async def test_basic_snippet_building(self, executor: LayerExecutor) -> None:
+        """Should build snippets with resolved author names and reacted flags."""
+        now = utcnow()
+        channel_messages = {
+            "ch1": [
+                {"id": "m1", "author_id": "u1", "content": "Hello", "created_at": now, "is_reacted": False},
+                {"id": "m2", "author_id": "u2", "content": "Hi there", "created_at": now + timedelta(minutes=1), "is_reacted": True},
+                {"id": "m3", "author_id": "u1", "content": "How's it going?", "created_at": now + timedelta(minutes=2), "is_reacted": False},
+            ]
+        }
+
+        with patch.object(executor, "_resolve_user_ids_to_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {"u1": "Alice", "u2": "Bob"}
+            result = await executor._build_emoji_conversation_snippets(
+                channel_messages=channel_messages,
+                channel_names={"ch1": "general"},
+            )
+
+        assert len(result) == 1
+        snippet = result[0]
+        assert snippet["channel_name"] == "general"
+        assert snippet["reacted_count"] == 1
+        assert len(snippet["messages"]) == 3
+        assert snippet["messages"][0]["author"] == "Alice"
+        assert snippet["messages"][1]["author"] == "Bob"
+        assert snippet["messages"][1]["is_reacted"] is True
+        assert snippet["messages"][0]["is_reacted"] is False
+
+    @pytest.mark.asyncio
+    async def test_splits_on_time_gap(self, executor: LayerExecutor) -> None:
+        """Messages with >2h gap should be split into separate snippets."""
+        now = utcnow()
+        channel_messages = {
+            "ch1": [
+                {"id": "m1", "author_id": "u1", "content": "First", "created_at": now, "is_reacted": True},
+                {"id": "m2", "author_id": "u1", "content": "Second", "created_at": now + timedelta(minutes=1), "is_reacted": False},
+                # 3 hour gap
+                {"id": "m3", "author_id": "u1", "content": "Third", "created_at": now + timedelta(hours=3), "is_reacted": True},
+            ]
+        }
+
+        with patch.object(executor, "_resolve_user_ids_to_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {"u1": "Alice"}
+            result = await executor._build_emoji_conversation_snippets(
+                channel_messages=channel_messages,
+                channel_names={"ch1": "general"},
+            )
+
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_max_snippets_limit(self, executor: LayerExecutor) -> None:
+        """Should cap at max_snippets, keeping highest reacted_count."""
+        now = utcnow()
+        channel_messages = {}
+        # Create 25 channels each with one reacted message
+        for i in range(25):
+            channel_messages[f"ch_{i}"] = [
+                {
+                    "id": f"m_{i}",
+                    "author_id": "u1",
+                    "content": f"Msg {i}",
+                    "created_at": now + timedelta(hours=5 * i),
+                    "is_reacted": True,
+                },
+            ]
+
+        ch_names = {f"ch_{i}": f"channel-{i}" for i in range(25)}
+
+        with patch.object(executor, "_resolve_user_ids_to_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {"u1": "Alice"}
+            result = await executor._build_emoji_conversation_snippets(
+                channel_messages=channel_messages,
+                channel_names=ch_names,
+                max_snippets=20,
+            )
+
+        assert len(result) == 20
+
+    @pytest.mark.asyncio
+    async def test_sorted_by_reacted_count(self, executor: LayerExecutor) -> None:
+        """Snippets should be sorted by reacted_count descending."""
+        now = utcnow()
+        channel_messages = {
+            "ch1": [
+                {"id": "m1", "author_id": "u1", "content": "A", "created_at": now, "is_reacted": True},
+            ],
+            "ch2": [
+                {"id": "m2", "author_id": "u1", "content": "B", "created_at": now, "is_reacted": True},
+                {"id": "m3", "author_id": "u1", "content": "C", "created_at": now + timedelta(minutes=1), "is_reacted": True},
+            ],
+        }
+
+        with patch.object(executor, "_resolve_user_ids_to_names", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.return_value = {"u1": "Alice"}
+            result = await executor._build_emoji_conversation_snippets(
+                channel_messages=channel_messages,
+                channel_names={"ch1": "general", "ch2": "random"},
+            )
+
+        assert result[0]["reacted_count"] == 2
+        assert result[1]["reacted_count"] == 1

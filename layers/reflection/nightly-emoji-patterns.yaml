@@ -23,7 +23,7 @@ nodes:
   - name: fetch_reactions
     type: fetch_reactions
     params:
-      lookback_days: 7
+      lookback_days: 30
       min_reactions: 5  # Only emojis with enough usage to analyze
 
   - name: fetch_prior_understanding

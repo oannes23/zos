@@ -1467,6 +1467,56 @@ class LayerExecutor:
                 seen_examples.add(content)
                 message_examples.append(content)
 
+        # Fetch surrounding conversation context for reacted messages
+        conversation_snippets: list[dict[str, Any]] = []
+        channel_targets: dict[str, list[dict[str, Any]]] = {}
+        for reaction in reactions:
+            ch_id = reaction.get("channel_id")
+            msg_id = reaction.get("message_id")
+            msg_ts = reaction.get("message_created_at")
+            if ch_id and msg_id and msg_ts:
+                channel_targets.setdefault(ch_id, []).append({
+                    "message_id": msg_id,
+                    "message_created_at": msg_ts,
+                })
+
+        if channel_targets:
+            # Deduplicate targets per channel (same message may have multiple reactions)
+            for ch_id in channel_targets:
+                seen_ids: set[str] = set()
+                deduped: list[dict[str, Any]] = []
+                for t in channel_targets[ch_id]:
+                    if t["message_id"] not in seen_ids:
+                        seen_ids.add(t["message_id"])
+                        deduped.append(t)
+                channel_targets[ch_id] = deduped
+
+            # Fetch surrounding messages per channel
+            channel_messages: dict[str, list[dict[str, Any]]] = {}
+            for ch_id, targets in channel_targets.items():
+                surrounding = self._get_surrounding_messages_for_channel(
+                    channel_id=ch_id, targets=targets
+                )
+                if surrounding:
+                    channel_messages[ch_id] = surrounding
+
+            if channel_messages:
+                # Resolve channel names
+                ch_name_map: dict[str, str] = {}
+                with self.engine.connect() as conn:
+                    rows = conn.execute(
+                        select(channels_table.c.id, channels_table.c.name)
+                        .where(channels_table.c.id.in_(channel_messages.keys()))
+                    ).fetchall()
+                for row in rows:
+                    if row.name:
+                        ch_name_map[row.id] = row.name
+
+                conversation_snippets = await self._build_emoji_conversation_snippets(
+                    channel_messages=channel_messages,
+                    channel_names=ch_name_map,
+                )
+
         # Format for template consumption
         formatted = {
             "emoji": emoji_name,
@@ -1484,6 +1534,7 @@ class LayerExecutor:
                 )
             ],
             "message_examples": message_examples,
+            "conversation_snippets": conversation_snippets,
         }
 
         ctx.reactions = formatted
@@ -1493,6 +1544,7 @@ class LayerExecutor:
             emoji=emoji_name,
             total_reactions=len(reactions),
             unique_users=len(user_counts),
+            snippets=len(conversation_snippets),
         )
 
     def _get_reactions_for_emoji(
@@ -1529,6 +1581,9 @@ class LayerExecutor:
                     reactions_table.c.created_at,
                     messages_table.c.content.label("message_content"),
                     messages_table.c.author_id.label("message_author"),
+                    messages_table.c.id.label("message_id"),
+                    messages_table.c.channel_id,
+                    messages_table.c.created_at.label("message_created_at"),
                 )
                 .select_from(
                     reactions_table.join(
@@ -1549,9 +1604,175 @@ class LayerExecutor:
                     "created_at": row.created_at,
                     "message_content": row.message_content,
                     "message_author": row.message_author,
+                    "message_id": row.message_id,
+                    "channel_id": row.channel_id,
+                    "message_created_at": row.message_created_at,
                 }
                 for row in rows
             ]
+
+    def _get_surrounding_messages_for_channel(
+        self,
+        channel_id: str,
+        targets: list[dict[str, Any]],
+        window: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Fetch messages surrounding reacted messages in a channel.
+
+        Queries a time-bounded window of messages in one channel, then finds
+        ±window messages around each target. Uses the existing
+        ix_messages_channel_created index for efficiency.
+
+        Args:
+            channel_id: The channel to query.
+            targets: List of dicts with "message_id" and "message_created_at".
+            window: Number of messages before/after each target to include.
+
+        Returns:
+            List of message dicts with "id", "author_id", "content",
+            "created_at", and "is_reacted" flag.
+        """
+        if not targets:
+            return []
+
+        timestamps = [t["message_created_at"] for t in targets]
+        target_ids = {t["message_id"] for t in targets}
+        min_ts = min(timestamps) - timedelta(hours=2)
+        max_ts = max(timestamps) + timedelta(hours=2)
+
+        with self.engine.connect() as conn:
+            stmt = (
+                select(
+                    messages_table.c.id,
+                    messages_table.c.author_id,
+                    messages_table.c.content,
+                    messages_table.c.created_at,
+                )
+                .where(
+                    and_(
+                        messages_table.c.channel_id == channel_id,
+                        messages_table.c.created_at >= min_ts,
+                        messages_table.c.created_at <= max_ts,
+                        messages_table.c.deleted_at.is_(None),
+                    )
+                )
+                .order_by(messages_table.c.created_at.asc())
+            )
+            rows = conn.execute(stmt).fetchall()
+
+        if not rows:
+            return []
+
+        # Build ordered list with index lookup
+        all_msgs = [
+            {
+                "id": row.id,
+                "author_id": row.author_id,
+                "content": row.content,
+                "created_at": row.created_at,
+                "is_reacted": row.id in target_ids,
+            }
+            for row in rows
+        ]
+
+        # Find indices of target messages and collect surrounding context
+        included_indices: set[int] = set()
+        for i, msg in enumerate(all_msgs):
+            if msg["is_reacted"]:
+                start = max(0, i - window)
+                end = min(len(all_msgs), i + window + 1)
+                included_indices.update(range(start, end))
+
+        return [all_msgs[i] for i in sorted(included_indices)]
+
+    async def _build_emoji_conversation_snippets(
+        self,
+        channel_messages: dict[str, list[dict[str, Any]]],
+        channel_names: dict[str, str],
+        max_snippets: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Build conversation snippets from surrounding messages grouped by channel.
+
+        Splits messages into contiguous snippets (breaking on 2h+ time gaps),
+        resolves author display names, and returns up to max_snippets sorted
+        by number of reacted messages (most relevant first).
+
+        Args:
+            channel_messages: Mapping of channel_id -> list of message dicts
+                (from _get_surrounding_messages_for_channel).
+            channel_names: Mapping of channel_id -> channel display name.
+            max_snippets: Maximum snippets to return.
+
+        Returns:
+            List of snippet dicts with "channel_name", "messages" (list of
+            formatted message dicts), and "reacted_count".
+        """
+        GAP_THRESHOLD = timedelta(hours=2)
+
+        # Collect all author IDs for batch resolution
+        all_author_ids: set[str] = set()
+        for msgs in channel_messages.values():
+            for m in msgs:
+                all_author_ids.add(m["author_id"])
+        author_names = await self._resolve_user_ids_to_names(all_author_ids)
+
+        snippets: list[dict[str, Any]] = []
+
+        for channel_id, msgs in channel_messages.items():
+            if not msgs:
+                continue
+
+            ch_name = channel_names.get(channel_id, channel_id)
+
+            # Split into contiguous snippets on time gaps
+            current_snippet: list[dict[str, Any]] = [msgs[0]]
+            for i in range(1, len(msgs)):
+                prev_ts = msgs[i - 1]["created_at"]
+                curr_ts = msgs[i]["created_at"]
+                if (curr_ts - prev_ts) > GAP_THRESHOLD:
+                    # Close current snippet
+                    snippets.append(self._format_snippet(
+                        current_snippet, ch_name, author_names
+                    ))
+                    current_snippet = [msgs[i]]
+                else:
+                    current_snippet.append(msgs[i])
+
+            # Close final snippet
+            if current_snippet:
+                snippets.append(self._format_snippet(
+                    current_snippet, ch_name, author_names
+                ))
+
+        # Sort by number of reacted messages descending, then truncate
+        snippets.sort(key=lambda s: s["reacted_count"], reverse=True)
+        return snippets[:max_snippets]
+
+    @staticmethod
+    def _format_snippet(
+        msgs: list[dict[str, Any]],
+        channel_name: str,
+        author_names: dict[str, str],
+    ) -> dict[str, Any]:
+        """Format a contiguous group of messages into a snippet dict."""
+        formatted_msgs = []
+        reacted_count = 0
+        for m in msgs:
+            display_name = author_names.get(m["author_id"], m["author_id"])
+            fmt = {
+                "author": display_name,
+                "content": m["content"],
+                "is_reacted": m["is_reacted"],
+            }
+            formatted_msgs.append(fmt)
+            if m["is_reacted"]:
+                reacted_count += 1
+
+        return {
+            "channel_name": channel_name,
+            "messages": formatted_msgs,
+            "reacted_count": reacted_count,
+        }
 
     def _extract_user_from_topic(self, topic_key: str) -> tuple[str | None, str | None]:
         """Extract user_id and server_id from a user topic key.
@@ -2115,14 +2336,28 @@ class LayerExecutor:
         if ctx.reactions:
             # Collect all example strings from both formats
             all_examples: list[str] = []
-            for reaction in ctx.reactions:
-                # User emoji format: reaction["examples"] is a list of strings
-                if "examples" in reaction:
-                    all_examples.extend(reaction["examples"])
-                # Dyad format: reaction["emojis"] is a list of dicts with "examples"
-                if "emojis" in reaction:
-                    for emoji_info in reaction["emojis"]:
-                        all_examples.extend(emoji_info.get("examples", []))
+
+            if isinstance(ctx.reactions, dict):
+                # Emoji topic format: dict with "users", "message_examples",
+                # and optionally "conversation_snippets"
+                for user_info in ctx.reactions.get("users", []):
+                    all_examples.extend(user_info.get("examples", []))
+                all_examples.extend(ctx.reactions.get("message_examples", []))
+                for snippet in ctx.reactions.get("conversation_snippets", []):
+                    for msg in snippet.get("messages", []):
+                        content = msg.get("content", "")
+                        if content:
+                            all_examples.append(content)
+            else:
+                # List format: user/dyad reaction lists
+                for reaction in ctx.reactions:
+                    # User emoji format: reaction["examples"] is a list of strings
+                    if "examples" in reaction:
+                        all_examples.extend(reaction["examples"])
+                    # Dyad format: reaction["emojis"] is a list of dicts with "examples"
+                    if "emojis" in reaction:
+                        for emoji_info in reaction["emojis"]:
+                            all_examples.extend(emoji_info.get("examples", []))
 
             # Extract IDs not already resolved
             extra_user_ids: set[str] = set()
@@ -2150,22 +2385,47 @@ class LayerExecutor:
                         channel_names[row.id] = row.name
 
             # Apply replacements in-place
-            for reaction in ctx.reactions:
-                if "examples" in reaction:
-                    reaction["examples"] = [
+            if isinstance(ctx.reactions, dict):
+                # Emoji topic format
+                for user_info in ctx.reactions.get("users", []):
+                    user_info["examples"] = [
                         replace_channel_mentions(
                             replace_mentions(ex, mention_names), channel_names
                         )
-                        for ex in reaction["examples"]
+                        for ex in user_info.get("examples", [])
                     ]
-                if "emojis" in reaction:
-                    for emoji_info in reaction["emojis"]:
-                        emoji_info["examples"] = [
+                ctx.reactions["message_examples"] = [
+                    replace_channel_mentions(
+                        replace_mentions(ex, mention_names), channel_names
+                    )
+                    for ex in ctx.reactions.get("message_examples", [])
+                ]
+                for snippet in ctx.reactions.get("conversation_snippets", []):
+                    for msg in snippet.get("messages", []):
+                        content = msg.get("content", "")
+                        if content:
+                            msg["content"] = replace_channel_mentions(
+                                replace_mentions(content, mention_names),
+                                channel_names,
+                            )
+            else:
+                # List format: user/dyad reaction lists
+                for reaction in ctx.reactions:
+                    if "examples" in reaction:
+                        reaction["examples"] = [
                             replace_channel_mentions(
                                 replace_mentions(ex, mention_names), channel_names
                             )
-                            for ex in emoji_info.get("examples", [])
+                            for ex in reaction["examples"]
                         ]
+                    if "emojis" in reaction:
+                        for emoji_info in reaction["emojis"]:
+                            emoji_info["examples"] = [
+                                replace_channel_mentions(
+                                    replace_mentions(ex, mention_names), channel_names
+                                )
+                                for ex in emoji_info.get("examples", [])
+                            ]
 
         # Build conversation chunks for template if available
         conversation_chunks_data: list[dict[str, Any]] | None = None
