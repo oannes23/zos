@@ -984,6 +984,97 @@ class LayerExecutor:
                 store_as=store_as,
             )
 
+        # --- Supplemental fetches: include_users, include_dyads, include_channels ---
+        # These add data to ctx.named_data alongside the primary insight fetch.
+
+        include_users = params.get("include_users", False)
+        include_dyads = params.get("include_dyads", False)
+        include_channels = params.get("include_channels", False)
+
+        if (include_users or include_dyads or include_channels) and ctx.messages:
+            # Extract unique non-anonymous, non-bot author IDs from messages
+            bot_id = self.config.discord.bot_user_id
+            author_ids = {
+                m.author_id for m in ctx.messages
+                if not m.author_id.startswith("<chat") and m.author_id != bot_id
+            }
+
+            server_id = self._extract_server_id(ctx.topic.key)
+
+            if include_users and author_ids:
+                user_max = params.get("user_max_per_topic", 3)
+                user_insights: dict[str, list[FormattedInsight]] = {}
+                # Resolve author IDs to display names
+                author_names = await self._resolve_user_ids_to_names(author_ids)
+
+                for uid in author_ids:
+                    if server_id:
+                        user_topic = f"server:{server_id}:user:{uid}"
+                    else:
+                        user_topic = f"user:{uid}"
+
+                    insights_for_user = await self.insight_retriever.retrieve(
+                        user_topic, profile=profile, limit=user_max,
+                    )
+                    if insights_for_user:
+                        display_name = author_names.get(uid, uid)
+                        user_insights[display_name] = insights_for_user
+
+                ctx.named_data["user_insights"] = user_insights
+                log.debug(
+                    "user_insights_fetched",
+                    topic=ctx.topic.key,
+                    users=len(user_insights),
+                    total_insights=sum(len(v) for v in user_insights.values()),
+                )
+
+            if include_dyads and author_ids and bot_id:
+                dyad_max = params.get("dyad_max_per_topic", 5)
+                dyad_insights: list[FormattedInsight] = []
+
+                for uid in author_ids:
+                    # Dyad keys are sorted: dyad:<min_id>:<max_id>
+                    sorted_ids = sorted([bot_id, uid])
+                    if server_id:
+                        dyad_topic = f"server:{server_id}:dyad:{sorted_ids[0]}:{sorted_ids[1]}"
+                    else:
+                        dyad_topic = f"dyad:{sorted_ids[0]}:{sorted_ids[1]}"
+
+                    insights_for_dyad = await self.insight_retriever.retrieve(
+                        dyad_topic, profile=profile, limit=dyad_max,
+                    )
+                    dyad_insights.extend(insights_for_dyad)
+
+                ctx.named_data["dyad_insights"] = dyad_insights
+                log.debug(
+                    "dyad_insights_fetched",
+                    topic=ctx.topic.key,
+                    count=len(dyad_insights),
+                )
+
+            if include_channels and author_ids:
+                channel_max = params.get("channel_max_per_topic", 3)
+                channel_insights: list[FormattedInsight] = []
+
+                # Find channels the user participates in (from messages)
+                channel_ids = {m.channel_id for m in ctx.messages if m.channel_id}
+                for cid in channel_ids:
+                    if server_id:
+                        ch_topic = f"server:{server_id}:channel:{cid}"
+                    else:
+                        continue  # Channels are always server-scoped
+                    insights_for_ch = await self.insight_retriever.retrieve(
+                        ch_topic, profile=profile, limit=channel_max,
+                    )
+                    channel_insights.extend(insights_for_ch)
+
+                ctx.named_data["channel_insights"] = channel_insights
+                log.debug(
+                    "channel_insights_fetched",
+                    topic=ctx.topic.key,
+                    count=len(channel_insights),
+                )
+
     async def _handle_fetch_layer_runs(
         self, node: Node, ctx: ExecutionContext
     ) -> None:
@@ -2651,6 +2742,11 @@ class LayerExecutor:
             "layer_runs": ctx.layer_runs,
             "llm_response": ctx.llm_response,  # Prior LLM response (for chained calls)
         }
+        # Stash formatted messages for downstream filter access
+        formatted_msgs = template_context.get("messages") or template_context.get("dm_messages")
+        if formatted_msgs:
+            ctx.named_data["_formatted_messages"] = formatted_msgs
+
         # Merge named data (e.g., recent_insights from store_as)
         template_context.update(ctx.named_data)
         # Merge send_context (e.g., operator_dm_only for conversation templates)
@@ -2887,10 +2983,15 @@ class LayerExecutor:
         if ctx.send_context.get("operator_dm_only"):
             destination += " [routed to operator DM for review]"
 
+        # Pull last 5 formatted messages for filter context
+        all_formatted = ctx.named_data.get("_formatted_messages", [])
+        recent_messages = all_formatted[-5:] if all_formatted else []
+
         # Render lightweight filter template (no self_concept or chat_guidance)
         template_context = {
             "draft": ctx.llm_response,
             "destination": destination,
+            "recent_messages": recent_messages,
         }
 
         prompt = self.templates.render(

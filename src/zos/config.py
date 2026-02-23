@@ -195,6 +195,7 @@ class ChattinessConfig(BaseModel):
     dm_impulse_per_message: float = 100.0  # Floods past threshold
     subject_impulse_per_insight: float = 10.0
     name_mention_impulse: float = 3.0  # Impulse when "zos" appears in text
+    self_impulse_per_message: float = 1.0  # Impulse from bot's own messages
 
     # Conversation heartbeat
     heartbeat_interval_seconds: int = 30

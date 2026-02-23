@@ -988,6 +988,7 @@ class ZosBot(commands.Bot):
 
         messages_stored = 0
         opted_in_messages = 0
+        self_messages = 0
         last_message_at: datetime | None = None
         pinged = False
         name_mentioned = False
@@ -1002,9 +1003,11 @@ class ZosBot(commands.Bot):
             messages_stored += 1
             last_message_at = message.created_at
 
-            # Only count opted-in, non-bot messages for impulse
+            # Count opted-in non-bot messages for impulse, bot messages separately
             bot_id = str(self.user.id) if self.user else None
-            if not author_id.startswith("<chat") and author_id != bot_id:
+            if author_id == bot_id:
+                self_messages += 1
+            elif not author_id.startswith("<chat"):
                 opted_in_messages += 1
 
                 # Detect if "zos" appears in message text (case-insensitive)
@@ -1029,20 +1032,32 @@ class ZosBot(commands.Bot):
                 messages_stored=messages_stored,
             )
 
-            # Earn channel impulse for opted-in, non-bot messages only
+            # Earn channel impulse for opted-in and self messages
             if (
                 self.config.chattiness.enabled
                 and self._impulse_engine is not None
-                and opted_in_messages > 0
+                and (opted_in_messages > 0 or self_messages > 0)
             ):
                 channel_topic = f"server:{server_id}:channel:{channel_id}"
                 server_config = self.config.get_server_config(server_id)
-                amount = opted_in_messages * self.config.chattiness.channel_impulse_per_message * server_config.speech_channel_impulse_modifier
-                self._impulse_engine.earn(
-                    channel_topic,
-                    amount,
-                    trigger=f"poll:{messages_stored}_msgs",
-                )
+
+                # Impulse from other users' messages
+                if opted_in_messages > 0:
+                    amount = opted_in_messages * self.config.chattiness.channel_impulse_per_message * server_config.speech_channel_impulse_modifier
+                    self._impulse_engine.earn(
+                        channel_topic,
+                        amount,
+                        trigger=f"poll:{messages_stored}_msgs",
+                    )
+
+                # Self-impulse from bot's own messages
+                if self_messages > 0 and self.config.chattiness.self_impulse_per_message > 0:
+                    self_amount = self_messages * self.config.chattiness.self_impulse_per_message * server_config.speech_channel_impulse_modifier
+                    self._impulse_engine.earn(
+                        channel_topic,
+                        self_amount,
+                        trigger=f"self:{self_messages}_msgs",
+                    )
 
                 # Ping saturates impulse to guarantee next heartbeat fires
                 if pinged:

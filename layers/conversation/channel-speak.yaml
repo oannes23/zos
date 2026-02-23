@@ -27,7 +27,7 @@ nodes:
     params:
       max_per_topic: 10
       include_users: true
-      user_max_per_topic: 5
+      user_max_per_topic: 3
       include_dyads: true
       dyad_max_per_topic: 5
 

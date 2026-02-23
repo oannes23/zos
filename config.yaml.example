@@ -79,19 +79,29 @@ salience:
     reaction: 0.5
     mention: 2.0
     reply: 1.5
-    media: 1.2  # Multiplier for messages with media
-    link: 1.2   # Multiplier for messages with links
-    self_mention: 5.0  # Extra salience when Zos is directly mentioned
+    thread_create: 2.0
+    dm_message: 1.5
+    emoji_use: 0.5
+    media_boost_factor: 1.2  # Multiplier for messages with media/links
+    self_mention: 5.0  # Extra salience when Zos is directly @-mentioned
+    name_mention: 3.0  # Salience when "zos" appears in text (not @-mention)
+
+  # Global caps
+  # global_dyad: 100
+  # global_self: 200
 
   # Propagation and decay
   propagation_factor: 0.3
   global_propagation_factor: 0.3
   spillover_factor: 0.5
-  retention_rate: 0.3
+  initial_global_warmth: 5.0
+  retention_rate: 1.5
   decay_threshold_days: 7
   decay_rate_per_day: 0.01
   warm_threshold: 1.0
   min_reflection_salience: 10.0  # Minimum salience for topic to be eligible for reflection
+  cost_per_token: 0.001          # Salience cost per LLM token for reflection
+  global_reflection_budget: 15.0 # Budget for global topics (cross-server/DM)
 
   # Budget allocation per group (must sum to ~1.0)
   budget:
@@ -111,11 +121,21 @@ image:
   size: 1024x1024         # 1024x1024, 1024x1792, 1792x1024
   quality: standard       # "standard" or "hd"
 
-# Chattiness configuration (MVP 1 prep)
+# Chattiness configuration
 chattiness:
+  enabled: false                    # Master switch
+  operator_dm_only: true            # All output → operator DMs
+  threshold: 25                     # Impulse threshold to trigger speech
+  channel_impulse_per_message: 1.0
+  channel_impulse_per_reaction: 0.5
+  dm_impulse_per_message: 100.0     # Floods past threshold for immediate DM response
+  subject_impulse_per_insight: 10.0
+  name_mention_impulse: 3.0         # Impulse when "zos" appears in text
+  self_impulse_per_message: 1.0    # Impulse from bot's own messages (0 to disable)
+  heartbeat_interval_seconds: 30
   decay_threshold_hours: 1
   decay_rate_per_hour: 0.05
-  base_spend: 10
+  review_enabled: true              # Self-review before sending
 
 # Privacy settings
 privacy:
@@ -128,12 +148,19 @@ privacy:
 # Observation settings
 observation:
   vision_enabled: true
+  vision_rate_limit_per_minute: 10
   transcription_enabled: true           # Transcribe audio/video via OpenAI Whisper (requires OPENAI_API_KEY)
   transcription_rate_limit_per_minute: 10
   transcription_max_file_size_mb: 25    # Whisper API hard limit
   link_fetch_enabled: true
   youtube_transcript_enabled: true
   video_duration_threshold_minutes: 30
+  backfill_hours: 24
+  reaction_user_rate_limit_per_minute: 20
+  media_queue_max_size: 100
+  link_queue_max_size: 50
+  link_rate_limit_per_minute: 5
+  reaction_resync_hours: 24
 
 # Scheduler settings
 scheduler:
