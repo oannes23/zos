@@ -971,6 +971,7 @@ class ZosBot(commands.Bot):
         opted_in_messages = 0
         last_message_at: datetime | None = None
         pinged = False
+        name_mentioned = False
 
         # Phase 1: Fetch new messages since last poll
         async for message in channel.history(
@@ -986,6 +987,10 @@ class ZosBot(commands.Bot):
             bot_id = str(self.user.id) if self.user else None
             if not author_id.startswith("<chat") and author_id != bot_id:
                 opted_in_messages += 1
+
+                # Detect if "zos" appears in message text (case-insensitive)
+                if not name_mentioned and re.search(r'\bzos\b', message.content or '', re.IGNORECASE):
+                    name_mentioned = True
 
             # Detect if Zos was directly pinged
             if self.user and self.user in message.mentions:
@@ -1026,6 +1031,14 @@ class ZosBot(commands.Bot):
                         channel_topic,
                         self.config.chattiness.threshold,
                         trigger=f"ping:{channel_id}",
+                    )
+
+                # Name mention ("zos" in text) earns configurable impulse
+                if name_mentioned:
+                    self._impulse_engine.earn(
+                        channel_topic,
+                        self.config.chattiness.name_mention_impulse * server_config.speech_channel_impulse_modifier,
+                        trigger=f"name_mention:{channel_id}",
                     )
 
         # Phase 2: Re-sync reactions by checking stored messages from database

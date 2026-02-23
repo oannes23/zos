@@ -105,7 +105,8 @@ class SalienceWeightsConfig(BaseModel):
     dm_message: float = 1.5
     emoji_use: float = 0.5
     media_boost_factor: float = 1.2
-    self_mention: float = 5.0  # Extra salience when Zos is directly mentioned
+    self_mention: float = 5.0  # Extra salience when Zos is directly @-mentioned
+    name_mention: float = 3.0  # Salience when "zos" appears in text (not @-mention)
 
 
 class SalienceCategoryMultipliersConfig(BaseModel):
@@ -184,6 +185,7 @@ class ChattinessConfig(BaseModel):
     channel_impulse_per_reaction: float = 0.5
     dm_impulse_per_message: float = 100.0  # Floods past threshold
     subject_impulse_per_insight: float = 10.0
+    name_mention_impulse: float = 3.0  # Impulse when "zos" appears in text
 
     # Conversation heartbeat
     heartbeat_interval_seconds: int = 30

@@ -1895,6 +1895,16 @@ class EarningCoordinator:
             if self_topic:
                 topics_earned.append(self_topic)
 
+        # 6. Name mention ("zos" in text, case-insensitive, not @-mention)
+        if re.search(r'\bzos\b', message.content or '', re.IGNORECASE):
+            name_topic = await self._earn_self_mention(
+                server_id, message.id, propagate=propagate,
+                amount=self.weights.name_mention,
+                reason_prefix="name_mention",
+            )
+            if name_topic:
+                topics_earned.append(name_topic)
+
         return topics_earned
 
     async def earn_channel(
@@ -2136,20 +2146,27 @@ class EarningCoordinator:
         server_id: str | None,
         message_id: str,
         propagate: bool = True,
+        amount: float | None = None,
+        reason_prefix: str = "self_mention",
     ) -> str | None:
-        """Earn extra salience for Zos being directly mentioned.
+        """Earn extra salience for Zos being mentioned.
 
-        When users tag Zos, it signals direct attention and should earn
-        extra salience to the self topic to increase reflection priority.
+        When users tag or name-mention Zos, it signals direct attention and
+        should earn extra salience to the self topic to increase reflection
+        priority.
 
         Args:
             server_id: Server ID, or None for DMs.
             message_id: ID of the message containing the mention.
             propagate: Whether to propagate to related topics.
+            amount: Salience amount to earn. Defaults to self_mention weight.
+            reason_prefix: Prefix for the earning reason (e.g. "self_mention", "name_mention").
 
         Returns:
             The self topic key if earned.
         """
+        earn_amount = amount if amount is not None else self.weights.self_mention
+
         # Earn to server-scoped self topic if in a server, otherwise global
         if server_id:
             self_topic = f"server:{server_id}:self:zos"
@@ -2158,15 +2175,15 @@ class EarningCoordinator:
 
         await self.ledger.earn_with_propagation(
             self_topic,
-            self.weights.self_mention,
-            reason=f"self_mention:{message_id}",
+            earn_amount,
+            reason=f"{reason_prefix}:{message_id}",
             propagate=propagate,
         )
 
         log.debug(
-            "self_mention_earned",
+            f"{reason_prefix}_earned",
             topic=self_topic,
-            amount=self.weights.self_mention,
+            amount=earn_amount,
             message_id=message_id,
         )
 
