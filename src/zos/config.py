@@ -171,6 +171,15 @@ class SalienceConfig(BaseModel):
     global_reflection_budget: float = 15.0  # Budget for global topics (cross-server/DM)
 
 
+class ImageConfig(BaseModel):
+    """Image generation configuration."""
+
+    enabled: bool = False  # Off by default, opt-in
+    model: str = "dall-e-3"
+    size: str = "1024x1024"  # 1024x1024, 1024x1792, 1792x1024
+    quality: str = "standard"  # "standard" or "hd"
+
+
 class ChattinessConfig(BaseModel):
     """Chattiness configuration — impulse-to-speech system."""
 
@@ -219,6 +228,9 @@ class ObservationConfig(BaseModel):
 
     vision_enabled: bool = True
     vision_rate_limit_per_minute: int = 10
+    transcription_enabled: bool = True
+    transcription_rate_limit_per_minute: int = 10
+    transcription_max_file_size_mb: int = 25
     link_fetch_enabled: bool = True
     youtube_transcript_enabled: bool = True
     video_duration_threshold_minutes: int = 30
@@ -291,6 +303,7 @@ class Config(BaseModel):
     models: ModelsConfig | None = None
     salience: SalienceConfig = Field(default_factory=SalienceConfig)
     chattiness: ChattinessConfig = Field(default_factory=ChattinessConfig)
+    image: ImageConfig = Field(default_factory=ImageConfig)
     privacy: PrivacyConfig = Field(default_factory=PrivacyConfig)
     observation: ObservationConfig = Field(default_factory=ObservationConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)

@@ -472,6 +472,136 @@ class ModelClient:
 
         return result
 
+    async def transcribe_audio(
+        self,
+        audio_data: bytes,
+        filename: str,
+        *,
+        layer_run_id: str | None = None,
+        topic_key: str | None = None,
+        call_type: LLMCallType = LLMCallType.TRANSCRIPTION,
+    ) -> CompletionResult:
+        """Transcribe audio/video using OpenAI Whisper API.
+
+        Whisper accepts audio formats (mp3, ogg, wav, flac, m4a) and video
+        containers (mp4, webm) directly — it extracts audio internally.
+
+        Args:
+            audio_data: Raw audio/video bytes.
+            filename: Original filename (Whisper uses extension for format detection).
+            layer_run_id: Optional layer run ID for context.
+            topic_key: Optional topic key for context.
+            call_type: Type of LLM call for categorization.
+
+        Returns:
+            CompletionResult with transcription text.
+
+        Raises:
+            ValueError: If OpenAI API key not found.
+        """
+        import io
+
+        from openai import AsyncOpenAI
+
+        api_key = self._get_api_key("openai")
+        if not api_key:
+            raise ValueError(
+                "OpenAI API key not found. Set OPENAI_API_KEY environment variable."
+            )
+
+        provider = "openai"
+        model = "whisper-1"
+
+        # Apply rate limiting
+        limiter = self._get_rate_limiter("openai_whisper")
+        await limiter.acquire()
+
+        start_time = time.monotonic()
+
+        try:
+            client = AsyncOpenAI(api_key=api_key)
+
+            # Wrap bytes in BytesIO with filename for format detection
+            audio_file = io.BytesIO(audio_data)
+            audio_file.name = filename
+
+            log.debug(
+                "transcription_start",
+                filename=filename,
+                size_bytes=len(audio_data),
+            )
+
+            response = await client.audio.transcriptions.create(
+                model=model,
+                file=audio_file,
+            )
+
+            transcription_text = response.text
+
+            # Whisper doesn't report token counts — estimate from text length
+            # Rough estimate: ~4 chars per token for English text
+            estimated_output_tokens = max(1, len(transcription_text) // 4)
+
+            usage = Usage(input_tokens=0, output_tokens=estimated_output_tokens)
+
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+
+            log.debug(
+                "transcription_complete",
+                filename=filename,
+                text_length=len(transcription_text),
+                latency_ms=latency_ms,
+            )
+
+            # Record successful call
+            if self.engine is not None:
+                try:
+                    await self._record_llm_call(
+                        layer_run_id=layer_run_id,
+                        topic_key=topic_key,
+                        call_type=call_type,
+                        model_profile="whisper",
+                        provider=provider,
+                        model=model,
+                        prompt=f"[Audio: {filename}, {len(audio_data)} bytes]",
+                        response=transcription_text,
+                        usage=usage,
+                        latency_ms=latency_ms,
+                        success=True,
+                        error_message=None,
+                    )
+                except Exception:
+                    log.warning("llm_call_recording_failed", call_type=call_type.value, exc_info=True)
+
+            return CompletionResult(
+                text=transcription_text,
+                usage=usage,
+                model=model,
+                provider=provider,
+            )
+
+        except Exception as exc:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            if self.engine is not None:
+                try:
+                    await self._record_llm_call(
+                        layer_run_id=layer_run_id,
+                        topic_key=topic_key,
+                        call_type=call_type,
+                        model_profile="whisper",
+                        provider=provider,
+                        model=model,
+                        prompt=f"[Audio: {filename}, {len(audio_data)} bytes]",
+                        response=None,
+                        usage=Usage(input_tokens=0, output_tokens=0),
+                        latency_ms=latency_ms,
+                        success=False,
+                        error_message=str(exc),
+                    )
+                except Exception:
+                    log.warning("llm_call_recording_failed", call_type=call_type.value, exc_info=True)
+            raise
+
     async def _anthropic_vision(
         self,
         image_base64: str,

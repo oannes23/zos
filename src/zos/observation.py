@@ -74,6 +74,20 @@ URL_PATTERN = re.compile(
 # Supported image MIME types for vision analysis
 SUPPORTED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 
+# Supported audio/video MIME types for transcription
+SUPPORTED_AUDIO_TYPES = {
+    "audio/mpeg", "audio/ogg", "audio/wav", "audio/mp4",
+    "audio/webm", "audio/flac", "audio/x-m4a", "audio/aac",
+}
+SUPPORTED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
+TRANSCRIBABLE_TYPES = SUPPORTED_AUDIO_TYPES | SUPPORTED_VIDEO_TYPES
+
+# Extension fallback for voice messages and mislabeled files
+TRANSCRIBABLE_EXTENSIONS = {
+    ".ogg", ".mp3", ".wav", ".flac", ".m4a", ".aac", ".wma",
+    ".mp4", ".webm", ".mov",
+}
+
 # Vision prompt for phenomenological image description
 # The prompt should elicit what it feels like to see the image, not just object detection
 VISION_PROMPT = """Describe this image as if you were recounting it to someone who can't see it.
@@ -148,6 +162,11 @@ class ZosBot(commands.Bot):
             calls_per_minute=config.observation.vision_rate_limit_per_minute
         )
 
+        # Transcription rate limiter (separate from vision — different provider)
+        self._transcription_rate_limiter = RateLimiter(
+            calls_per_minute=config.observation.transcription_rate_limit_per_minute
+        )
+
         # Reaction rate limiter
         self._reaction_user_limiter = RateLimiter(
             calls_per_minute=config.observation.reaction_user_rate_limit_per_minute
@@ -212,8 +231,8 @@ class ZosBot(commands.Bot):
             interval_seconds=interval,
         )
 
-        # Start media analysis background task if vision is enabled
-        if self.config.observation.vision_enabled:
+        # Start media analysis background task if vision or transcription is enabled
+        if self.config.observation.vision_enabled or self.config.observation.transcription_enabled:
             self._media_analysis_task = asyncio.create_task(
                 self._process_media_queue()
             )
@@ -1765,6 +1784,29 @@ class ZosBot(commands.Bot):
         """
         return attachment.content_type in SUPPORTED_IMAGE_TYPES
 
+    def _is_transcribable(self, attachment: discord.Attachment) -> bool:
+        """Check if attachment is a supported audio/video type for transcription.
+
+        Checks content_type first, then falls back to filename extension
+        for voice messages and mislabeled files.
+
+        Args:
+            attachment: Discord attachment to check.
+
+        Returns:
+            True if this is a supported audio/video type for transcription.
+        """
+        if attachment.content_type in TRANSCRIBABLE_TYPES:
+            return True
+
+        # Fallback to extension for voice messages (often missing content_type)
+        if attachment.filename:
+            ext = "." + attachment.filename.rsplit(".", 1)[-1].lower() if "." in attachment.filename else ""
+            if ext in TRANSCRIBABLE_EXTENSIONS:
+                return True
+
+        return False
+
     def _infer_media_type(self, attachment: discord.Attachment) -> str:
         """Infer media type from attachment, with fallback to filename extension.
 
@@ -1839,9 +1881,9 @@ class ZosBot(commands.Bot):
         message: discord.Message,
         author_id: str,
     ) -> None:
-        """Queue any image attachments for vision analysis.
+        """Queue image/audio/video attachments for analysis.
 
-        Messages are stored immediately with has_media=true. Images are
+        Messages are stored immediately with has_media=true. Media is
         queued for separate analysis that doesn't block polling.
 
         Privacy boundary: Anonymous users (<chat>) have their media logged
@@ -1852,7 +1894,10 @@ class ZosBot(commands.Bot):
             message: Discord message with potential media attachments.
             author_id: Resolved author ID (may be <chat_N> for anonymous users).
         """
-        if not self.config.observation.vision_enabled:
+        vision_enabled = self.config.observation.vision_enabled
+        transcription_enabled = self.config.observation.transcription_enabled
+
+        if not vision_enabled and not transcription_enabled:
             return
 
         # Privacy boundary: never analyze media from anonymous users
@@ -1865,8 +1910,27 @@ class ZosBot(commands.Bot):
                 )
             return
 
+        max_file_size = self.config.observation.transcription_max_file_size_mb * 1024 * 1024
+
         for attachment in message.attachments:
-            if self._is_image(attachment):
+            should_queue = False
+
+            if vision_enabled and self._is_image(attachment):
+                should_queue = True
+            elif transcription_enabled and self._is_transcribable(attachment):
+                # Check file size limit before queueing
+                if attachment.size and attachment.size > max_file_size:
+                    log.debug(
+                        "media_skipped_too_large",
+                        message_id=str(message.id),
+                        filename=attachment.filename,
+                        size_bytes=attachment.size,
+                        max_bytes=max_file_size,
+                    )
+                    continue
+                should_queue = True
+
+            if should_queue:
                 # Log warning if queue is getting full
                 queue_size = self._media_analysis_queue.qsize()
                 if queue_size > self.config.observation.media_queue_max_size * 0.8:
@@ -1906,8 +1970,11 @@ class ZosBot(commands.Bot):
                 except asyncio.TimeoutError:
                     continue
 
-                # Analyze the image
-                await self._analyze_image(message_id, attachment)
+                # Dispatch based on media type
+                if self._is_transcribable(attachment):
+                    await self._transcribe_audio(message_id, attachment)
+                else:
+                    await self._analyze_image(message_id, attachment)
 
             except asyncio.CancelledError:
                 log.debug("media_analysis_task_cancelled")
@@ -2042,6 +2109,126 @@ class ZosBot(commands.Bot):
                 error=str(e),
             )
             # Don't re-raise - media analysis failure shouldn't block observation
+
+    async def _transcribe_audio(
+        self,
+        message_id: str,
+        attachment: discord.Attachment,
+    ) -> None:
+        """Transcribe an audio/video attachment using Whisper.
+
+        Downloads the attachment, sends it to the Whisper API for transcription,
+        and stores the result. Failures are logged but don't block observation.
+
+        Args:
+            message_id: ID of the message containing the audio/video.
+            attachment: Discord attachment to transcribe.
+        """
+        try:
+            # Apply transcription-specific rate limiting
+            await self._transcription_rate_limiter.acquire()
+
+            # Download audio/video
+            audio_data = await attachment.read()
+
+            # Enforce file size limit
+            max_size = self.config.observation.transcription_max_file_size_mb * 1024 * 1024
+            if len(audio_data) > max_size:
+                log.debug(
+                    "transcription_skipped_too_large",
+                    message_id=message_id,
+                    filename=attachment.filename,
+                    size_bytes=len(audio_data),
+                    max_bytes=max_size,
+                )
+                return
+
+            log.debug(
+                "transcription_start",
+                message_id=message_id,
+                filename=attachment.filename,
+                size_bytes=len(audio_data),
+                content_type=attachment.content_type,
+            )
+
+            # Call Whisper API
+            llm = self._get_llm_client()
+            result = await llm.transcribe_audio(
+                audio_data=audio_data,
+                filename=attachment.filename or "audio.ogg",
+            )
+
+            # Skip empty transcriptions
+            if not result.text or not result.text.strip():
+                log.debug(
+                    "transcription_empty",
+                    message_id=message_id,
+                    filename=attachment.filename,
+                )
+                return
+
+            # Determine MediaType based on content_type
+            content_type = attachment.content_type or ""
+            if content_type.startswith("video/"):
+                media_type = MediaType.VIDEO
+            else:
+                media_type = MediaType.AUDIO
+
+            # Generate ID for the record and local file
+            analysis_id = generate_id()
+
+            # Save file to data/media/
+            local_filename = None
+            try:
+                media_dir = self.config.data_dir / "media"
+                media_dir.mkdir(parents=True, exist_ok=True)
+                # Use original extension or derive from content_type
+                ext = None
+                if attachment.filename and "." in attachment.filename:
+                    ext = attachment.filename.rsplit(".", 1)[-1].lower()
+                if not ext:
+                    ext = "ogg"
+                local_filename = f"{analysis_id}.{ext}"
+                local_path = media_dir / local_filename
+                local_path.write_bytes(audio_data)
+            except Exception as e:
+                log.warning(
+                    "media_save_failed",
+                    message_id=message_id,
+                    error=str(e),
+                )
+                local_filename = None
+
+            # Store analysis with [Transcription] prefix
+            analysis = MediaAnalysis(
+                id=analysis_id,
+                message_id=message_id,
+                media_type=media_type,
+                url=attachment.url,
+                filename=attachment.filename,
+                description=f"[Transcription] {result.text}",
+                local_path=local_filename,
+                analyzed_at=datetime.now(timezone.utc),
+                analysis_model=result.model,
+            )
+
+            self._insert_media_analysis(analysis)
+
+            log.info(
+                "media_transcribed",
+                message_id=message_id,
+                media_type=media_type.value,
+                text_length=len(result.text),
+            )
+
+        except Exception as e:
+            log.warning(
+                "transcription_failed",
+                message_id=message_id,
+                filename=attachment.filename,
+                error=str(e),
+            )
+            # Don't re-raise - transcription failure shouldn't block observation
 
     def _insert_media_analysis(self, analysis: MediaAnalysis) -> None:
         """Insert a media analysis record into the database.

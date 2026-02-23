@@ -1,7 +1,10 @@
 """Command-line interface for Zos."""
 
+from __future__ import annotations
+
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -155,6 +158,16 @@ def serve(
             )
             llm = ModelClient(config, engine=engine)
 
+            # Create image client if enabled
+            image_client = None
+            if config.image.enabled:
+                try:
+                    from zos.image import ImageClient
+                    image_client = ImageClient(config)
+                    log.info("image_client_initialized")
+                except (ValueError, ImportError) as e:
+                    log.warning("image_client_disabled", reason=str(e))
+
             # Create impulse engine for conversation
             impulse_engine = ImpulseEngine(engine, config)
 
@@ -166,26 +179,34 @@ def serve(
                 content: str, context: dict
             ) -> str | None:
                 """Send a message to Discord via the bot."""
+                import discord as discord_lib
+
                 bot = send_bot_ref[0] if send_bot_ref else None
                 if bot is None:
                     log.warning("send_callback_no_bot")
                     return None
+
+                # Build send kwargs — optionally attach an image
+                kwargs: dict[str, Any] = {"content": content}
+                image_path = context.get("image_path")
+                if image_path:
+                    kwargs["file"] = discord_lib.File(image_path)
 
                 try:
                     if context.get("operator_dm"):
                         msg = None
                         for op_id in config.discord.operators.user_ids:
                             user = await bot.fetch_user(int(op_id))
-                            msg = await user.send(content)
+                            msg = await user.send(**kwargs)
                         return str(msg.id) if msg else None
                     elif context.get("dm_user_id"):
                         user = await bot.fetch_user(int(context["dm_user_id"]))
-                        msg = await user.send(content)
+                        msg = await user.send(**kwargs)
                         return str(msg.id)
                     elif context.get("channel_id"):
                         channel = bot.get_channel(int(context["channel_id"]))
                         if channel:
-                            msg = await channel.send(content)
+                            msg = await channel.send(**kwargs)
                             return str(msg.id)
                 except Exception as e:
                     log.error("send_to_discord_failed", error=str(e))
@@ -199,6 +220,7 @@ def serve(
                 config=config,
                 loader=loader,
                 send_callback=send_to_discord,
+                image_client=image_client,
             )
 
             # Create and start scheduler
@@ -276,6 +298,11 @@ def serve(
             if llm is not None:
                 await llm.close()
                 log.debug("llm_client_closed")
+
+            # Close image client
+            if image_client is not None:
+                await image_client.close()
+                log.debug("image_client_closed")
 
     try:
         asyncio.run(run())

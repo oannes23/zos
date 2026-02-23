@@ -89,6 +89,9 @@ DEFAULT_METRICS = {
 # Maximum retry attempts per topic
 MAX_RETRY_ATTEMPTS = 3
 
+# Regex to extract [IMAGE: ...] directives from LLM output
+IMAGE_DIRECTIVE_RE = re.compile(r'\[IMAGE:\s*(.+?)\]', re.DOTALL)
+
 # Conversation layer categories excluded from template discovery
 CONVERSATION_CATEGORIES = {"response", "participation", "insight_sharing"}
 
@@ -280,6 +283,7 @@ class LayerExecutor:
         config: "Config",
         loader: LayerLoader | None = None,
         send_callback: SendCallback | None = None,
+        image_client: Any | None = None,
     ) -> None:
         """Initialize the layer executor.
 
@@ -292,6 +296,7 @@ class LayerExecutor:
             loader: Optional layer loader for hash lookup.
             send_callback: Async function to send messages to Discord.
                 Takes (content, context_dict) and returns message_id or None.
+            image_client: Optional ImageClient for generating images from directives.
         """
         self.engine = engine
         self.ledger = ledger
@@ -300,6 +305,7 @@ class LayerExecutor:
         self.config = config
         self.loader = loader or LayerLoader()
         self.send_callback = send_callback
+        self.image_client = image_client
 
         # Initialize insight retriever
         self.insight_retriever = InsightRetriever(engine, config)
@@ -379,12 +385,18 @@ class LayerExecutor:
                 # Ensure topic exists (creates if needed)
                 topic = await self.ledger.ensure_topic(topic_key)
 
+                effective_send_context = dict(send_context or {})
+                # Inject image_enabled flag so conversation templates can
+                # conditionally offer the [IMAGE:] directive
+                if self.image_client is not None:
+                    effective_send_context.setdefault("image_enabled", True)
+
                 ctx = ExecutionContext(
                     topic=topic,
                     layer=layer,
                     run_id=run_id,
                     dry_run=dry_run,
-                    send_context=send_context or {},
+                    send_context=effective_send_context,
                 )
 
                 # Execute each node in sequence
@@ -2766,6 +2778,33 @@ class LayerExecutor:
                 ctx.output_content = ctx.llm_response
         else:
             ctx.output_content = ctx.llm_response
+
+        # Extract [IMAGE: ...] directive from output, if present
+        if ctx.output_content and self.image_client:
+            match = IMAGE_DIRECTIVE_RE.search(ctx.output_content)
+            if match:
+                image_prompt = match.group(1).strip()
+                # Strip the directive from the text message
+                ctx.output_content = IMAGE_DIRECTIVE_RE.sub('', ctx.output_content).strip()
+                try:
+                    result = await self.image_client.generate(image_prompt)
+                    ctx.send_context["image_path"] = str(result.image_path)
+                    log.info(
+                        "image_directive_generated",
+                        topic=ctx.topic.key,
+                        layer=ctx.layer.name,
+                        image_prompt=image_prompt[:100],
+                        image_path=str(result.image_path),
+                    )
+                except Exception as e:
+                    log.warning(
+                        "image_directive_failed",
+                        topic=ctx.topic.key,
+                        layer=ctx.layer.name,
+                        image_prompt=image_prompt[:100],
+                        error=str(e),
+                    )
+                    # Continue sending the text without the image
 
         # Emit to destination
         if destination == "log":

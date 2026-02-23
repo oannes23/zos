@@ -104,6 +104,7 @@ class MediaType(str, Enum):
     VIDEO = "video"
     GIF = "gif"
     EMBED = "embed"
+    AUDIO = "audio"
 
 
 class ContentType(str, Enum):
@@ -125,6 +126,7 @@ class LLMCallType(str, Enum):
     FILTER = "filter"
     SYNTHESIS = "synthesis"
     OTHER = "other"
+    TRANSCRIPTION = "transcription"
 
 
 # =============================================================================

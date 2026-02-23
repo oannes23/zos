@@ -1896,7 +1896,7 @@ class TestEnums:
 
     def test_media_type_values(self) -> None:
         """Test media type enum values."""
-        expected = {"image", "video", "gif", "embed"}
+        expected = {"image", "video", "gif", "embed", "audio"}
         actual = {t.value for t in MediaType}
         assert actual == expected
 
@@ -1908,6 +1908,6 @@ class TestEnums:
 
     def test_llm_call_type_values(self) -> None:
         """Test LLM call type enum values."""
-        expected = {"reflection", "vision", "conversation", "filter", "synthesis", "other"}
+        expected = {"reflection", "vision", "conversation", "filter", "synthesis", "other", "transcription"}
         actual = {t.value for t in LLMCallType}
         assert actual == expected

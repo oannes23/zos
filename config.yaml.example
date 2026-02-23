@@ -104,6 +104,13 @@ salience:
   # Self budget is separate
   self_budget: 20
 
+# Image generation (requires OPENAI_API_KEY)
+image:
+  enabled: false          # Opt-in: set true to allow Zos to generate images
+  model: dall-e-3
+  size: 1024x1024         # 1024x1024, 1024x1792, 1792x1024
+  quality: standard       # "standard" or "hd"
+
 # Chattiness configuration (MVP 1 prep)
 chattiness:
   decay_threshold_hours: 1
@@ -121,6 +128,9 @@ privacy:
 # Observation settings
 observation:
   vision_enabled: true
+  transcription_enabled: true           # Transcribe audio/video via OpenAI Whisper (requires OPENAI_API_KEY)
+  transcription_rate_limit_per_minute: 10
+  transcription_max_file_size_mb: 25    # Whisper API hard limit
   link_fetch_enabled: true
   youtube_transcript_enabled: true
   video_duration_threshold_minutes: 30

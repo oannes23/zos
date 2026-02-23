@@ -440,9 +440,10 @@ class TestVisionDisabled:
 
     @pytest.mark.asyncio
     async def test_media_task_not_started_when_vision_disabled(self) -> None:
-        """Media analysis task is not started when vision is disabled."""
+        """Media analysis task is not started when both vision and transcription are disabled."""
         config = Config()
         config.observation.vision_enabled = False
+        config.observation.transcription_enabled = False
         bot = ZosBot(config)
 
         # Mock cog loading and command syncing
@@ -792,9 +793,10 @@ class TestMediaQueueing:
 
     @pytest.mark.asyncio
     async def test_non_images_not_queued(self) -> None:
-        """Non-image attachments are not queued."""
+        """Non-image attachments are not queued when transcription is disabled."""
         config = Config()
         config.observation.vision_enabled = True
+        config.observation.transcription_enabled = False
         bot = ZosBot(config)
 
         message = MagicMock()
@@ -813,9 +815,10 @@ class TestMediaQueueing:
 
     @pytest.mark.asyncio
     async def test_mixed_attachments_only_images_queued(self) -> None:
-        """Only images are queued from mixed attachments."""
+        """Only images are queued from mixed attachments when transcription is disabled."""
         config = Config()
         config.observation.vision_enabled = True
+        config.observation.transcription_enabled = False
         bot = ZosBot(config)
 
         message = MagicMock()
