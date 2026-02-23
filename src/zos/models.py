@@ -127,6 +127,7 @@ class LLMCallType(str, Enum):
     SYNTHESIS = "synthesis"
     OTHER = "other"
     TRANSCRIPTION = "transcription"
+    IMAGE_GENERATION = "image_generation"
 
 
 # =============================================================================

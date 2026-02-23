@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -2796,8 +2797,10 @@ class LayerExecutor:
                 ctx.output_content = IMAGE_DIRECTIVE_RE.sub('', ctx.output_content).strip()
 
         if image_prompt and self.image_client:
+            start_time = time.monotonic()
             try:
                 result = await self.image_client.generate(image_prompt)
+                latency_ms = int((time.monotonic() - start_time) * 1000)
                 ctx.send_context["image_path"] = str(result.image_path)
                 log.info(
                     "image_directive_generated",
@@ -2805,14 +2808,23 @@ class LayerExecutor:
                     layer=ctx.layer.name,
                     image_prompt=image_prompt[:100],
                     image_path=str(result.image_path),
+                    latency_ms=latency_ms,
+                )
+                await self._record_image_call(
+                    ctx, image_prompt, result, latency_ms, success=True,
                 )
             except Exception as e:
+                latency_ms = int((time.monotonic() - start_time) * 1000)
                 log.warning(
                     "image_directive_failed",
                     topic=ctx.topic.key,
                     layer=ctx.layer.name,
                     image_prompt=image_prompt[:100],
                     error=str(e),
+                    latency_ms=latency_ms,
+                )
+                await self._record_image_call(
+                    ctx, image_prompt, None, latency_ms, success=False, error=str(e),
                 )
                 # Continue sending the text without the image
 
@@ -2845,6 +2857,7 @@ class LayerExecutor:
                     layer=ctx.layer.name,
                     message_id=message_id,
                     content_length=len(ctx.output_content),
+                    has_image=bool(ctx.send_context.get("image_path")),
                 )
 
                 # Log to conversation_log
@@ -2874,6 +2887,49 @@ class LayerExecutor:
             destination=destination,
             format=format_type,
         )
+
+    async def _record_image_call(
+        self,
+        ctx: ExecutionContext,
+        prompt: str,
+        result: Any | None,
+        latency_ms: int,
+        success: bool,
+        error: str | None = None,
+    ) -> None:
+        """Record an image generation call in llm_calls for budget tracking."""
+        from zos.database import llm_calls
+        from zos.llm import estimate_image_cost
+        from zos.models import LLMCallType
+
+        cost = estimate_image_cost(
+            self.config.image.model,
+            self.config.image.quality,
+            self.config.image.size,
+        )
+
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(llm_calls.insert().values(
+                    id=generate_id(),
+                    layer_run_id=ctx.run_id,
+                    topic_key=ctx.topic.key,
+                    call_type=LLMCallType.IMAGE_GENERATION.value,
+                    model_profile="image",
+                    model_provider="openai",
+                    model_name=self.config.image.model,
+                    prompt=prompt,
+                    response=str(result.image_path) if result else None,
+                    tokens_input=0,
+                    tokens_output=0,
+                    tokens_total=0,
+                    estimated_cost_usd=cost if success else 0.0,
+                    latency_ms=latency_ms,
+                    success=success,
+                    error_message=error,
+                ))
+        except Exception as e:
+            log.warning("image_call_recording_failed", error=str(e))
 
     async def _log_conversation(
         self, message_id: str, ctx: ExecutionContext

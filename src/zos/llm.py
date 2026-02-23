@@ -119,6 +119,22 @@ MODEL_PRICES: dict[str, tuple[float, float]] = {
 }
 
 
+# DALL-E 3 pricing (as of 2025)
+DALLE_PRICES: dict[tuple[str, str, str], float] = {
+    ("dall-e-3", "standard", "1024x1024"): 0.040,
+    ("dall-e-3", "standard", "1024x1792"): 0.080,
+    ("dall-e-3", "standard", "1792x1024"): 0.080,
+    ("dall-e-3", "hd", "1024x1024"): 0.080,
+    ("dall-e-3", "hd", "1024x1792"): 0.120,
+    ("dall-e-3", "hd", "1792x1024"): 0.120,
+}
+
+
+def estimate_image_cost(model: str, quality: str, size: str) -> float:
+    """Estimate cost in USD for an image generation call."""
+    return DALLE_PRICES.get((model, quality, size), 0.04)
+
+
 def estimate_cost(
     provider: str,
     model: str,
