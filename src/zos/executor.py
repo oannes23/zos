@@ -2584,6 +2584,14 @@ class LayerExecutor:
             log.debug("filter_skip_dry_run", topic=ctx.topic.key)
             return
 
+        # Extract [IMAGE:] directive before filter sees it — it's a system
+        # instruction, not message content to be length-checked or quality-reviewed
+        if ctx.llm_response and self.image_client:
+            match = IMAGE_DIRECTIVE_RE.search(ctx.llm_response)
+            if match:
+                ctx.send_context["pending_image_prompt"] = match.group(1).strip()
+                ctx.llm_response = IMAGE_DIRECTIVE_RE.sub('', ctx.llm_response).strip()
+
         log.info("filter_start", topic=ctx.topic.key, layer=ctx.layer.name,
                  draft_length=len(ctx.llm_response))
 
@@ -2779,32 +2787,34 @@ class LayerExecutor:
         else:
             ctx.output_content = ctx.llm_response
 
-        # Extract [IMAGE: ...] directive from output, if present
-        if ctx.output_content and self.image_client:
+        # Extract [IMAGE: ...] directive — either stashed by filter or inline in output
+        image_prompt = ctx.send_context.pop("pending_image_prompt", None)
+        if not image_prompt and ctx.output_content and self.image_client:
             match = IMAGE_DIRECTIVE_RE.search(ctx.output_content)
             if match:
                 image_prompt = match.group(1).strip()
-                # Strip the directive from the text message
                 ctx.output_content = IMAGE_DIRECTIVE_RE.sub('', ctx.output_content).strip()
-                try:
-                    result = await self.image_client.generate(image_prompt)
-                    ctx.send_context["image_path"] = str(result.image_path)
-                    log.info(
-                        "image_directive_generated",
-                        topic=ctx.topic.key,
-                        layer=ctx.layer.name,
-                        image_prompt=image_prompt[:100],
-                        image_path=str(result.image_path),
-                    )
-                except Exception as e:
-                    log.warning(
-                        "image_directive_failed",
-                        topic=ctx.topic.key,
-                        layer=ctx.layer.name,
-                        image_prompt=image_prompt[:100],
-                        error=str(e),
-                    )
-                    # Continue sending the text without the image
+
+        if image_prompt and self.image_client:
+            try:
+                result = await self.image_client.generate(image_prompt)
+                ctx.send_context["image_path"] = str(result.image_path)
+                log.info(
+                    "image_directive_generated",
+                    topic=ctx.topic.key,
+                    layer=ctx.layer.name,
+                    image_prompt=image_prompt[:100],
+                    image_path=str(result.image_path),
+                )
+            except Exception as e:
+                log.warning(
+                    "image_directive_failed",
+                    topic=ctx.topic.key,
+                    layer=ctx.layer.name,
+                    image_prompt=image_prompt[:100],
+                    error=str(e),
+                )
+                # Continue sending the text without the image
 
         # Emit to destination
         if destination == "log":
