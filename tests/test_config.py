@@ -599,6 +599,7 @@ def test_chattiness_config_defaults() -> None:
     assert chat.channel_impulse_per_reaction == 0.5
     assert chat.dm_impulse_per_message == 100.0
     assert chat.subject_impulse_per_insight == 10.0
+    assert chat.channel_impulse_per_insight == 5.0
     assert chat.heartbeat_interval_seconds == 30
     assert chat.decay_threshold_hours == 1
     assert chat.decay_rate_per_hour == 0.05

@@ -130,6 +130,7 @@ chattiness:
   channel_impulse_per_reaction: 0.5
   dm_impulse_per_message: 100.0     # Floods past threshold for immediate DM response
   subject_impulse_per_insight: 10.0
+  channel_impulse_per_insight: 5.0  # Impulse from channel reflection insights
   name_mention_impulse: 3.0         # Impulse when "zos" appears in text
   self_impulse_per_message: 1.0    # Impulse from bot's own messages (0 to disable)
   heartbeat_interval_seconds: 30

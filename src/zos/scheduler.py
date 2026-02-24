@@ -228,9 +228,11 @@ class ReflectionScheduler:
                 targets_processed=run.targets_processed,
             )
 
-            # Post-reflection: earn subject impulse for insights created
-            if run.insights_created > 0 and layer.category == LayerCategory.SUBJECT:
-                await self._post_reflection_impulse(run, topics)
+            # Post-reflection: earn impulse for insights created
+            if run.insights_created > 0 and layer.category in (
+                LayerCategory.SUBJECT, LayerCategory.CHANNEL,
+            ):
+                await self._post_reflection_impulse(run, topics, layer.category)
 
             return run
 
@@ -243,19 +245,23 @@ class ReflectionScheduler:
             return None
 
     async def _post_reflection_impulse(
-        self, run: LayerRun, topics: list[str]
+        self, run: LayerRun, topics: list[str], category: LayerCategory
     ) -> None:
-        """Earn subject impulse for insights created during reflection.
+        """Earn impulse for insights created during reflection.
 
-        Called after subject reflection completes. Each processed subject topic
-        gets impulse proportional to the insight count.
+        Called after subject or channel reflection completes. Each processed
+        topic gets impulse proportional to the insight count, with the
+        per-insight amount determined by the layer category.
         """
         if not self.config.chattiness.enabled:
             return
         if self.impulse_engine is None:
             return
 
-        amount = self.config.chattiness.subject_impulse_per_insight
+        if category == LayerCategory.CHANNEL:
+            amount = self.config.chattiness.channel_impulse_per_insight
+        else:
+            amount = self.config.chattiness.subject_impulse_per_insight
         for topic_key in topics:
             self.impulse_engine.earn(
                 topic_key,
@@ -263,9 +269,10 @@ class ReflectionScheduler:
                 trigger=f"reflection:{run.id}",
             )
             log.debug(
-                "subject_impulse_earned",
+                "reflection_impulse_earned",
                 topic_key=topic_key,
                 amount=amount,
+                category=category.value,
                 run_id=run.id,
             )
 

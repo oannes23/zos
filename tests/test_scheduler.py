@@ -1261,3 +1261,241 @@ async def test_global_only_selection(
     assert len(selected[BudgetGroup.SPACES]) == 0
     assert len(selected[BudgetGroup.SEMANTIC]) == 0
     assert len(selected[BudgetGroup.CULTURE]) == 0
+
+
+# =============================================================================
+# Post-Reflection Impulse Tests
+# =============================================================================
+
+
+@pytest.fixture
+def subject_layer() -> Layer:
+    """A minimal subject-category layer."""
+    return Layer(
+        name="nightly-subject-reflection",
+        category=LayerCategory.SUBJECT,
+        description="Subject reflection",
+        nodes=[Node(type=NodeType.LLM_CALL, params={"prompt_template": "t.jinja2"})],
+    )
+
+
+@pytest.fixture
+def channel_layer() -> Layer:
+    """A minimal channel-category layer."""
+    return Layer(
+        name="nightly-channel-reflection",
+        category=LayerCategory.CHANNEL,
+        description="Channel reflection",
+        nodes=[Node(type=NodeType.LLM_CALL, params={"prompt_template": "t.jinja2"})],
+    )
+
+
+@pytest.fixture
+def run_with_insights() -> LayerRun:
+    """A LayerRun that produced insights."""
+    return LayerRun(
+        id=generate_id(),
+        layer_name="test-layer",
+        layer_hash="abc123",
+        started_at=utcnow(),
+        completed_at=utcnow(),
+        status=LayerRunStatus.SUCCESS,
+        targets_matched=2,
+        targets_processed=2,
+        targets_skipped=0,
+        insights_created=3,
+    )
+
+
+@pytest.mark.asyncio
+async def test_channel_reflection_earns_impulse(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    run_with_insights: LayerRun,
+) -> None:
+    """Test that channel reflection earns impulse at channel rate."""
+    from zos.chattiness import ImpulseEngine
+
+    test_config.chattiness.enabled = True
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    impulse_engine = MagicMock(spec=ImpulseEngine)
+    scheduler.impulse_engine = impulse_engine
+
+    topics = ["server:123:channel:general", "server:123:channel:random"]
+
+    await scheduler._post_reflection_impulse(
+        run_with_insights, topics, LayerCategory.CHANNEL,
+    )
+
+    assert impulse_engine.earn.call_count == 2
+
+    expected_amount = test_config.chattiness.channel_impulse_per_insight
+    for call in impulse_engine.earn.call_args_list:
+        assert call[0][1] == expected_amount  # second positional arg is amount
+
+
+@pytest.mark.asyncio
+async def test_subject_reflection_earns_impulse_at_subject_rate(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    run_with_insights: LayerRun,
+) -> None:
+    """Test that subject reflection still uses the subject rate."""
+    from zos.chattiness import ImpulseEngine
+
+    test_config.chattiness.enabled = True
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    impulse_engine = MagicMock(spec=ImpulseEngine)
+    scheduler.impulse_engine = impulse_engine
+
+    topics = ["server:123:subject:python"]
+
+    await scheduler._post_reflection_impulse(
+        run_with_insights, topics, LayerCategory.SUBJECT,
+    )
+
+    assert impulse_engine.earn.call_count == 1
+    assert impulse_engine.earn.call_args[0][1] == test_config.chattiness.subject_impulse_per_insight
+
+
+@pytest.mark.asyncio
+async def test_channel_reflection_no_impulse_when_disabled(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    run_with_insights: LayerRun,
+) -> None:
+    """Test that no impulse is earned when chattiness is disabled."""
+    from zos.chattiness import ImpulseEngine
+
+    test_config.chattiness.enabled = False
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    impulse_engine = MagicMock(spec=ImpulseEngine)
+    scheduler.impulse_engine = impulse_engine
+
+    await scheduler._post_reflection_impulse(
+        run_with_insights, ["server:123:channel:general"], LayerCategory.CHANNEL,
+    )
+
+    impulse_engine.earn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_execute_layer_triggers_channel_impulse(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    layers_dir: Path,
+    engine,
+) -> None:
+    """Integration: _execute_layer triggers impulse for channel layers."""
+    from zos.chattiness import ImpulseEngine
+
+    test_config.chattiness.enabled = True
+
+    # Write a channel layer with schedule
+    channel_yaml = """
+name: nightly-channel-reflection
+category: channel
+description: Nightly channel reflection
+schedule: "0 13 * * *"
+max_targets: 10
+
+nodes:
+  - type: fetch_messages
+    params:
+      lookback_hours: 24
+  - type: llm_call
+    params:
+      prompt_template: channel-reflection.jinja2
+  - type: store_insight
+    params:
+      category: channel_reflection
+"""
+    (layers_dir / "nightly-channel-reflection.yaml").write_text(channel_yaml)
+    loader = LayerLoader(layers_dir)
+
+    # Mock executor to return a run with insights
+    async def mock_execute(layer, topics, **kwargs):
+        return LayerRun(
+            id=generate_id(),
+            layer_name=layer.name,
+            layer_hash="abc123",
+            started_at=utcnow(),
+            completed_at=utcnow(),
+            status=LayerRunStatus.SUCCESS,
+            targets_matched=1,
+            targets_processed=1,
+            targets_skipped=0,
+            insights_created=2,
+        )
+
+    mock_executor.execute_layer = AsyncMock(side_effect=mock_execute)
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    impulse_engine = MagicMock(spec=ImpulseEngine)
+    scheduler.impulse_engine = impulse_engine
+
+    # Mock topic selection
+    with patch.object(
+        scheduler, "_select_topics", new_callable=AsyncMock
+    ) as mock_select:
+        mock_select.return_value = ["server:123:channel:general"]
+
+        run = await scheduler._execute_layer("nightly-channel-reflection")
+
+    assert run is not None
+    assert run.insights_created == 2
+    impulse_engine.earn.assert_called_once_with(
+        "server:123:channel:general",
+        test_config.chattiness.channel_impulse_per_insight,
+        trigger=f"reflection:{run.id}",
+    )
