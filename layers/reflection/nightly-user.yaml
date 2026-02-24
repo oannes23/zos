@@ -11,6 +11,9 @@ category: user
 description: |
   Reflect on each user's recent activity to build understanding.
   Runs nightly at 3 AM, targeting users with highest salience.
+goal: |
+  Build an honest, evolving understanding of who each person is — not a
+  profile, but a felt sense that accumulates and deepens over time.
 
 schedule: "0 3 * * *"
 target_category: user

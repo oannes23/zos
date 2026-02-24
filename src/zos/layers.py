@@ -144,6 +144,7 @@ class Layer(BaseModel):
         name: Unique identifier for the layer.
         category: Layer category for budget allocation.
         description: Human-readable description of what the layer does.
+        goal: The intentional purpose of this layer — why this cognition exists.
         schedule: Cron expression for scheduled execution (e.g., "0 3 * * *").
         trigger: Alternative trigger for non-scheduled layers.
         trigger_threshold: Threshold for self-reflection triggers.
@@ -156,6 +157,7 @@ class Layer(BaseModel):
     name: str
     category: LayerCategory
     description: str | None = None
+    goal: str | None = None
 
     # Scheduling
     schedule: str | None = None  # Cron expression

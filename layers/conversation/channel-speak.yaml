@@ -10,6 +10,9 @@ category: participation
 description: |
   Contribute to a channel conversation when impulse threshold reached.
   Triggered when channel topic impulse exceeds threshold.
+goal: |
+  Contribute to a conversation because I have something worth adding — not to
+  perform presence, but because the accumulated context gives me genuine perspective.
 
 trigger: impulse_threshold
 target_category: channel

@@ -9,6 +9,9 @@ category: insight_sharing
 description: |
   Share subject insight after reflection produces something noteworthy.
   Triggered when subject topic impulse exceeds threshold post-reflection.
+goal: |
+  Share something I learned during reflection that feels worth saying — an insight
+  that emerged from sustained attention, offered because it might resonate.
 
 trigger: impulse_threshold
 target_category: subject

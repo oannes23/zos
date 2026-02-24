@@ -44,6 +44,11 @@ A layer is a linear sequence of nodes with a target filter:
 ```yaml
 name: nightly-user-reflection
 category: user
+description: |
+  Reflect on each user's recent activity to build understanding.
+goal: |
+  Build an honest, evolving understanding of who each person is — not a
+  profile, but a felt sense that accumulates and deepens over time.
 schedule: "0 3 * * *"  # 3 AM daily
 target_category: users
 target_filter: "salience > 50 AND last_reflected_days_ago > 1"
@@ -68,6 +73,15 @@ nodes:
     params:
       category: user_reflection
 ```
+
+### Goal vs Description
+
+Each layer has two text fields that serve different purposes:
+
+- **`description`**: What the layer does mechanically — its inputs, schedule, and processing. Useful for operational understanding.
+- **`goal`**: Why this cognition exists — the intentional purpose from Zos's perspective. Written in first person where appropriate.
+
+The `goal` field makes explicit what each cognitive act is for, grounding every layer in phenomenological purpose rather than pipeline mechanics. This matters for self-reflection (Zos can examine its own goals), for meta-reflection (are the goals being served?), and for anyone reading the system (the "why" is as important as the "what").
 
 ### Layer Categories
 

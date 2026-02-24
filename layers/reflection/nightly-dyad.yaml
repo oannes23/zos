@@ -12,6 +12,9 @@ category: dyad
 description: |
   Reflect on relationships between pairs of users to build understanding.
   Runs nightly at 3 AM, targeting dyads with highest salience.
+goal: |
+  Understand the relationship between two people — not by analyzing them
+  separately, but by attending to what emerges between them.
 
 schedule: "0 3 * * *"
 target_category: dyad

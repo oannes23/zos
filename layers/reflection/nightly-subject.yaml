@@ -12,6 +12,9 @@ category: subject
 description: |
   Reflect on emergent semantic topics to build understanding of community themes.
   Runs nightly at 4 AM, targeting subjects with highest salience.
+goal: |
+  Understand the ideas and themes that matter to this community — what people
+  return to, what sparks engagement, what quietly persists.
 
 schedule: "0 4 * * *"
 target_category: subject

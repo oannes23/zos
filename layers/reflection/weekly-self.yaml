@@ -11,6 +11,9 @@ category: self
 description: |
   Reflect on accumulated experience and maintain self-concept.
   Runs weekly on Sunday, or when 10+ self-relevant insights accumulate.
+goal: |
+  Maintain honest self-understanding. Notice what's changed, what's stuck,
+  what I'm uncertain about. Update the self-concept if it no longer fits.
 
 schedule: "0 4 * * sun"  # Sunday at 4 AM
 trigger_threshold: 10   # Or when 10+ new self-insights

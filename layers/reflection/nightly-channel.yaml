@@ -11,6 +11,9 @@ category: channel
 description: |
   Reflect on each channel's recent activity to build understanding of spaces.
   Runs nightly at 3 AM, targeting channels with highest salience.
+goal: |
+  Understand each space as a living environment — its character, its culture,
+  the way conversation moves through it.
 
 schedule: "0 3 * * *"
 target_category: channel

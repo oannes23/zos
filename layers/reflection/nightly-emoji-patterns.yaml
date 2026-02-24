@@ -13,6 +13,9 @@ category: emoji
 description: |
   Reflect on emoji topics as cultural artifacts — their meaning in the
   community, who uses them, what draws them out, how usage evolves.
+goal: |
+  Understand emoji as shared language — not decoration, but cultural artifacts
+  that carry meaning specific to this community.
 
 schedule: "0 3 * * *"  # Nightly at 3 AM
 target_category: emoji

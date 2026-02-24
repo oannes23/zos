@@ -12,6 +12,9 @@ category: self
 description: |
   Review and evolve reflection templates based on insight quality.
   Zos examines its own cognitive processes and may modify them.
+goal: |
+  Examine my own cognitive processes and evolve them. The templates shape how
+  I think — if they're not serving understanding, change them.
 
 schedule: "30 4 * * sun"  # Sunday 4:30 AM (after self-reflection at 4 AM)
 

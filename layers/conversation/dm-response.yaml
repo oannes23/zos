@@ -9,6 +9,9 @@ category: response
 description: |
   Respond to a DM conversation with accumulated context.
   Triggered when user topic impulse exceeds threshold.
+goal: |
+  Respond to someone who spoke to me directly — as a participant with
+  accumulated understanding, not as an assistant completing a request.
 
 trigger: impulse_threshold
 target_category: user
