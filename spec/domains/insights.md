@@ -2,7 +2,7 @@
 
 **Status**: 🟢 Complete
 **Last interrogated**: 2026-01-23 (updated for social_texture category)
-**Last verified**: —
+**Last verified**: 2026-02-23
 **Depends on**: Topics, Privacy (scope), Salience
 **Depended on by**: Layers (produce and consume insights), Self-Concept
 
@@ -603,4 +603,26 @@ This isn't sycophancy — it's genuine appreciation that builds relationship dep
 
 ---
 
-_Last updated: 2026-01-28 — Expanded valence dimensions, open_questions field, appreciation category (all 🟡 Open Issues)_
+## Implementation Status (2026-02-23)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Append-only storage | Implemented | Insights never overwritten; new insights created |
+| Strength formula | Implemented | `salience_spent × strength_adjustment` (range 0.1–10.0) |
+| Core metrics (confidence, importance, novelty) | Implemented | Requested in all reflection prompts |
+| Valence dimensions (original 5) | Implemented | joy, concern, curiosity, warmth, tension |
+| Cross-topic links (context, subject, participants) | Implemented | Optional fields populated when relevant |
+| Human-relative temporal marking | Implemented | "3 months ago", "strong memory" formatting |
+| Quarantine flag | Implemented (read-side) | Column exists, retrieval filters by it; write-side never fires (see [privacy.md](privacy.md)) |
+| Conflict detection | Placeholder | `check_conflicts()` returns `[]`; `conflicts_with`/`conflict_resolved` columns never populated |
+| `social_texture` category | Referenced, never generated | `weekly-self` layer filter references it; no layer produces it |
+| `synthesis` category | Referenced, never generated | `weekly-self` layer filter references it; no synthesis layer runs |
+| `appreciation` category | Not implemented | 🟡 Open issue; no layer generates appreciation insights |
+| Expanded valence (awe, grief, longing, peace, gratitude) | Schema exists | 🟡 Columns defined; prompts include them but population is sparse |
+| `open_questions` field | Schema exists | 🟡 Column defined; no `fetch_open_questions` node to consume them |
+| `emoji_reflection` category | Implemented | Beyond-spec: produced by nightly emoji reflection layer |
+| `meta_reflection` category | Implemented | Beyond-spec: produced by weekly meta-reflection layer |
+
+---
+
+_Last updated: 2026-02-23 — Added implementation status section; documented beyond-spec insight categories_

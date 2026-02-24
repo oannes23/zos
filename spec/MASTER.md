@@ -54,14 +54,14 @@ See [mvp-scope.md](architecture/mvp-scope.md) for full details.
 
 | Area | Doc | Status | Key Open Questions |
 |------|-----|--------|-------------------|
-| Observation | [observation.md](domains/observation.md) | 🟢 | — |
-| Topics | [topics.md](domains/topics.md) | 🟢 | — |
-| Privacy | [privacy.md](domains/privacy.md) | 🟢 | — |
-| Salience | [salience.md](domains/salience.md) | 🟢 | — |
-| Insights | [insights.md](domains/insights.md) | 🟢 | — |
-| Layers | [layers.md](domains/layers.md) | 🔄 | MVP 1: 3 of 4 conversation layers; deferred items marked 🔴 |
-| Chattiness | [chattiness.md](domains/chattiness.md) | 🔄 | MVP 1: simplified impulse model; deferred items marked 🔴 |
-| Self-Modification | [self-modification.md](domains/self-modification.md) | 🟢 | Proposal format only; execution deferred to MVP 2+ |
+| Observation | [observation.md](domains/observation.md) | 🟢 | Beyond-spec: audio transcription (Whisper), image generation (DALL-E 3) |
+| Topics | [topics.md](domains/topics.md) | 🟢 | Compound topics (user_in_channel, dyad_in_channel) and role topics are enum-only |
+| Privacy | [privacy.md](domains/privacy.md) | 🔄 | First-contact DM, quarantine triggers, review pass scaffolded but not wired |
+| Salience | [salience.md](domains/salience.md) | 🟢 | Thread propagation stubbed; `spend()` deprecated |
+| Insights | [insights.md](domains/insights.md) | 🟢 | Placeholder conflict detection; `social_texture`/`synthesis` categories never generated |
+| Layers | [layers.md](domains/layers.md) | 🔄 | MVP 1: 3 of 4 conversation layers; beyond-spec: emoji reflection, meta-reflection |
+| Chattiness | [chattiness.md](domains/chattiness.md) | 🔄 | MVP 1: simplified impulse model; beyond-spec: name-mention, self-impulse, post-reflection impulse |
+| Self-Modification | [self-modification.md](domains/self-modification.md) | 🔄 | Template evolution bypasses proposal framework — design tension |
 
 ---
 
@@ -134,6 +134,27 @@ See [future/self-modification.md](future/self-modification.md) for the vision do
 ---
 
 ## Recent Changes
+
+### 2026-02-23: Spec-vs-Code Reconciliation (Full Audit)
+
+Comprehensive audit of all specs against current codebase. See `data/spec_analysis.md` for the full gap analysis.
+
+**Status changes:**
+- privacy.md: 🟢 → 🔄 (first-contact DM, quarantine triggers, review pass scaffolded but not wired)
+- self-modification.md: 🟢 → 🔄 (template evolution bypasses proposal framework)
+
+**Implementation status sections added** to: privacy.md, topics.md, insights.md, self-modification.md
+
+**Beyond-spec features documented:**
+- Audio transcription (Whisper API) and image generation (DALL-E 3) in observation.md
+- Emoji reflection layer and weekly meta-reflection layer in layers.md
+- Name-mention, self-impulse, and post-reflection impulse mechanisms in chattiness.md
+- `emoji_reflection` and `meta_reflection` insight categories in insights.md
+- Template evolution as de facto self-modification in self-modification.md
+
+**Design tension surfaced:** Template evolution (`update_templates` node) allows Zos to rewrite its own cognitive templates without human review, bypassing the proposal framework that was designed to create a collaborative modification loop. Open question documented in self-modification.md.
+
+**New glossary terms:** Template Evolution, Emoji Reflection Layer. Updated: Node (3 new types), Layer Category (emoji), Impulse (beyond-spec earning), Budget Group (Culture).
 
 ### 2026-02-13: MVP 1 Foundation — Chattiness & Conversation System Implemented
 
@@ -655,8 +676,10 @@ Key terms: Salience, Topic, Topic Key, Layer, Insight, Scope, Reflection, Observ
 ---
 
 ## Last Updated
-_2026-02-13 — Spec ↔ Code reconciliation: fixed get_cap() bug, updated caps/budget/retention/config across all specs, added deferred markers, updated last-verified dates._
+_2026-02-23 — Full spec-vs-code reconciliation: status changes (privacy 🔄, self-modification 🔄), implementation status sections, beyond-spec features documented, design tensions surfaced._
 
 ## Pending Updates
 
-None — all specs reconciled with code as of 2026-02-13.
+- **Template evolution governance**: Should template rewriting require human review (proposal framework) or remain autonomous self-tuning? See [self-modification.md](domains/self-modification.md).
+- **New insight categories**: `emoji_reflection` and `meta_reflection` are produced at runtime but not in the insight categories spec table. Add to [insights.md](domains/insights.md) categories section.
+- **Emoji layer category**: `emoji` reflection category is used in YAML layers but not in the spec's fixed category list. Add to [layers.md](domains/layers.md) categories table.

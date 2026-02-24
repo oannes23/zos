@@ -138,6 +138,7 @@ Filter expressions support:
 | `synthesize_to_global` | Consolidate server-scoped insights to global topic | Used in automatic post-hook |
 | `update_self_concept` | Update the self-concept.md document | Used in self-reflection layer |
 | `fetch_layer_runs` | Retrieve recent layer run history | Used by weekly self-reflection for operational awareness |
+| `update_templates` | Review and rewrite Jinja2 prompt templates | Beyond-spec: used by weekly meta-reflection for template evolution |
 
 ### Node Parameters
 
@@ -1216,6 +1217,19 @@ All conversation templates include:
 - Voice guidance: authentic, not performative
 - Privacy guidance: DM-sourced knowledge handled with discretion
 
+### Beyond-Spec Layers and Nodes
+
+These capabilities grew organically during development and are not part of the original spec vision.
+
+**Emoji Reflection Layer** (`layers/reflection/nightly-emoji-patterns.yaml`): Nightly reflection on emoji usage as cultural artifacts. Category: `emoji` (new, beyond-spec). Produces `emoji_reflection` category insights. Uses `fetch_reactions` node to gather emoji usage data and reflects on per-community emoji meaning and evolution. See [glossary.md](../glossary.md) → Emoji Reflection Layer.
+
+**Weekly Meta-Reflection Layer** (`layers/reflection/weekly-meta.yaml`): Reviews recent layer output quality and rewrites Jinja2 templates via the `update_templates` node (`executor.py:3364-3460`). Genuinely recursive — reviews itself last. This is de facto self-modification: Zos modifies its own cognitive processes at the template level without human review. See [self-modification.md](self-modification.md) for the design tension this creates with the proposal framework.
+
+**New node types**:
+- `update_templates` (`executor.py:3364-3460`): Scans loaded layers for Jinja2 templates, reviews recent output quality, rewrites templates. Operates directly — no proposal or human review step.
+- `fetch_layer_runs` (`executor.py:1078-1120`): Fetches recent layer run history with errors framed as "felt experience." Configurable: `limit`, `layer_name`, `since_days`, `include_errors`. Used by weekly-self layer for operational awareness.
+- `fetch_reactions` (`executor.py:2689+`): Retrieves grouped reaction data for emoji culture analysis. Used by the emoji reflection layer.
+
 ### What's Deferred
 
 - 🔴 `question` category (curiosity impulse, `fetch_open_questions` node)
@@ -1228,4 +1242,4 @@ All conversation templates include:
 
 ---
 
-_Last updated: 2026-02-13 — Added MVP 1 implementation notes for conversation layers_
+_Last updated: 2026-02-23 — Added beyond-spec layers (emoji reflection, weekly meta-reflection), new node types (update_templates, fetch_layer_runs, fetch_reactions)_

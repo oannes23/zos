@@ -1,8 +1,8 @@
 # Self-Modification — Domain Specification
 
-**Status**: 🟢 Complete (Proposal Format only — execution deferred to MVP 2+)
+**Status**: 🔄 Needs revision — template evolution bypasses proposal framework
 **Last interrogated**: 2026-01-23
-**Last verified**: —
+**Last verified**: 2026-02-23
 **Depends on**: Layers (proposals modify layers), Insights (proposals emerge from self-insights)
 **Depended on by**: None yet (execution machinery deferred)
 
@@ -408,4 +408,30 @@ This domain spec covers the *proposal format* — the concrete representation of
 
 ---
 
-_Last updated: 2026-01-23 — Initial creation (proposal format only)_
+## Implementation Status (2026-02-23)
+
+### Proposal Format
+
+The proposal format (markdown with YAML frontmatter in `data/proposals/`) is fully specified but **not yet exercised at runtime**. No layer generates proposals. The self-insight pipeline exists (insights on `self:zos` topics are produced by weekly-self reflection), but the leap from self-insight to formal proposal has not been built.
+
+### Template Evolution: De Facto Self-Modification
+
+While the proposal framework awaits its first exercise, a more direct form of self-modification has been implemented: the `update_templates` node (`executor.py:3364-3460`).
+
+The weekly meta-reflection layer (`layers/reflection/weekly-meta.yaml`) scans all loaded layers for Jinja2 prompt templates, reviews recent output quality, and **rewrites templates directly** — without human review, without a proposal, and without the collaborative loop that the proposal format was designed to create. The process is genuinely recursive: it reviews its own template last.
+
+This is arguably Zos's most philosophically significant capability — a system modifying its own cognitive processes. It creates a design tension:
+
+| Aspect | Proposal Framework | Template Evolution |
+|--------|-------------------|-------------------|
+| **Human oversight** | Required (human reviews, Claude Code implements) | None (operates directly) |
+| **Scope** | Any layer change (YAML structure, new layers, parameters) | Template content only (Jinja2 files) |
+| **Phenomenological section** | Required ("What This Feels Like") | Not required (LLM decides autonomously) |
+| **Audit trail** | Full proposal lifecycle in `data/proposals/` | Layer run record only |
+| **Outcome reflection** | Scheduled check-in (14 days post-implementation) | No formal outcome check |
+
+**Open question**: Should template evolution fall under the proposal framework (requiring human review for template changes), or should the proposal framework acknowledge a tier of "operational self-tuning" that operates below the threshold of formal proposals? The current implementation chose the latter implicitly; the spec should decide explicitly.
+
+---
+
+_Last updated: 2026-02-23 — Added implementation status; status changed to 🔄 (template evolution bypasses proposal framework)_

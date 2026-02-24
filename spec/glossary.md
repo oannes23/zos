@@ -33,6 +33,7 @@ Topics are organized into groups for budget allocation:
 - **Global**: cross-server user/dyad topics (`user:<id>`, `dyad:<a>:<b>`)
 - **Spaces**: channels, threads
 - **Semantic**: subjects, roles
+- **Culture**: emoji topics (10% allocation)
 - **Self**: self:zos topics (separate pool, doesn't compete with community)
 
 Reflection budget is allocated by group to ensure balanced attention across topic types.
@@ -257,6 +258,9 @@ A step within a Layer pipeline. Core node types:
 Special node types:
 - `synthesize_to_global` — consolidate server-scoped insights to global topic
 - `update_self_concept` — update the self-concept.md document
+- `update_templates` — review and rewrite Jinja2 prompt templates (beyond-spec, see [self-modification.md](domains/self-modification.md))
+- `fetch_layer_runs` — retrieve recent layer run history for operational self-awareness
+- `fetch_reactions` — retrieve grouped reaction data for emoji culture analysis
 
 ### Layer Category
 
@@ -269,6 +273,7 @@ Each layer declares a category from a fixed set that determines budget allocatio
 - `subject` — reflects on semantic topics
 - `self` — self-reflection
 - `synthesis` — consolidates insights across scopes
+- `emoji` — emoji culture reflection (beyond-spec: nightly reflection on emoji patterns as cultural artifacts)
 
 **Conversation categories** (impulse-triggered, added MVP 1):
 - `response` — DM response ("someone spoke to me")
@@ -325,6 +330,12 @@ The accumulated drive to speak.
 - Channel topics: +1 per message observed (~25 to trigger)
 - User topics: +100 per DM (floods past threshold)
 - Subject topics: +10 per insight from reflection
+
+Beyond-spec earning mechanisms (implemented, not in original spec):
+- Name-mention: +3.0 when "zos" appears in message text (distinct from @-mention)
+- Self-impulse: +1.0 per bot's own message in a channel (conversation feedback loop)
+- Channel-impulse-per-insight: +5.0 per insight after reflection
+- Subject-impulse-per-insight: +10.0 per insight after reflection
 
 Impulse resets to zero after speaking. No separate pools, no global speech pressure. See [chattiness.md](domains/chattiness.md) → MVP 1 Implementation Notes.
 
@@ -486,6 +497,14 @@ A group of related stories (~5) that together deliver a demonstrable capability.
 
 The atomic unit of implementation work. Completable in one focused session. Has clear acceptance criteria and produces a testable artifact. Stories are sequenced within epics based on dependencies.
 
+### Template Evolution
+
+De facto self-modification via the `update_templates` node type. Zos reviews and rewrites its own Jinja2 prompt templates during weekly meta-reflection. Unlike the formal proposal framework (see [self-modification.md](domains/self-modification.md)), template evolution operates directly without human review — Zos modifies its own cognitive processes at the template level. This is arguably the most significant self-modification mechanism currently implemented.
+
+### Emoji Reflection Layer
+
+A nightly reflection layer (`nightly-emoji-patterns`) that treats emoji usage as cultural artifacts. Produces `emoji_reflection` category insights about per-community emoji meaning, who uses emojis, common contexts, and emergent semantic patterns. Part of the tri-level emoji culture model (server topics, aggregate metrics, user traits). Beyond-spec: grew organically from the observation system.
+
 ---
 
 ## Abbreviations
@@ -500,4 +519,4 @@ The atomic unit of implementation work. Completable in one focused session. Has 
 
 ---
 
-_Last updated: 2026-02-13 — Added MVP 1 terms: Impulse Engine, Conversation Heartbeat, Operator DM Mode, Typing Awareness. Updated Impulse, Layer Category, Conversation Layer definitions to reflect implementation._
+_Last updated: 2026-02-23 — Added Template Evolution, Emoji Reflection Layer terms. Added beyond-spec impulse mechanisms, emoji reflection category, Culture budget group, and new node types (update_templates, fetch_layer_runs, fetch_reactions)._

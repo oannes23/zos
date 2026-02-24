@@ -1,8 +1,8 @@
 # Privacy — Domain Specification
 
-**Status**: 🟢 Complete
+**Status**: 🔄 Needs revision — several features scaffolded but not wired at runtime
 **Last interrogated**: 2026-01-22
-**Last verified**: —
+**Last verified**: 2026-02-23
 **Depends on**: None (primitive constraint)
 **Depended on by**: Insights, Layers, Context Assembly, Topics
 
@@ -325,4 +325,20 @@ This message reflects Zos's epistemic honesty about its own nature while being c
 
 ---
 
-_Last updated: 2026-01-23 — First-contact message rewritten to match Zos's voice_
+## Implementation Status (2026-02-23)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Scope tracking (`public`, `dm`) | Implemented | `sources_scope_max` on insights, `scope` on messages |
+| Privacy gate role | Implemented | `privacy_gate_role` config per server, checked during observation |
+| `<chat>` anonymization | Implemented | Real IDs stored; anonymization at context assembly time |
+| Quarantine read-side | Implemented | `quarantined` column, index, retrieval filtering |
+| Inline judgment (prompt guidance) | Implemented | `<chat>` guidance injected into all layer prompts |
+| First-contact DM acknowledgment | Scaffolded | DB columns (`first_dm_acknowledged`, `first_dm_at`), config field (`first_contact_message`), but `on_message` never sends the message or sets the flag |
+| Quarantine triggers (write-side) | Not wired | Read-side works, but nothing ever sets `quarantined=True`. No role change monitoring exists |
+| Review pass (sensitivity filter) | Config only | Config validated (`always`/`private_context`/`never`), output handler reads param but never executes the review LLM call |
+| Derived scope | Not implemented | `derived` scope defined but no code computes scope combination for synthesized insights |
+
+---
+
+_Last updated: 2026-02-23 — Added implementation status section; status changed to 🔄_

@@ -2,7 +2,7 @@
 
 **Status**: 🟢 Complete
 **Last interrogated**: 2026-01-23 (updated for observation integration, reaction earning, emoji topics, culture budget)
-**Last verified**: 2026-02-13
+**Last verified**: 2026-02-23
 **Depends on**: Topics (need topic keys to track salience against), Observation (reaction/media signals)
 **Depended on by**: Layers (salience determines what gets reflected on), Insights (salience spent on creation)
 
@@ -222,7 +222,7 @@ Groups are extensible — new groupings can be added as the topic taxonomy evolv
 |--------------|---------------|
 | `server:X:user:<id>` | dyads involving this user, user_in_channel for this user, **global `user:<id>` if warm** |
 | `server:X:channel:<id>` | user_in_channel in this channel, threads in this channel |
-| `server:X:thread:<id>` | parent channel |
+| `server:X:thread:<id>` | parent channel (stub: `_get_threads_for_channel()` returns `[]`, needs topic metadata) |
 | `server:X:dyad:<a>:<b>` | both server-scoped users, **global `dyad:<a>:<b>` if warm** |
 | `server:X:user_in_channel` | user, channel |
 | `server:X:dyad_in_channel` | dyad, channel, both users |
@@ -442,6 +442,8 @@ def reset_after_reflection(topic: Topic, tokens_used: int):
 On reflection **failure**, no salience is modified — the topic keeps its full balance
 for the next reflection attempt.
 
+**Note**: The original `spend()` method (`salience.py:143-196`) is deprecated in favor of `reset_after_reflection()`. Zero callers remain. The original model (deduct cost, retain percentage of *remaining* balance) behaved oddly at high retention rates; the zero-reset model is cleaner.
+
 ---
 
 ## Decay Process
@@ -597,4 +599,4 @@ GROUP BY topic_key;
 
 ---
 
-_Last updated: 2026-02-13 — Reconciled with code: retention_rate 0.3→1.5, semantic budget 20%→15%, updated caps to match implementation, added self_mention weight, min_reflection_salience, global_reflection_budget, self_budget 50→20_
+_Last updated: 2026-02-23 — Noted thread stub in propagation, noted `spend()` deprecation in favor of `reset_after_reflection()`_

@@ -2,7 +2,7 @@
 
 **Status**: 🟢 Complete
 **Last interrogated**: 2026-01-22
-**Last verified**: —
+**Last verified**: 2026-02-23
 **Depends on**: None (primitive)
 **Depended on by**: Salience, Insights, Layers, Privacy
 
@@ -399,4 +399,24 @@ This is specified in detail in [salience.md](salience.md).
 
 ---
 
-_Last updated: 2026-01-23 — Added emoji topic type_
+## Implementation Status (2026-02-23)
+
+| Topic Type | Status | Notes |
+|------------|--------|-------|
+| `server:<id>:user:<id>` | Implemented | Created during message observation |
+| `server:<id>:channel:<id>` | Implemented | Created during channel polling |
+| `server:<id>:dyad:<a>:<b>` | Implemented | Created during message observation (sorted IDs) |
+| `server:<id>:subject:<name>` | Implemented | Bootstrapped during reflection, `lowercase_underscore` naming |
+| `server:<id>:emoji:<emoji_id>` | Implemented | Created on first reaction observation |
+| `server:<id>:self:zos` | Implemented | Created per server |
+| `self:zos` | Implemented | Global self-topic |
+| `user:<id>` | Implemented | Global user topic (schema ready, warming via DM) |
+| `dyad:<a>:<b>` | Implemented | Global dyad topic (schema ready) |
+| `server:<id>:thread:<id>` | Stub | `_get_threads_for_channel()` returns `[]`; needs topic metadata |
+| `server:<id>:role:<id>` | Enum only | `TopicCategory.ROLE` defined, cap configured, never created |
+| `server:<id>:user_in_channel:<c>:<u>` | Enum only | `TopicCategory.USER_IN_CHANNEL` defined, cap configured, never created |
+| `server:<id>:dyad_in_channel:<c>:<a>:<b>` | Enum only | `TopicCategory.DYAD_IN_CHANNEL` defined, cap configured, never created |
+
+---
+
+_Last updated: 2026-02-23 — Added implementation status section_

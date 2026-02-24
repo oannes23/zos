@@ -2,7 +2,7 @@
 
 **Status**: 🟢 Complete
 **Last interrogated**: 2026-01-23
-**Last verified**: 2026-02-13
+**Last verified**: 2026-02-23
 **Depends on**: Topics (emoji topic creation), Privacy (reaction tracking rules)
 **Depended on by**: Layers (consumes observed data), Salience (reaction-based earning), Insights (social texture)
 
@@ -257,13 +257,47 @@ Key handoff points:
 
 ---
 
+## Beyond-Spec Capabilities
+
+These capabilities grew organically during development and are not part of the original observation spec.
+
+### Audio Transcription (Whisper API)
+
+Zos can transcribe audio attachments in messages via OpenAI Whisper (`observation.py:2128-2200`).
+
+| Aspect | Details |
+|--------|---------|
+| **Supported formats** | MP3, OGG, WAV, FLAC, M4A, AAC, WMA, MP4, WebM, MOV |
+| **Processing** | Async queue-based with configurable rate limits |
+| **File size limit** | 25 MB default |
+| **Config** | `transcription_enabled`, `transcription_rate_limit_per_minute`, `max_audio_file_size_mb` |
+| **Relationship to spec** | `spec/future/video-analysis.md` mentions Whisper for video audio tracks; standalone audio attachment transcription is unspecced |
+
+Note: This is distinct from voice channel participation (still a non-goal, see below). Audio transcription processes file attachments, not live voice streams.
+
+### Image Generation (DALL-E 3)
+
+Zos can generate images via OpenAI DALL-E 3 (`src/zos/image.py:49-100`).
+
+| Aspect | Details |
+|--------|---------|
+| **Trigger** | `[IMAGE:]` directive extracted from conversation layer output |
+| **Storage** | Local files in `data/media/generated/` |
+| **Config** | `ImageConfig` — `enabled`, `size`, `quality`, `daily_budget` |
+| **Budget tracking** | Per-day generation count with configurable daily limit |
+| **Spec coverage** | None — grew organically from conversation capability |
+
+---
+
 ## Non-Goals
 
 Explicit exclusions for MVP:
 
 ### Voice/Audio Analysis
 
-Zos does not listen to voice channels. Voice is a different modality with different privacy implications and technical complexity. Deferred to future consideration.
+Zos does not listen to voice channels or participate in voice. Voice channel participation is a different modality with different privacy implications and technical complexity. Deferred to future consideration.
+
+**Note**: Audio *attachment* transcription (Whisper) is implemented — see [Beyond-Spec Capabilities](#beyond-spec-capabilities) above. This is distinct from voice channel participation.
 
 ### External User Research
 
@@ -298,4 +332,4 @@ Observation uses batch polling, not Discord gateway events. This is intentional 
 
 ---
 
-_Last updated: 2026-02-13 — Reconciled with code: added link_queue_max_size and link_rate_limit_per_minute, removed link_fetch_timeout_seconds and reaction_batch_size (handled at implementation level)_
+_Last updated: 2026-02-23 — Added beyond-spec capabilities (audio transcription, image generation), clarified voice/audio non-goal distinction_

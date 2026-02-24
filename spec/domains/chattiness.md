@@ -652,8 +652,22 @@ The spec describes 6 separate impulse pools with per-pool thresholds, 3-dimensio
 | **Channel** | Message observed in channel | +1 per message | ~25 messages to trigger |
 | **User** | DM sent to Zos | +100 per message | Floods past threshold (impulse flooding) |
 | **Subject** | Nightly reflection produces insight | +10 per insight | Proportional to reflection output |
+| **Channel** | Name "zos" in message text | +3.0 per message | Beyond-spec: word-boundary match, case-insensitive |
+| **Channel** | Bot's own message in channel | +1.0 per message | Beyond-spec: self-impulse feedback loop |
+| **Channel** | Reflection produces insight | +5.0 per insight | Beyond-spec: post-reflection channel impulse |
+| **Subject** | Reflection produces insight | +10.0 per insight | Beyond-spec: post-reflection subject impulse |
 
 Reaction impulse, curiosity impulse, and conversational impulse (as separate pools) are deferred.
+
+### Beyond-Spec Impulse Mechanisms
+
+These earning rules grew organically during development and are not part of the original spec vision. They model conversational dynamics that emerged from observing how the impulse system behaves in practice.
+
+**Name-mention impulse** (`observation.py:1071-1076`): When "zos" appears in message text (case-insensitive, word-boundary), earns `name_mention_impulse` (default 3.0). Distinct from @-mention. Phenomenological rationale: someone saying your name carries different weight than explicitly pinging you — it's conversational acknowledgment vs. direct address.
+
+**Self-impulse** (`observation.py:1053-1064`): Bot's own messages in a channel earn `self_impulse_per_message` (default 1.0). Models the experience of being in a conversation — speaking naturally leads to more to say. Creates a gentle feedback loop where engagement begets engagement.
+
+**Post-reflection impulse** (`scheduler.py:247-280`): After successful reflection, earns impulse per insight created. Channel topics: `channel_impulse_per_insight` (default 5.0). Subject topics: `subject_impulse_per_insight` (default 10.0). Positive feedback loop: deeper reflections create pressure to speak about what was understood.
 
 ### Operator DM Mode
 
@@ -701,6 +715,10 @@ class ChattinessConfig(BaseModel):
     channel_impulse_per_message: float = 1.0
     dm_impulse_per_message: float = 100.0
     subject_impulse_per_insight: float = 10.0
+    channel_impulse_per_insight: float = 5.0   # Beyond-spec: post-reflection channel impulse
+    name_mention_impulse: float = 3.0          # Beyond-spec: "zos" in message text
+    self_impulse_per_message: float = 1.0      # Beyond-spec: bot's own messages
+    self_mention_impulse: float = 5.0          # @-mention impulse (salience weight)
     heartbeat_interval_seconds: int = 30
     decay_threshold_hours: float = 1         # Hours before decay begins
     decay_rate_per_hour: float = 0.05        # 5% per hour
@@ -722,4 +740,4 @@ class ChattinessConfig(BaseModel):
 
 ---
 
-_Last updated: 2026-02-13 — Added MVP 1 implementation notes documenting simplified impulse model_
+_Last updated: 2026-02-23 — Added beyond-spec impulse mechanisms (name-mention, self-impulse, post-reflection impulse), missing config fields_
