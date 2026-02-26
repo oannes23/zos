@@ -249,6 +249,7 @@ def serve(
                 host=host,
                 port=port,
                 log_level="info",
+                access_log=False,
             )
             server = Server(uvicorn_config)
 
@@ -406,6 +407,7 @@ def api(ctx: click.Context, host: str, port: int) -> None:
             host=host,
             port=port,
             log_level="info",
+            access_log=False,
         )
         server = uvicorn.Server(server_config)
         await server.serve()

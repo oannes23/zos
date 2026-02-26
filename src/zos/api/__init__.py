@@ -84,13 +84,13 @@ Currently no authentication (local development only).
     # Request logging middleware
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
-        log.info(
+        log.debug(
             "request_start",
             method=request.method,
             path=request.url.path,
         )
         response = await call_next(request)
-        log.info(
+        log.debug(
             "request_complete",
             method=request.method,
             path=request.url.path,
