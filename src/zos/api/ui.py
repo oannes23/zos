@@ -1446,7 +1446,7 @@ async def topics_page(request: Request) -> HTMLResponse:
 async def topics_list_partial(
     request: Request,
     category: Optional[str] = Query(None, description="Filter by topic category"),
-    sort: str = Query("salience", description="Sort by salience or impulse"),
+    sort: str = Query("salience", description="Sort by salience, impulse, insights, or activity"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     limit: int = Query(30, ge=1, le=100, description="Page size"),
     db: "Engine" = Depends(get_db),

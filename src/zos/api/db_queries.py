@@ -1581,11 +1581,15 @@ async def list_all_topics_with_stats(
 
         if sort_by == "salience":
             stmt = stmt.order_by(func.coalesce(balance_sub.c.balance, 0.0).desc())
+        elif sort_by == "insights":
+            stmt = stmt.order_by(func.coalesce(insight_sub.c.insight_count, 0).desc())
+        elif sort_by == "activity":
+            stmt = stmt.order_by(topics.c.last_activity_at.desc().nulls_last())
 
         if conditions:
             stmt = stmt.where(*conditions)
 
-        if sort_by == "salience":
+        if sort_by in ("salience", "insights", "activity"):
             stmt = stmt.offset(offset).limit(limit)
 
         results = []
