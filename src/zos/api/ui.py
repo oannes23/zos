@@ -344,18 +344,10 @@ async def _resolve_topic_key_for_ui(db: "Engine", topic_key: str) -> str:
     return resolved_map.get(topic_key, topic_key)
 
 
-@router.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    """UI home page / dashboard.
-
-    Displays overview cards for insights, salience, and layer runs.
-    Cards load their content via htmx for a responsive experience.
-    """
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={"active": "home", "dev_mode": _get_dev_mode(request)},
-    )
+@router.get("/", response_class=RedirectResponse)
+async def index() -> RedirectResponse:
+    """Redirect landing page to Topics view."""
+    return RedirectResponse(url="/ui/topics", status_code=302)
 
 
 @router.get("/status", response_class=HTMLResponse)
@@ -1625,7 +1617,7 @@ async def topic_salience_history_partial(
     ledger: "SalienceLedger" = Depends(get_ledger),
 ) -> HTMLResponse:
     """Partial for salience transaction history (htmx)."""
-    transactions = await ledger.get_history(topic_key, limit=20)
+    transactions = await ledger.get_history(topic_key, limit=10)
 
     formatted = [
         {
@@ -1654,7 +1646,7 @@ async def topic_impulse_history_partial(
     if not impulse_engine:
         return HTMLResponse('<p class="text-muted">Impulse not enabled</p>')
 
-    transactions = impulse_engine.get_history(topic_key, limit=20)
+    transactions = impulse_engine.get_history(topic_key, limit=10)
 
     return templates.TemplateResponse(
         request=request,

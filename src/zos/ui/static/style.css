@@ -1752,9 +1752,10 @@ a:hover {
     color: var(--accent);
 }
 
-/* Full-width insights section below detail grid */
+/* Full-width insights section */
 .insights-section {
-    margin-top: 2rem;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
 }
 
 .section-header {

@@ -60,43 +60,23 @@ def client(app) -> TestClient:
 
 
 class TestUIHomePage:
-    """Tests for: UI home page loads correctly."""
+    """Tests for: UI home page redirects to Topics."""
 
-    def test_ui_index_returns_200(self, client: TestClient) -> None:
-        """UI home page should return 200 OK."""
+    def test_ui_index_redirects_to_topics(self, client: TestClient) -> None:
+        """UI home page should redirect to /ui/topics."""
+        response = client.get("/ui/", follow_redirects=False)
+        assert response.status_code == 302
+        assert response.headers["location"] == "/ui/topics"
+
+    def test_ui_index_follow_redirect_returns_200(self, client: TestClient) -> None:
+        """Following the redirect should return 200 OK."""
         response = client.get("/ui/")
         assert response.status_code == 200
 
-    def test_ui_index_returns_html(self, client: TestClient) -> None:
-        """UI home page should return HTML."""
+    def test_ui_index_follow_redirect_shows_topics(self, client: TestClient) -> None:
+        """Following the redirect should show the Topics page."""
         response = client.get("/ui/")
-        assert "text/html" in response.headers["content-type"]
-
-    def test_ui_index_contains_title(self, client: TestClient) -> None:
-        """UI home page should contain Zos Dashboard title."""
-        response = client.get("/ui/")
-        assert "Zos Dashboard" in response.text
-
-    def test_ui_index_contains_navigation(self, client: TestClient) -> None:
-        """UI home page should contain navigation links."""
-        response = client.get("/ui/")
-        assert "Insights" in response.text
         assert "Topics" in response.text
-        assert "Layer Runs" in response.text
-
-    def test_ui_index_contains_htmx_triggers(self, client: TestClient) -> None:
-        """UI home page should contain htmx triggers for dynamic content."""
-        response = client.get("/ui/")
-        # Check for htmx attributes
-        assert "hx-get" in response.text
-        assert "hx-trigger" in response.text
-
-    def test_ui_index_contains_dashboard_cards(self, client: TestClient) -> None:
-        """UI home page should contain dashboard cards."""
-        response = client.get("/ui/")
-        assert "Recent Insights" in response.text
-        assert "Top Topics" in response.text
-        assert "Recent Runs" in response.text
 
 
 # =============================================================================
@@ -177,24 +157,24 @@ class TestStaticFiles:
 class TestNavigation:
     """Tests for: Navigation between sections."""
 
-    def test_nav_links_to_insights(self, client: TestClient) -> None:
-        """Navigation should link to insights page."""
-        response = client.get("/ui/")
-        assert 'href="/ui/insights"' in response.text
-
-    def test_nav_links_to_salience(self, client: TestClient) -> None:
-        """Navigation should link to salience page."""
-        response = client.get("/ui/")
-        assert 'href="/ui/salience"' in response.text
+    def test_nav_links_to_topics(self, client: TestClient) -> None:
+        """Navigation should link to topics page."""
+        response = client.get("/ui/topics")
+        assert 'href="/ui/topics"' in response.text
 
     def test_nav_links_to_runs(self, client: TestClient) -> None:
         """Navigation should link to runs page."""
-        response = client.get("/ui/")
+        response = client.get("/ui/topics")
         assert 'href="/ui/runs"' in response.text
+
+    def test_nav_links_to_messages(self, client: TestClient) -> None:
+        """Navigation should link to messages page."""
+        response = client.get("/ui/topics")
+        assert 'href="/ui/messages"' in response.text
 
     def test_nav_links_to_api_docs(self, client: TestClient) -> None:
         """Footer should link to API docs."""
-        response = client.get("/ui/")
+        response = client.get("/ui/topics")
         assert 'href="/docs"' in response.text
 
 
@@ -217,13 +197,11 @@ class TestHtmxIntegration:
         assert 'hx-get="/ui/status"' in response.text
         assert 'hx-trigger=' in response.text
 
-    def test_dashboard_cards_have_htmx_load(self, client: TestClient) -> None:
-        """Dashboard cards should load content via htmx."""
-        response = client.get("/ui/")
-        # Should have htmx load triggers for dashboard content
-        assert 'hx-get="/ui/insights/recent"' in response.text
-        assert 'hx-get="/ui/salience/top' in response.text  # May have query params
-        assert 'hx-get="/ui/runs/recent"' in response.text
+    def test_topics_page_has_htmx_load(self, client: TestClient) -> None:
+        """Topics page should load content via htmx."""
+        response = client.get("/ui/topics")
+        assert 'hx-get' in response.text
+        assert 'hx-trigger' in response.text
 
 
 # =============================================================================
