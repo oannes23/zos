@@ -86,16 +86,6 @@
         </div>
         {% endif %}
 
-        <!-- Insights -->
-        <div class="card mb-2">
-            <div class="card-header">
-                <span class="card-title">Insights</span>
-            </div>
-            <div hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/insights" hx-trigger="load" hx-swap="innerHTML">
-                Loading insights...
-            </div>
-        </div>
-
         {% if topic.category == 'user' and topic.entity_id %}
         <!-- Dyad Relationships (user topics only) -->
         <div class="card mb-2">
@@ -143,6 +133,31 @@
             </div>
         </div>
         {% endif %}
+    </div>
+</div>
+
+<div class="insights-section">
+    <div class="section-header">
+        <h2>Insights</h2>
+        {% if insight_categories %}
+        <div class="filters">
+            <select hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/insights"
+                    hx-target="#topic-insights-list"
+                    name="category"
+                    hx-include="this">
+                <option value="">All categories</option>
+                {% for cat in insight_categories %}
+                <option value="{{ cat }}">{{ cat }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+    </div>
+    <div id="topic-insights-list"
+         hx-get="/ui/topics/{{ topic.topic_key | urlencode }}/insights"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        Loading insights...
     </div>
 </div>
 {% endblock %}

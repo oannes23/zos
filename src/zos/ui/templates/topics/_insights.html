@@ -1,0 +1,58 @@
+{% if insights %}
+<table class="data-table insights-table">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th class="sortable{% if sort == 'created_at' %} sorted{% endif %}"
+                hx-get="/ui/topics/{{ topic_key | urlencode }}/insights?sort=created_at{% if category %}&category={{ category }}{% endif %}&limit={{ limit }}"
+                hx-target="#topic-insights-list">
+                Created {% if sort == 'created_at' %}&#9660;{% endif %}
+            </th>
+            <th>Content</th>
+            <th class="sortable{% if sort == 'confidence' %} sorted{% endif %}"
+                hx-get="/ui/topics/{{ topic_key | urlencode }}/insights?sort=confidence{% if category %}&category={{ category }}{% endif %}&limit={{ limit }}"
+                hx-target="#topic-insights-list">
+                Confidence {% if sort == 'confidence' %}&#9660;{% endif %}
+            </th>
+            <th class="sortable{% if sort == 'strength' %} sorted{% endif %}"
+                hx-get="/ui/topics/{{ topic_key | urlencode }}/insights?sort=strength{% if category %}&category={{ category }}{% endif %}&limit={{ limit }}"
+                hx-target="#topic-insights-list">
+                Strength {% if sort == 'strength' %}&#9660;{% endif %}
+            </th>
+            <th>Memory</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for i in insights %}
+        <tr class="clickable" onclick="window.location='/ui/insights/{{ i.id }}'">
+            <td><span class="badge badge-{{ i.category }}">{{ i.category }}</span></td>
+            <td class="text-muted">{{ i.created_at | relative_time }}</td>
+            <td class="insight-content-cell" title="{{ i.content }}">{{ i.content[:120] }}{% if i.content|length > 120 %}...{% endif %}</td>
+            <td>{{ (i.confidence * 100) | int }}%</td>
+            <td>{{ i.strength | round(1) }}</td>
+            <td class="text-muted">{{ i.temporal_marker }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="pagination">
+    {% if offset > 0 %}
+    <button hx-get="/ui/topics/{{ topic_key | urlencode }}/insights?offset={{ offset - limit }}&limit={{ limit }}{% if category %}&category={{ category }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
+            hx-target="#topic-insights-list">
+        Previous
+    </button>
+    {% endif %}
+
+    <span class="page-info">{{ offset + 1 }}-{{ offset + insights|length }} of {{ total }}</span>
+
+    {% if offset + limit < total %}
+    <button hx-get="/ui/topics/{{ topic_key | urlencode }}/insights?offset={{ offset + limit }}&limit={{ limit }}{% if category %}&category={{ category }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
+            hx-target="#topic-insights-list">
+        Next
+    </button>
+    {% endif %}
+</div>
+{% else %}
+<p class="text-muted">No insights found</p>
+{% endif %}

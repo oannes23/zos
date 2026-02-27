@@ -1725,3 +1725,52 @@ a:hover {
 .message-meta .metric-row:last-child {
     border-bottom: none;
 }
+
+/* =============================================================================
+   Insights Table (in Topic Detail)
+   ============================================================================= */
+
+/* Insights table column widths */
+.insights-table th:nth-child(1) { width: 12%; } /* Category */
+.insights-table th:nth-child(2) { width: 12%; } /* Created */
+.insights-table th:nth-child(3) { width: 36%; } /* Content */
+.insights-table th:nth-child(4) { width: 10%; } /* Confidence */
+.insights-table th:nth-child(5) { width: 10%; } /* Strength */
+.insights-table th:nth-child(6) { width: 20%; } /* Memory */
+
+/* Sortable header */
+.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sortable:hover {
+    color: var(--text-primary);
+}
+
+.sortable.sorted {
+    color: var(--accent);
+}
+
+/* Full-width insights section below detail grid */
+.insights-section {
+    margin-top: 2rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.section-header h2 {
+    margin-bottom: 0;
+}
+
+/* Truncated content cell */
+.insight-content-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

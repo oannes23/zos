@@ -618,7 +618,7 @@ async def insight_detail(
     return templates.TemplateResponse(
         request=request,
         name="insights/detail.html",
-        context={"insight": formatted, "active": "insights", "dev_mode": _get_dev_mode(request)},
+        context={"insight": formatted, "active": "topics", "dev_mode": _get_dev_mode(request)},
     )
 
 
@@ -1546,31 +1546,54 @@ def _extract_category_from_key(topic_key: str) -> str | None:
 async def topic_insights_partial(
     request: Request,
     topic_key: str,
+    category: Optional[str] = Query(None),
+    sort: str = Query("created_at"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     db: "Engine" = Depends(get_db),
 ) -> HTMLResponse:
-    """Partial for topic insights (htmx)."""
-    from sqlalchemy import and_, select
+    """Partial for topic insights table (htmx).
+
+    Supports sorting, category filtering, and pagination.
+    """
+    from sqlalchemy import and_, func, select
 
     from zos.database import insights as insights_table
     from zos.insights import _row_to_insight_static
 
+    # Whitelist sortable columns
+    sort_columns = {
+        "created_at": insights_table.c.created_at,
+        "confidence": insights_table.c.confidence,
+        "strength": insights_table.c.strength,
+    }
+    order_col = sort_columns.get(sort, insights_table.c.created_at)
+
+    # Base filter
+    conditions = [
+        insights_table.c.topic_key == topic_key,
+        insights_table.c.quarantined == False,
+    ]
+    if category:
+        conditions.append(insights_table.c.category == category)
+
+    where_clause = and_(*conditions)
+
     with db.connect() as conn:
+        # Count query for pagination
+        count_stmt = select(func.count()).select_from(insights_table).where(where_clause)
+        total = conn.execute(count_stmt).scalar()
+
+        # Data query
         stmt = (
             select(insights_table)
-            .where(
-                and_(
-                    insights_table.c.topic_key == topic_key,
-                    insights_table.c.quarantined == False,
-                )
-            )
-            .order_by(insights_table.c.created_at.desc())
-            .limit(10)
+            .where(where_clause)
+            .order_by(order_col.desc())
+            .offset(offset)
+            .limit(limit)
         )
         rows = conn.execute(stmt).fetchall()
         insights = [_row_to_insight_static(r) for r in rows]
-
-    if not insights:
-        return HTMLResponse('<p class="text-muted">No insights yet</p>')
 
     topic_keys = [i.topic_key for i in insights]
     resolved_names = await _resolve_topic_keys_for_ui(db, topic_keys)
@@ -1580,17 +1603,19 @@ async def topic_insights_partial(
         for i in insights
     ]
 
-    html_parts = []
-    for i in formatted:
-        display_name = i["readable_topic_key"] or i["topic_key"]
-        html_parts.append(
-            f'<div class="list-item list-item-truncate">'
-            f'<a href="/ui/insights/{i["id"]}" class="truncate-text" title="{i["topic_key"]}">{display_name}</a>'
-            f'<span class="text-muted ml-1">{i["temporal_marker"]}</span>'
-            f'</div>'
-        )
-
-    return HTMLResponse("".join(html_parts))
+    return templates.TemplateResponse(
+        request=request,
+        name="topics/_insights.html",
+        context={
+            "insights": formatted,
+            "topic_key": topic_key,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "category": category or "",
+            "sort": sort,
+        },
+    )
 
 
 @router.get("/topics/{topic_key:path}/salience-history", response_class=HTMLResponse)
@@ -1796,6 +1821,10 @@ async def topic_detail(
 
     Shows salience, impulse, insights, and category-specific info for any topic.
     """
+    from sqlalchemy import and_, select
+
+    from zos.database import insights as insights_table
+
     balance = await ledger.get_balance(topic_key)
     cap = ledger.get_cap(topic_key)
 
@@ -1810,6 +1839,21 @@ async def topic_detail(
     # Extract category and entity_id from topic key
     category = _extract_category_from_key(topic_key) or "unknown"
     entity_id = _extract_entity_id(topic_key)
+
+    # Get distinct insight categories for this topic
+    with db.connect() as conn:
+        cat_stmt = (
+            select(insights_table.c.category)
+            .where(
+                and_(
+                    insights_table.c.topic_key == topic_key,
+                    insights_table.c.quarantined == False,
+                )
+            )
+            .distinct()
+            .order_by(insights_table.c.category)
+        )
+        insight_categories = [row[0] for row in conn.execute(cat_stmt).fetchall()]
 
     topic_data = {
         "topic_key": topic_key,
@@ -1828,7 +1872,12 @@ async def topic_detail(
     return templates.TemplateResponse(
         request=request,
         name="topics/detail.html",
-        context={"topic": topic_data, "active": "topics", "dev_mode": _get_dev_mode(request)},
+        context={
+            "topic": topic_data,
+            "insight_categories": insight_categories,
+            "active": "topics",
+            "dev_mode": _get_dev_mode(request),
+        },
     )
 
 

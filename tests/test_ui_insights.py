@@ -231,11 +231,10 @@ class TestInsightsBrowserPage:
         assert 'hx-get="/ui/insights/list"' in response.text
         assert 'hx-trigger="load"' in response.text
 
-    def test_insights_page_marks_nav_as_active(self, client: TestClient) -> None:
-        """Insights page should mark insights nav link as active."""
+    def test_insights_page_still_accessible(self, client: TestClient) -> None:
+        """Insights page should still be accessible via direct URL (no nav link)."""
         response = client.get("/ui/insights")
-        # The active class should be on the insights nav link
-        assert 'class="active"' in response.text
+        assert response.status_code == 200
 
 
 # =============================================================================
@@ -650,10 +649,10 @@ class TestInsightDetail:
         assert "Warmth" in response.text
         assert "Curiosity" in response.text
 
-    def test_detail_shows_breadcrumb(
+    def test_detail_shows_back_link_to_topic(
         self, client: TestClient, engine, layer_run_id: str
     ) -> None:
-        """Detail page should show breadcrumb navigation."""
+        """Detail page should show back-link navigating to the parent topic."""
         insight_id = create_insight_in_db(
             engine,
             layer_run_id,
@@ -663,8 +662,7 @@ class TestInsightDetail:
         response = client.get(f"/ui/insights/{insight_id}")
 
         assert response.status_code == 200
-        assert 'href="/ui/insights"' in response.text
-        assert "breadcrumb" in response.text
+        assert 'href="/ui/topics/server:123:user:breadcrumb"' in response.text
 
     def test_detail_shows_supersedes_link(
         self, client: TestClient, engine, layer_run_id: str

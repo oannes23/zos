@@ -2,7 +2,7 @@
 {% block title %}{{ insight.readable_topic_key or insight.topic_key }} — Zos{% endblock %}
 
 {% block content %}
-<a href="/ui/insights" class="back-link">&larr; All Insights</a>
+<a href="/ui/topics/{{ insight.topic_key }}" class="back-link">&larr; {{ insight.readable_topic_key or insight.topic_key }}</a>
 
 <div class="page-header">
     {% if insight.entity_link %}
