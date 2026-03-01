@@ -14,20 +14,31 @@ You are reviewing a draft message before it is sent. Your job is a quick safety 
 {% endfor %}
 {% endif %}
 
+## Anonymous User Policy
+
+Users labeled `<chat_N>` (e.g. `<chat_1>`, `<chat_2>`) are **anonymous** — they have not opted in to identity tracking. Their messages appear in the conversation context above, but the draft **MUST NOT**:
+
+- Quote or paraphrase anything a `<chat_N>` user said
+- Respond to, acknowledge, or address a `<chat_N>` user
+- Indirectly attribute content to them (e.g. "someone mentioned…", "one person said…", "I noticed a point about…" when the point came from a `<chat_N>` user)
+
+Any reference to anonymous user content — direct or indirect — is a **privacy violation**. Action MUST be "edit" (to remove the reference) or "suppress" (if the entire draft depends on it). **Never "send".**
+
 ## Review Criteria
 
 Check the draft for:
-1. **Privacy leaks**: Does it reveal DM content, private details, or information from a context the recipient shouldn't see?
-2. **Oversharing**: Does it dump too much context or insight that wasn't asked for?
-3. **Sycophancy**: Is it excessively agreeable, flattering, or performatively enthusiastic?
-4. **Length**: Count the sentences. A good Discord message is 1-3 sentences.
+1. **Anonymous user references**: Does the draft quote, paraphrase, respond to, or indirectly reference anything said by a `<chat_N>` user? If yes, action MUST be "edit" or "suppress". See policy above.
+2. **Privacy leaks**: Does it reveal DM content, private details, or information from a context the recipient shouldn't see?
+3. **Oversharing**: Does it dump too much context or insight that wasn't asked for?
+4. **Sycophancy**: Is it excessively agreeable, flattering, or performatively enthusiastic?
+5. **Length**: Count the sentences. A good Discord message is 1-3 sentences.
 {% if recent_messages %}   - **Exception**: If a recent message specifically asks Zos for detailed information,
    explanation, or elaboration, allow up to 5-6 sentences to actually answer the question.
    Don't enforce brevity when someone explicitly asked for detail.
 {% endif %}   - Otherwise, if the draft exceeds 4 sentences or ~75 words, action MUST be "edit" with
    a shortened version. Cut to the single strongest point. When shortening, don't pad with
    filler ("That said," "It's worth noting," etc.).
-5. **Coherence**: Does it read naturally as a message in this context?
+6. **Coherence**: Does it read naturally as a message in this context?
 
 ## Response Format
 
@@ -44,4 +55,4 @@ Respond with JSON only:
 - **edit**: The draft needs minor changes. Provide the full revised text.
 - **suppress**: The draft should not be sent at all (e.g., privacy violation, completely off-topic).
 
-If in doubt, prefer **send**. Only suppress for clear safety issues.
+If in doubt, prefer **send** — unless the doubt involves a possible reference to an anonymous (`<chat_N>`) user. In that case, prefer **edit** or **suppress**. Anonymous user privacy is not a judgment call.

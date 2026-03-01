@@ -2983,9 +2983,10 @@ class LayerExecutor:
         if ctx.send_context.get("operator_dm_only"):
             destination += " [routed to operator DM for review]"
 
-        # Pull last 5 formatted messages for filter context
+        # Pull last 10 formatted messages for filter context
+        # (enough to see what <chat_N> users said so filter can detect references)
         all_formatted = ctx.named_data.get("_formatted_messages", [])
-        recent_messages = all_formatted[-5:] if all_formatted else []
+        recent_messages = all_formatted[-10:] if all_formatted else []
 
         # Render lightweight filter template (no self_concept or chat_guidance)
         template_context = {
