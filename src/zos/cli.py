@@ -236,6 +236,9 @@ def serve(
             scheduler.start()
             log.info("scheduler_started")
 
+            # Run catch-up for any layers missed during downtime/sleep
+            asyncio.create_task(scheduler.startup_catchup())
+
             # Create API app and configure state
             app = create_app(config)
             app.state.config = config

@@ -18,7 +18,7 @@ Design decision: We use MemoryJobStore instead of SQLAlchemyJobStore because:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
@@ -104,7 +104,7 @@ class ReflectionScheduler:
             job_defaults={
                 "coalesce": True,  # Combine missed executions
                 "max_instances": 1,  # No concurrent runs of same job
-                "misfire_grace_time": 3600,  # 1 hour grace for missed jobs
+                "misfire_grace_time": config.scheduler.misfire_grace_time,  # None = unlimited
             },
             timezone=self._timezone,
         )
@@ -504,6 +504,140 @@ class ReflectionScheduler:
             ).scalar()
 
             return result or 0
+
+    # =========================================================================
+    # Startup catch-up
+    # =========================================================================
+
+    def _compute_expected_period(self, cron_expr: str) -> timedelta | None:
+        """Compute the expected period between consecutive cron fires.
+
+        Uses APScheduler's CronTrigger to find two consecutive fire times
+        and returns the delta between them.
+
+        Args:
+            cron_expr: A 5-field crontab expression.
+
+        Returns:
+            timedelta between consecutive fires, or None on parse error.
+        """
+        try:
+            trigger = CronTrigger.from_crontab(cron_expr, timezone=self._timezone)
+        except ValueError:
+            return None
+
+        now = datetime.now(self._timezone)
+        first = trigger.get_next_fire_time(None, now)
+        if first is None:
+            return None
+        second = trigger.get_next_fire_time(first, first)
+        if second is None:
+            return None
+        return second - first
+
+    def _get_last_run_time(self, layer_name: str) -> datetime | None:
+        """Get the most recent successful/partial completion time for a layer.
+
+        Args:
+            layer_name: Name of the layer.
+
+        Returns:
+            UTC-aware datetime of last successful run, or None if never run.
+        """
+        from zos.database import layer_runs as layer_runs_table
+
+        with self.ledger.engine.connect() as conn:
+            row = conn.execute(
+                select(layer_runs_table.c.completed_at)
+                .where(layer_runs_table.c.layer_name == layer_name)
+                .where(layer_runs_table.c.status.in_(["success", "partial"]))
+                .order_by(layer_runs_table.c.completed_at.desc())
+                .limit(1)
+            ).fetchone()
+
+        if not row or not row.completed_at:
+            return None
+
+        ts = row.completed_at
+        # Ensure timezone-aware (SQLite stores naive UTC)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts
+
+    async def _startup_catchup(self) -> list[str]:
+        """Check each scheduled layer and run any that are overdue.
+
+        A layer is considered overdue if it has never run, or if the time
+        since its last successful run exceeds the expected period multiplied
+        by the configured threshold.
+
+        Returns:
+            List of layer names that were executed as catch-up.
+        """
+        threshold = self.config.scheduler.startup_catchup_threshold
+        executed: list[str] = []
+
+        try:
+            layers = self.loader.load_all()
+        except Exception as e:
+            log.error("catchup_failed_to_load_layers", error=str(e))
+            return executed
+
+        now = datetime.now(timezone.utc)
+
+        for name, layer in layers.items():
+            if not layer.schedule:
+                continue
+
+            period = self._compute_expected_period(layer.schedule)
+            if period is None:
+                continue
+
+            last_run = self._get_last_run_time(name)
+
+            if last_run is None:
+                # Never run — overdue
+                overdue = True
+                log.info(
+                    "catchup_never_run",
+                    layer=name,
+                    period_hours=period.total_seconds() / 3600,
+                )
+            else:
+                elapsed = now - last_run
+                overdue = elapsed > (period * threshold)
+                if overdue:
+                    log.info(
+                        "catchup_overdue",
+                        layer=name,
+                        elapsed_hours=elapsed.total_seconds() / 3600,
+                        threshold_hours=(period * threshold).total_seconds() / 3600,
+                    )
+
+            if overdue:
+                log.info("catchup_executing", layer=name)
+                await self._execute_layer(name)
+                executed.append(name)
+
+        return executed
+
+    async def startup_catchup(self) -> list[str]:
+        """Public entry point for startup catch-up.
+
+        Should be called (as a task) after scheduler.start().
+        Skips if disabled in config.
+
+        Returns:
+            List of layer names that were executed, or empty list.
+        """
+        if not self.config.scheduler.startup_catchup_enabled:
+            log.info("startup_catchup_disabled")
+            return []
+
+        log.info("startup_catchup_starting")
+        executed = await self._startup_catchup()
+        log.info("startup_catchup_complete", layers_executed=len(executed), layers=executed)
+        return executed
 
     async def trigger_now(
         self,

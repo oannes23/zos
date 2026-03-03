@@ -249,6 +249,9 @@ class SchedulerConfig(BaseModel):
 
     timezone: str = "UTC"
     reflection_cron: str = "0 13 * * *"
+    misfire_grace_time: int | None = None  # None = unlimited (always run on wake)
+    startup_catchup_enabled: bool = True
+    startup_catchup_threshold: float = 1.3  # multiplier of expected period
 
 
 class DevelopmentConfig(BaseModel):

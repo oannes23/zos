@@ -1499,3 +1499,380 @@ nodes:
         test_config.chattiness.channel_impulse_per_insight,
         trigger=f"reflection:{run.id}",
     )
+
+
+# =============================================================================
+# Misfire Grace Time Tests
+# =============================================================================
+
+
+def test_misfire_grace_time_defaults_to_none(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+) -> None:
+    """Test that misfire_grace_time defaults to None (unlimited)."""
+    assert test_config.scheduler.misfire_grace_time is None
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    # APScheduler stores None as the grace time
+    assert scheduler.scheduler._job_defaults["misfire_grace_time"] is None
+
+
+def test_misfire_grace_time_from_config(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    loader: LayerLoader,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+) -> None:
+    """Test that a configured misfire_grace_time is propagated."""
+    test_config.scheduler.misfire_grace_time = 7200  # 2 hours
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    assert scheduler.scheduler._job_defaults["misfire_grace_time"] == 7200
+
+
+# =============================================================================
+# Startup Catch-up Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_compute_expected_period_daily(
+    scheduler_with_layers: ReflectionScheduler,
+) -> None:
+    """Test period computation for a daily cron schedule."""
+    period = scheduler_with_layers._compute_expected_period("0 13 * * *")
+
+    assert period is not None
+    # Daily cron = 24 hours
+    assert period == timedelta(hours=24)
+
+
+@pytest.mark.asyncio
+async def test_compute_expected_period_weekly(
+    scheduler_with_layers: ReflectionScheduler,
+) -> None:
+    """Test period computation for a weekly cron schedule."""
+    period = scheduler_with_layers._compute_expected_period("0 6 * * sun")
+
+    assert period is not None
+    # Weekly cron = 7 days
+    assert period == timedelta(days=7)
+
+
+@pytest.mark.asyncio
+async def test_compute_expected_period_invalid_cron(
+    scheduler_with_layers: ReflectionScheduler,
+) -> None:
+    """Test that invalid cron returns None."""
+    period = scheduler_with_layers._compute_expected_period("not a cron")
+
+    assert period is None
+
+
+@pytest.mark.asyncio
+async def test_get_last_run_time_no_runs(
+    scheduler_with_layers: ReflectionScheduler,
+) -> None:
+    """Test that _get_last_run_time returns None when no runs exist."""
+    result = scheduler_with_layers._get_last_run_time("nightly-user-reflection")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_last_run_time_with_successful_run(
+    scheduler_with_layers: ReflectionScheduler,
+    engine,
+) -> None:
+    """Test that _get_last_run_time returns the most recent success time."""
+    completed = utcnow()
+    with engine.connect() as conn:
+        conn.execute(
+            layer_runs_table.insert().values(
+                id=generate_id(),
+                layer_name="nightly-user-reflection",
+                layer_hash="abc",
+                started_at=utcnow(),
+                completed_at=completed,
+                status="success",
+                targets_matched=1,
+                targets_processed=1,
+                targets_skipped=0,
+                insights_created=1,
+            )
+        )
+        conn.commit()
+
+    result = scheduler_with_layers._get_last_run_time("nightly-user-reflection")
+
+    assert result is not None
+    assert result.tzinfo is not None  # Should be timezone-aware
+
+
+@pytest.mark.asyncio
+async def test_get_last_run_time_ignores_failed_runs(
+    scheduler_with_layers: ReflectionScheduler,
+    engine,
+) -> None:
+    """Test that _get_last_run_time ignores failed runs."""
+    with engine.connect() as conn:
+        conn.execute(
+            layer_runs_table.insert().values(
+                id=generate_id(),
+                layer_name="nightly-user-reflection",
+                layer_hash="abc",
+                started_at=utcnow(),
+                completed_at=utcnow(),
+                status="failed",
+                targets_matched=1,
+                targets_processed=0,
+                targets_skipped=1,
+                insights_created=0,
+            )
+        )
+        conn.commit()
+
+    result = scheduler_with_layers._get_last_run_time("nightly-user-reflection")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_runs_overdue_layers(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    layers_dir: Path,
+    sample_layer_yaml: str,
+    engine,
+) -> None:
+    """Test that startup catch-up runs layers that are overdue."""
+    # Write layer file (daily schedule)
+    (layers_dir / "nightly-user-reflection.yaml").write_text(sample_layer_yaml)
+    loader = LayerLoader(layers_dir)
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    # Insert a run from 2 days ago (overdue for a daily layer)
+    with engine.connect() as conn:
+        conn.execute(
+            layer_runs_table.insert().values(
+                id=generate_id(),
+                layer_name="nightly-user-reflection",
+                layer_hash="abc",
+                started_at=utcnow() - timedelta(days=2),
+                completed_at=utcnow() - timedelta(days=2),
+                status="success",
+                targets_matched=1,
+                targets_processed=1,
+                targets_skipped=0,
+                insights_created=1,
+            )
+        )
+        conn.commit()
+
+    # Mock _execute_layer to track calls
+    with patch.object(
+        scheduler, "_execute_layer", new_callable=AsyncMock
+    ) as mock_exec:
+        mock_exec.return_value = None
+
+        executed = await scheduler.startup_catchup()
+
+    assert "nightly-user-reflection" in executed
+    mock_exec.assert_called_once_with("nightly-user-reflection")
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_skips_recent_layers(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    layers_dir: Path,
+    sample_layer_yaml: str,
+    engine,
+) -> None:
+    """Test that startup catch-up skips layers that ran recently."""
+    (layers_dir / "nightly-user-reflection.yaml").write_text(sample_layer_yaml)
+    loader = LayerLoader(layers_dir)
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    # Insert a run from 6 hours ago (not overdue for a daily layer)
+    with engine.connect() as conn:
+        conn.execute(
+            layer_runs_table.insert().values(
+                id=generate_id(),
+                layer_name="nightly-user-reflection",
+                layer_hash="abc",
+                started_at=utcnow() - timedelta(hours=6),
+                completed_at=utcnow() - timedelta(hours=6),
+                status="success",
+                targets_matched=1,
+                targets_processed=1,
+                targets_skipped=0,
+                insights_created=1,
+            )
+        )
+        conn.commit()
+
+    with patch.object(
+        scheduler, "_execute_layer", new_callable=AsyncMock
+    ) as mock_exec:
+        executed = await scheduler.startup_catchup()
+
+    assert executed == []
+    mock_exec.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_runs_never_run_layers(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    layers_dir: Path,
+    sample_layer_yaml: str,
+) -> None:
+    """Test that startup catch-up runs layers that have never been run."""
+    (layers_dir / "nightly-user-reflection.yaml").write_text(sample_layer_yaml)
+    loader = LayerLoader(layers_dir)
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    # No layer_runs records — layer has never run
+    with patch.object(
+        scheduler, "_execute_layer", new_callable=AsyncMock
+    ) as mock_exec:
+        mock_exec.return_value = None
+
+        executed = await scheduler.startup_catchup()
+
+    assert "nightly-user-reflection" in executed
+    mock_exec.assert_called_once_with("nightly-user-reflection")
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_disabled(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    layers_dir: Path,
+    sample_layer_yaml: str,
+) -> None:
+    """Test that startup catch-up does nothing when disabled."""
+    test_config.scheduler.startup_catchup_enabled = False
+
+    (layers_dir / "nightly-user-reflection.yaml").write_text(sample_layer_yaml)
+    loader = LayerLoader(layers_dir)
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    with patch.object(
+        scheduler, "_execute_layer", new_callable=AsyncMock
+    ) as mock_exec:
+        executed = await scheduler.startup_catchup()
+
+    assert executed == []
+    mock_exec.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_sequential_execution(
+    tmp_path: Path,
+    mock_executor: MagicMock,
+    selector: ReflectionSelector,
+    ledger: SalienceLedger,
+    test_config: Config,
+    layers_dir: Path,
+    sample_layer_yaml: str,
+    sample_self_layer_yaml: str,
+) -> None:
+    """Test that multiple overdue layers are executed sequentially."""
+    # Write two layers, both never run
+    (layers_dir / "nightly-user-reflection.yaml").write_text(sample_layer_yaml)
+    (layers_dir / "self-reflection.yaml").write_text(sample_self_layer_yaml)
+    loader = LayerLoader(layers_dir)
+
+    scheduler = ReflectionScheduler(
+        db_path=str(tmp_path / "scheduler.db"),
+        executor=mock_executor,
+        loader=loader,
+        selector=selector,
+        ledger=ledger,
+        config=test_config,
+    )
+
+    call_order: list[str] = []
+
+    async def track_execution(layer_name: str):
+        call_order.append(layer_name)
+        return None
+
+    with patch.object(
+        scheduler, "_execute_layer", new_callable=AsyncMock, side_effect=track_execution
+    ):
+        executed = await scheduler.startup_catchup()
+
+    # Both should have been executed
+    assert len(executed) == 2
+    # They should be in call_order (sequential, not concurrent)
+    assert len(call_order) == 2
