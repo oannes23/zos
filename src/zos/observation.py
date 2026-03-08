@@ -91,8 +91,10 @@ TRANSCRIBABLE_EXTENSIONS = {
     ".mp4", ".webm", ".mov",
 }
 
-# Maximum image size in bytes for the vision API (5 MB)
-VISION_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+# Maximum image size for the vision API. The API enforces 5 MB on the
+# base64-encoded payload, which is ~4/3 of raw bytes. Use 3.75 MB raw
+# threshold so encoded size stays under 5 MB.
+VISION_MAX_IMAGE_BYTES = (5 * 1024 * 1024 * 3) // 4
 
 
 def _resize_image_for_api(image_data: bytes, media_type: str) -> bytes:
