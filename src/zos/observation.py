@@ -2174,6 +2174,19 @@ class ZosBot(commands.Bot):
                 filename=attachment.filename,
                 error=str(e),
             )
+            try:
+                failed = MediaAnalysis(
+                    message_id=message_id,
+                    media_type="image",
+                    url=str(attachment.url),
+                    filename=attachment.filename,
+                    description="",
+                    status="failed",
+                    error=str(e)[:500],
+                )
+                self._insert_media_analysis(failed)
+            except Exception:
+                log.debug("failed_to_record_media_failure", message_id=message_id)
             # Don't re-raise - media analysis failure shouldn't block observation
 
     async def _transcribe_audio(
@@ -2294,6 +2307,24 @@ class ZosBot(commands.Bot):
                 filename=attachment.filename,
                 error=str(e),
             )
+            try:
+                content_type = getattr(attachment, "content_type", "") or ""
+                if content_type.startswith("video/"):
+                    failed_media_type = "video"
+                else:
+                    failed_media_type = "audio"
+                failed = MediaAnalysis(
+                    message_id=message_id,
+                    media_type=failed_media_type,
+                    url=str(attachment.url),
+                    filename=attachment.filename,
+                    description="",
+                    status="failed",
+                    error=str(e)[:500],
+                )
+                self._insert_media_analysis(failed)
+            except Exception:
+                log.debug("failed_to_record_transcription_failure", message_id=message_id)
             # Don't re-raise - transcription failure shouldn't block observation
 
     def _insert_media_analysis(self, analysis: MediaAnalysis) -> None:
@@ -2349,9 +2380,112 @@ class ZosBot(commands.Bot):
                     local_path=row.local_path,
                     analyzed_at=row.analyzed_at,
                     analysis_model=row.analysis_model,
+                    status=row.status if hasattr(row, "status") else "completed",
+                    error=row.error if hasattr(row, "error") else None,
                 )
                 for row in result
             ]
+
+    async def retry_failed_media(self, hours: int = 24) -> dict:
+        """Retry failed media analyses from the last N hours.
+
+        Uses two strategies:
+        1. Re-queue explicitly failed records (status='failed')
+        2. Detect mismatches: messages with has_media=True but fewer
+           media_analysis records than Discord attachments
+        """
+        hours = min(hours, 72)  # Hard cap
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        stats = {"failed_found": 0, "mismatched_found": 0, "requeued": 0, "message_not_found": 0}
+
+        # Strategy 1: Find explicitly failed records
+        with self.engine.connect() as conn:
+            failed_rows = conn.execute(
+                select(media_analysis).where(
+                    media_analysis.c.status == "failed",
+                    media_analysis.c.analyzed_at >= cutoff,
+                )
+            ).fetchall()
+
+        stats["failed_found"] = len(failed_rows)
+
+        # Collect message IDs that need re-examination
+        message_ids_to_check: set[str] = set()
+        for row in failed_rows:
+            message_ids_to_check.add(row.message_id)
+
+        # Strategy 2: Find messages with has_media but potentially missing analyses
+        with self.engine.connect() as conn:
+            media_msgs = conn.execute(
+                select(messages.c.id, messages.c.channel_id).where(
+                    messages.c.has_media == True,
+                    messages.c.created_at >= cutoff,
+                )
+            ).fetchall()
+
+        for msg_row in media_msgs:
+            message_ids_to_check.add(str(msg_row.id))
+
+        # Delete failed records so they can be re-analyzed
+        if failed_rows:
+            failed_ids = [r.id for r in failed_rows]
+            with self.engine.connect() as conn:
+                conn.execute(
+                    media_analysis.delete().where(
+                        media_analysis.c.id.in_(failed_ids)
+                    )
+                )
+                conn.commit()
+
+        # For each message, fetch from Discord and check for unanalyzed attachments
+        for msg_id in message_ids_to_check:
+            # Get channel_id for this message
+            with self.engine.connect() as conn:
+                row = conn.execute(
+                    select(messages.c.channel_id).where(messages.c.id == msg_id)
+                ).first()
+
+            if not row:
+                continue
+
+            channel = self.get_channel(int(row.channel_id))
+            if not channel:
+                stats["message_not_found"] += 1
+                continue
+
+            try:
+                discord_msg = await channel.fetch_message(int(msg_id))
+            except Exception:
+                stats["message_not_found"] += 1
+                continue
+
+            if not discord_msg.attachments:
+                continue
+
+            # Check which attachments already have successful analyses
+            with self.engine.connect() as conn:
+                existing = conn.execute(
+                    select(media_analysis.c.url).where(
+                        media_analysis.c.message_id == msg_id,
+                        media_analysis.c.status == "completed",
+                    )
+                ).fetchall()
+            existing_urls = {r.url for r in existing}
+
+            for attachment in discord_msg.attachments:
+                if str(attachment.url) not in existing_urls:
+                    try:
+                        self._media_analysis_queue.put_nowait(
+                            (str(discord_msg.id), attachment)
+                        )
+                        stats["requeued"] += 1
+                        stats["mismatched_found"] += 1
+                    except asyncio.QueueFull:
+                        log.warning("retry_media_queue_full")
+                        break
+
+        log.info("retry_failed_media_complete", **stats)
+        return stats
 
     # =========================================================================
     # Link Analysis

@@ -927,3 +927,128 @@ class TestResizeImageForApi:
             result = _resize_image_for_api(large_jpeg, "image/jpeg")
             # Verify it's still JPEG by checking magic bytes
             assert result[:2] == b"\xff\xd8"
+
+
+class TestMediaAnalysisFailureTracking:
+    """Tests for media analysis failure recording and retry."""
+
+    @pytest.fixture
+    def engine(self, tmp_path: Path):
+        """Create a test database engine."""
+        config = Config()
+        config.data_dir = tmp_path
+        config.database.path = "test.db"
+
+        engine = get_engine(config)
+        create_tables(engine)
+        return engine
+
+    def test_failed_status_stored_in_db(self, engine):
+        """Failed media analysis records are stored with status='failed'."""
+        from zos.database import channels, messages, servers
+        from zos.models import utcnow
+
+        now = utcnow()
+        with engine.connect() as conn:
+            conn.execute(servers.insert().values(id="srv1", name="Test"))
+            conn.execute(channels.insert().values(
+                id="ch1", server_id="srv1", name="test", type="text",
+            ))
+            conn.execute(messages.insert().values(
+                id="msg1", channel_id="ch1", server_id="srv1",
+                author_id="user1", content="test", has_media=True,
+                has_links=False, visibility_scope="public",
+                created_at=now,
+            ))
+            conn.execute(media_analysis.insert().values(
+                id="ma1", message_id="msg1", media_type="image",
+                url="https://example.com/img.png", description="",
+                status="failed", error="API timeout",
+            ))
+            conn.commit()
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(media_analysis).where(media_analysis.c.id == "ma1")
+            ).first()
+
+        assert row.status == "failed"
+        assert row.error == "API timeout"
+
+    def test_completed_status_default(self, engine):
+        """Successful media analysis records default to status='completed'."""
+        from zos.database import channels, messages, servers
+        from zos.models import utcnow
+
+        now = utcnow()
+        with engine.connect() as conn:
+            conn.execute(servers.insert().values(id="srv2", name="Test"))
+            conn.execute(channels.insert().values(
+                id="ch2", server_id="srv2", name="test", type="text",
+            ))
+            conn.execute(messages.insert().values(
+                id="msg2", channel_id="ch2", server_id="srv2",
+                author_id="user1", content="test", has_media=True,
+                has_links=False, visibility_scope="public",
+                created_at=now,
+            ))
+            conn.execute(media_analysis.insert().values(
+                id="ma2", message_id="msg2", media_type="image",
+                url="https://example.com/img.png",
+                description="A beautiful sunset",
+            ))
+            conn.commit()
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(media_analysis).where(media_analysis.c.id == "ma2")
+            ).first()
+
+        assert row.status == "completed"
+        assert row.error is None
+
+    def test_get_failed_media_analyses(self, engine):
+        """Query function returns only failed records within time window."""
+        from datetime import timedelta
+
+        from zos.api.db_queries import get_failed_media_analyses
+        from zos.database import channels, messages, servers
+        from zos.models import utcnow
+
+        with engine.connect() as conn:
+            conn.execute(servers.insert().values(id="srv3", name="Test"))
+            conn.execute(channels.insert().values(
+                id="ch3", server_id="srv3", name="test", type="text",
+            ))
+            conn.execute(messages.insert().values(
+                id="msg3", channel_id="ch3", server_id="srv3",
+                author_id="user1", content="test", has_media=True,
+                has_links=False, visibility_scope="public",
+                created_at=utcnow(),
+            ))
+            # Recent failure
+            conn.execute(media_analysis.insert().values(
+                id="ma3", message_id="msg3", media_type="image",
+                url="https://example.com/fail.png", description="",
+                status="failed", error="timeout",
+                analyzed_at=utcnow(),
+            ))
+            # Old failure (outside window)
+            conn.execute(media_analysis.insert().values(
+                id="ma4", message_id="msg3", media_type="image",
+                url="https://example.com/old.png", description="",
+                status="failed", error="old error",
+                analyzed_at=utcnow() - timedelta(hours=100),
+            ))
+            # Successful analysis
+            conn.execute(media_analysis.insert().values(
+                id="ma5", message_id="msg3", media_type="image",
+                url="https://example.com/ok.png",
+                description="A photo",
+                status="completed",
+            ))
+            conn.commit()
+
+        results = get_failed_media_analyses(engine, hours=24)
+        assert len(results) == 1
+        assert results[0]["id"] == "ma3"

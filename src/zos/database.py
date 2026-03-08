@@ -162,6 +162,8 @@ media_analysis = Table(
     Column("local_path", String, nullable=True),  # Relative path under data/media/
     Column("analyzed_at", DateTime, nullable=False, default=datetime.utcnow),
     Column("analysis_model", String, nullable=True),
+    Column("status", String, nullable=False, server_default="completed"),
+    Column("error", Text, nullable=True),
     Index("ix_media_analysis_message", "message_id"),
 )
 

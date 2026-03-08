@@ -2286,3 +2286,24 @@ async def get_links_for_message(
             })
 
         return results
+
+
+def get_failed_media_analyses(engine: "Engine", hours: int = 24) -> list[dict]:
+    """Get failed media analysis records from the last N hours."""
+    from datetime import timedelta
+
+    from zos.database import media_analysis
+    from zos.models import utcnow
+
+    cutoff = utcnow() - timedelta(hours=min(hours, 72))
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(media_analysis)
+            .where(
+                media_analysis.c.status == "failed",
+                media_analysis.c.analyzed_at >= cutoff,
+            )
+            .order_by(media_analysis.c.analyzed_at.desc())
+        ).fetchall()
+
+    return [dict(r._mapping) for r in rows]

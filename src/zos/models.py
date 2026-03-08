@@ -293,6 +293,8 @@ class MediaAnalysis(BaseModel):
     local_path: str | None = None  # Relative path to saved image file
     analyzed_at: datetime = Field(default_factory=utcnow)
     analysis_model: str | None = None
+    status: str = "completed"
+    error: str | None = None
 
 
 class LinkAnalysis(BaseModel):

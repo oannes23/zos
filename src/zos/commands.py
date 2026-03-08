@@ -626,6 +626,43 @@ class OperatorCommands(commands.Cog):
         )
 
 
+    @app_commands.command(
+        name="retry-media",
+        description="Retry failed media analyses from recent messages",
+    )
+    @app_commands.describe(
+        hours="How far back to look in hours (default: 24, max: 72)",
+    )
+    async def retry_media(
+        self,
+        interaction: discord.Interaction,
+        hours: int = 24,
+    ):
+        if not await self.operator_check(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+
+        hours = min(hours, 72)
+        result = await self.bot.retry_failed_media(hours=hours)
+
+        total_found = result["failed_found"] + result["mismatched_found"]
+        msg = (
+            f"**Media retry results ({hours}h window)**\n"
+            f"Failed records found: {result['failed_found']}\n"
+            f"Missing analyses detected: {result['mismatched_found']}\n"
+            f"Requeued for analysis: {result['requeued']}\n"
+        )
+        if result["message_not_found"]:
+            msg += f"Messages no longer accessible: {result['message_not_found']}\n"
+        if result["requeued"] > 0:
+            msg += "\nMedia will be analyzed in the background."
+        elif total_found == 0:
+            msg += "\nNo failed or missing media found."
+
+        await interaction.followup.send(msg, ephemeral=True)
+        log.info("retry_media_command", user=str(interaction.user), **result)
+
+
 async def setup(bot: ZosBot) -> None:
     """Setup function for loading the cog.
 
