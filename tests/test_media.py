@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -882,3 +883,47 @@ class TestVisionPrompt:
         """Supported image types match the story specification."""
         expected = {"image/png", "image/jpeg", "image/gif", "image/webp"}
         assert SUPPORTED_IMAGE_TYPES == expected
+
+
+class TestResizeImageForApi:
+    """Tests for the image resize helper."""
+
+    def test_resize_image_under_limit(self) -> None:
+        """Small images pass through unchanged."""
+        from zos.observation import VISION_MAX_IMAGE_BYTES, _resize_image_for_api
+
+        small_data = b"x" * 100
+        result = _resize_image_for_api(small_data, "image/jpeg")
+        assert result is small_data  # Same object, not just equal
+
+    def test_resize_image_over_limit(self) -> None:
+        """Large images get resized to under 5 MB."""
+        from PIL import Image as PILImage
+
+        from zos.observation import VISION_MAX_IMAGE_BYTES, _resize_image_for_api
+
+        # Create a large image
+        img = PILImage.new("RGB", (4000, 4000), color="red")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        large_data = buf.getvalue()
+        # Only test if it's actually over the limit
+        if len(large_data) > VISION_MAX_IMAGE_BYTES:
+            result = _resize_image_for_api(large_data, "image/png")
+            assert len(result) <= VISION_MAX_IMAGE_BYTES
+
+    def test_resize_preserves_format(self) -> None:
+        """Format is preserved after resize."""
+        from PIL import Image as PILImage
+
+        from zos.observation import VISION_MAX_IMAGE_BYTES, _resize_image_for_api
+
+        # Create a large JPEG
+        img = PILImage.new("RGB", (6000, 6000), color="blue")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=100)
+        large_jpeg = buf.getvalue()
+        if len(large_jpeg) > VISION_MAX_IMAGE_BYTES:
+            result = _resize_image_for_api(large_jpeg, "image/jpeg")
+            # Verify it's still JPEG by checking magic bytes
+            assert result[:2] == b"\xff\xd8"

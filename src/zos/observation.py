@@ -19,11 +19,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import io
 import json
 import re
 import signal
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
+
+from PIL import Image
 
 import discord
 from discord.ext import commands, tasks
@@ -87,6 +90,43 @@ TRANSCRIBABLE_EXTENSIONS = {
     ".ogg", ".mp3", ".wav", ".flac", ".m4a", ".aac", ".wma",
     ".mp4", ".webm", ".mov",
 }
+
+# Maximum image size in bytes for the vision API (5 MB)
+VISION_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def _resize_image_for_api(image_data: bytes, media_type: str) -> bytes:
+    """Resize image if it exceeds the vision API size limit."""
+    if len(image_data) <= VISION_MAX_IMAGE_BYTES:
+        return image_data
+
+    img = Image.open(io.BytesIO(image_data))
+
+    # Map media types to PIL formats
+    format_map = {
+        "image/jpeg": "JPEG",
+        "image/png": "PNG",
+        "image/gif": "GIF",
+        "image/webp": "WEBP",
+    }
+    save_format = format_map.get(media_type, "JPEG")
+    save_kwargs = {"quality": 85} if save_format == "JPEG" else {}
+
+    for _ in range(10):
+        width, height = img.size
+        new_width = int(width * 0.75)
+        new_height = int(height * 0.75)
+        img = img.resize((new_width, new_height), Image.LANCZOS)
+
+        buf = io.BytesIO()
+        img.save(buf, format=save_format, **save_kwargs)
+        resized_data = buf.getvalue()
+
+        if len(resized_data) <= VISION_MAX_IMAGE_BYTES:
+            return resized_data
+
+    return resized_data  # Return best effort after 10 iterations
+
 
 # Vision prompt for phenomenological image description
 # The prompt should elicit what it feels like to see the image, not just object detection
@@ -2021,7 +2061,6 @@ class ZosBot(commands.Bot):
 
             # Download image
             image_data = await attachment.read()
-            image_base64 = base64.b64encode(image_data).decode("utf-8")
 
             log.debug(
                 "vision_analysis_start",
@@ -2053,6 +2092,18 @@ class ZosBot(commands.Bot):
                     first_bytes=image_data[:12].hex() if len(image_data) >= 12 else image_data.hex(),
                 )
                 return
+
+            # Resize if image exceeds API size limit
+            if len(image_data) > VISION_MAX_IMAGE_BYTES:
+                original_size = len(image_data)
+                image_data = _resize_image_for_api(image_data, media_type_str)
+                log.info(
+                    "resized_image_for_api",
+                    original_bytes=original_size,
+                    new_bytes=len(image_data),
+                )
+
+            image_base64 = base64.b64encode(image_data).decode("utf-8")
 
             # Call vision model
             llm = self._get_llm_client()

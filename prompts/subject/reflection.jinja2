@@ -35,9 +35,7 @@ I don't have prior understanding of this subject yet.
 {% for msg in messages %}
 [{{ msg.created_at | relative_time }}] {{ msg.author_display }}: {{ msg.content }}
 {% if msg.media_descriptions %}
-{% for media in msg.media_descriptions %}
-  [{{ media.media_type }}{% if media.filename %}: {{ media.filename }}{% endif %}] {{ media.description }}
-{% endfor %}
+{% for media in msg.media_descriptions %}{% if media.media_type in ['image', 'gif'] %}Picture{% elif media.media_type == 'audio' %}Audio{% elif media.media_type == 'video' %}Video{% else %}Media{% endif %} {{ loop.index }}: {{ media.description }}{% if not media.description.endswith('.') %}.{% endif %} {% endfor %}
 {% elif msg.has_media %}[contains unanalyzed media]{% endif %}
 {% if msg.link_summaries %}
 {% for link in msg.link_summaries %}
