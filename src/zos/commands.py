@@ -16,6 +16,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from zos.ask import ask as ask_handler, split_response
 from zos.insights import get_insights_for_topic
 from zos.layers import LayerCategory
 from zos.logging import get_logger
@@ -661,6 +662,73 @@ class OperatorCommands(commands.Cog):
 
         await interaction.followup.send(msg, ephemeral=True)
         log.info("retry_media_command", user=str(interaction.user), **result)
+
+    @app_commands.command(
+        name="ask", description="Ask Zos a question using its full context"
+    )
+    @app_commands.describe(question="Your question")
+    async def ask_command(
+        self, interaction: discord.Interaction, question: str
+    ) -> None:
+        """Ask Zos a question leveraging accumulated context.
+
+        Uses a two-phase LLM flow: first plans which context to gather,
+        then answers the question with that context.
+        """
+        if not await self.operator_check(interaction):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        if not self.bot.engine:
+            await interaction.followup.send(
+                "Database not available.", ephemeral=True
+            )
+            return
+
+        try:
+            from pathlib import Path
+
+            from zos.llm import ModelClient
+            from zos.templates import TemplateEngine
+
+            llm = ModelClient(self.config, engine=self.bot.engine)
+            template_engine = TemplateEngine(
+                templates_dir=Path("prompts"),
+                data_dir=self.config.data_dir,
+                self_concept_max_chars=self.config.self_concept_max_chars,
+            )
+
+            answer = await ask_handler(
+                question=question,
+                llm=llm,
+                engine=self.bot.engine,
+                config=self.config,
+                template_engine=template_engine,
+            )
+
+            # Split and send response
+            chunks = split_response(answer)
+            for i, chunk in enumerate(chunks):
+                if i == 0:
+                    await interaction.followup.send(chunk, ephemeral=True)
+                else:
+                    await interaction.followup.send(chunk, ephemeral=True)
+
+            log.info(
+                "ask_command",
+                user=str(interaction.user),
+                question=question[:100],
+                answer_length=len(answer),
+                chunks=len(chunks),
+            )
+
+        except Exception as e:
+            log.error("ask_command_failed", error=str(e), user=str(interaction.user))
+            await interaction.followup.send(
+                f"Failed to answer: {e}",
+                ephemeral=True,
+            )
 
 
 async def setup(bot: ZosBot) -> None:
