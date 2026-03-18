@@ -97,6 +97,26 @@ TRANSCRIBABLE_EXTENSIONS = {
 VISION_MAX_IMAGE_BYTES = (5 * 1024 * 1024 * 3) // 4
 
 
+def _is_connection_error(exc: BaseException) -> bool:
+    """Check if an exception is a network/connection error.
+
+    Handles aiohttp errors wrapped inside discord.py HTTPException or
+    generic Exception wrappers.
+    """
+    if isinstance(exc, (OSError, ConnectionError)):
+        return True
+    # aiohttp connection errors (may not be importable if aiohttp
+    # changes its API, so check by class name as well)
+    type_name = type(exc).__name__
+    if type_name in ("ClientConnectorError", "ServerDisconnectedError", "ClientOSError"):
+        return True
+    # Check wrapped __cause__ / __context__
+    cause = exc.__cause__ or exc.__context__
+    if cause is not None:
+        return _is_connection_error(cause)
+    return False
+
+
 def _resize_image_for_api(image_data: bytes, media_type: str) -> bytes:
     """Resize image if it exceeds the vision API size limit."""
     if len(image_data) <= VISION_MAX_IMAGE_BYTES:
@@ -245,6 +265,13 @@ class ZosBot(commands.Bot):
 
         # Conversation heartbeat task
         self._conversation_heartbeat_task: asyncio.Task | None = None
+
+        # Circuit breaker for Discord API connectivity
+        self._consecutive_poll_failures: int = 0
+        self._circuit_open_until: datetime | None = None
+
+        # Tick counter for reaction resync interval
+        self._poll_tick_count: int = 0
 
     async def setup_hook(self) -> None:
         """Called when bot is ready to start tasks.
@@ -502,6 +529,10 @@ class ZosBot(commands.Bot):
 
         The task runs at the interval configured in discord.polling_interval_seconds.
         When silenced, polling is skipped.
+
+        Includes a circuit breaker: if ALL channels fail with connection errors
+        in a single tick, backs off exponentially (30s to 600s). A single
+        successful channel poll resets the breaker.
         """
         if self._shutdown_requested:
             # Don't start new work if shutdown is in progress
@@ -516,8 +547,22 @@ class ZosBot(commands.Bot):
             log.debug("poll_messages_tick_no_engine")
             return
 
-        log.debug("poll_messages_tick_start")
+        # Circuit breaker: skip tick if still in backoff
+        now = datetime.now(timezone.utc)
+        if self._circuit_open_until is not None and now < self._circuit_open_until:
+            remaining = (self._circuit_open_until - now).total_seconds()
+            log.warning(
+                "poll_circuit_open",
+                consecutive_failures=self._consecutive_poll_failures,
+                retry_in_seconds=int(remaining),
+            )
+            return
+
+        self._poll_tick_count += 1
+        log.debug("poll_messages_tick_start", tick=self._poll_tick_count)
         total_messages = 0
+        channels_attempted = 0
+        channels_failed_connection = 0
 
         for guild in self.guilds:
             server_id = str(guild.id)
@@ -530,6 +575,7 @@ class ZosBot(commands.Bot):
                 if not channel.permissions_for(guild.me).read_message_history:
                     continue
 
+                channels_attempted += 1
                 try:
                     count = await self._poll_channel(channel, server_id)
                     total_messages += count
@@ -539,12 +585,28 @@ class ZosBot(commands.Bot):
                         channel_id=str(channel.id),
                         channel_name=channel.name,
                     )
-                except Exception as e:
+                except (OSError, ConnectionError) as e:
+                    channels_failed_connection += 1
                     log.error(
-                        "poll_channel_error",
+                        "poll_channel_connection_error",
                         channel_id=str(channel.id),
                         error=str(e),
                     )
+                except Exception as e:
+                    # Check if the underlying cause is a connection error
+                    if _is_connection_error(e):
+                        channels_failed_connection += 1
+                        log.error(
+                            "poll_channel_connection_error",
+                            channel_id=str(channel.id),
+                            error=str(e),
+                        )
+                    else:
+                        log.error(
+                            "poll_channel_error",
+                            channel_id=str(channel.id),
+                            error=str(e),
+                        )
 
         # Also poll DM channels
         for dm in self.private_channels:
@@ -558,6 +620,29 @@ class ZosBot(commands.Bot):
                         channel_id=str(dm.id),
                         error=str(e),
                     )
+
+        # Circuit breaker logic: if all attempted channels failed with
+        # connection errors, open the circuit with exponential backoff
+        if channels_attempted > 0 and channels_failed_connection == channels_attempted:
+            self._consecutive_poll_failures += 1
+            backoff_seconds = min(30 * (2 ** (self._consecutive_poll_failures - 1)), 600)
+            self._circuit_open_until = datetime.now(timezone.utc) + timedelta(
+                seconds=backoff_seconds
+            )
+            log.warning(
+                "poll_circuit_opened",
+                consecutive_failures=self._consecutive_poll_failures,
+                backoff_seconds=backoff_seconds,
+            )
+        elif channels_attempted > 0 and channels_failed_connection < channels_attempted:
+            # At least one channel succeeded — reset circuit breaker
+            if self._consecutive_poll_failures > 0:
+                log.info(
+                    "poll_circuit_reset",
+                    previous_failures=self._consecutive_poll_failures,
+                )
+            self._consecutive_poll_failures = 0
+            self._circuit_open_until = None
 
         log.debug(
             "poll_messages_tick_complete",
@@ -1004,12 +1089,19 @@ class ZosBot(commands.Bot):
     ) -> int:
         """Poll a single text channel for new messages.
 
+        Connection errors in Phase 1 (message history) skip Phase 2 (resync)
+        and propagate to the caller for circuit-breaker accounting. Connection
+        errors during resync break the loop early to avoid wasting sockets.
+
         Args:
             channel: Discord text channel to poll.
             server_id: Parent server ID.
 
         Returns:
             Number of messages stored.
+
+        Raises:
+            OSError, ConnectionError: Propagated so caller can track failures.
         """
         # Ensure channel exists in database
         await self._ensure_channel(channel, server_id)
@@ -1036,33 +1128,47 @@ class ZosBot(commands.Bot):
         name_mentioned = False
 
         # Phase 1: Fetch new messages since last poll
-        async for message in channel.history(
-            after=last_polled,
-            limit=100,  # Default batch size
-            oldest_first=True,
-        ):
-            author_id = await self._store_message(message, server_id)
-            messages_stored += 1
-            last_message_at = message.created_at
+        # Connection errors here skip Phase 2 entirely and propagate
+        try:
+            async for message in channel.history(
+                after=last_polled,
+                limit=100,  # Default batch size
+                oldest_first=True,
+            ):
+                author_id = await self._store_message(message, server_id)
+                messages_stored += 1
+                last_message_at = message.created_at
 
-            # Count opted-in non-bot messages for impulse, bot messages separately
-            bot_id = str(self.user.id) if self.user else None
-            if author_id == bot_id:
-                self_messages += 1
-            elif not author_id.startswith("<chat"):
-                opted_in_messages += 1
+                # Count opted-in non-bot messages for impulse, bot messages separately
+                bot_id = str(self.user.id) if self.user else None
+                if author_id == bot_id:
+                    self_messages += 1
+                elif not author_id.startswith("<chat"):
+                    opted_in_messages += 1
 
-                # Detect if "zos" appears in message text (case-insensitive)
-                if not name_mentioned and re.search(r'\bzos\b', message.content or '', re.IGNORECASE):
-                    name_mentioned = True
+                    # Detect if "zos" appears in message text (case-insensitive)
+                    if not name_mentioned and re.search(r'\bzos\b', message.content or '', re.IGNORECASE):
+                        name_mentioned = True
 
-            # Detect if Zos was directly pinged
-            if self.user and self.user in message.mentions:
-                pinged = True
+                # Detect if Zos was directly pinged
+                if self.user and self.user in message.mentions:
+                    pinged = True
 
-            # Sync reactions for this message
-            if message.reactions:
-                await self._sync_reactions(message, server_id)
+                # Sync reactions for this message
+                if message.reactions:
+                    await self._sync_reactions(message, server_id)
+        except (OSError, ConnectionError):
+            # Network unreachable — skip resync, let caller handle
+            raise
+        except Exception as e:
+            if _is_connection_error(e):
+                raise
+            # Non-connection errors: log and continue to resync
+            log.error(
+                "channel_history_error",
+                channel_id=channel_id,
+                error=str(e),
+            )
 
         # Update poll state if we processed any messages
         if messages_stored > 0 and last_message_at is not None:
@@ -1119,10 +1225,16 @@ class ZosBot(commands.Bot):
 
         # Phase 2: Re-sync reactions by checking stored messages from database
         # This catches reactions added to older messages after they were first polled
+        # Throttled: only runs every N ticks to reduce API call volume
+        resync_interval = self.config.observation.reaction_resync_interval_ticks
+        if self._poll_tick_count % resync_interval != 0:
+            return messages_stored
+
         resync_hours = self.config.observation.reaction_resync_hours
         resync_cutoff = datetime.now(timezone.utc) - timedelta(hours=resync_hours)
+        batch_size = self.config.observation.reaction_resync_batch_size
 
-        # Query messages from database (last N hours, non-deleted, limit for performance)
+        # Query messages from database (last N hours, non-deleted, limited batch)
         with self.engine.connect() as conn:
             stmt = (
                 select(messages.c.id, messages.c.channel_id, messages.c.reactions_aggregate)
@@ -1134,11 +1246,12 @@ class ZosBot(commands.Bot):
                     )
                 )
                 .order_by(messages.c.created_at.desc())
-                .limit(100)  # Only check 100 most recent messages for performance
+                .limit(batch_size)
             )
             stored_messages = conn.execute(stmt).fetchall()
 
         # Re-fetch each message from Discord to check for reaction changes
+        # Connection errors break the loop early to avoid wasting sockets
         reactions_resynced = 0
         messages_checked = 0
         for row in stored_messages:
@@ -1160,7 +1273,21 @@ class ZosBot(commands.Bot):
                     channel_id=channel_id,
                 )
                 continue
+            except (OSError, ConnectionError):
+                log.warning(
+                    "resync_connection_error_break",
+                    channel_id=channel_id,
+                    messages_checked=messages_checked,
+                )
+                break
             except Exception as e:
+                if _is_connection_error(e):
+                    log.warning(
+                        "resync_connection_error_break",
+                        channel_id=channel_id,
+                        messages_checked=messages_checked,
+                    )
+                    break
                 log.error(
                     "message_fetch_error",
                     message_id=message_id,
@@ -1556,6 +1683,20 @@ class ZosBot(commands.Bot):
                     emoji=emoji_str,
                 )
                 continue
+            except (OSError, ConnectionError):
+                log.warning(
+                    "reaction_users_connection_error",
+                    message_id=message_id,
+                )
+                return
+            except Exception as e:
+                if _is_connection_error(e):
+                    log.warning(
+                        "reaction_users_connection_error",
+                        message_id=message_id,
+                    )
+                    return
+                raise
 
         # Get previously stored reactions for this message
         stored_reactions = self._get_reactions_for_message(message_id)
@@ -2817,6 +2958,10 @@ class ZosBot(commands.Bot):
         # Close the LLM client if initialized
         if self._llm_client is not None:
             await self._llm_client.close()
+
+        # Close the link analyzer's HTTP client
+        if self._link_analyzer is not None:
+            await self._link_analyzer.close()
 
         # Close the Discord connection
         await self.close()

@@ -242,6 +242,8 @@ class ObservationConfig(BaseModel):
     link_queue_max_size: int = 50
     link_rate_limit_per_minute: int = 5
     reaction_resync_hours: int = 24
+    reaction_resync_batch_size: int = 25
+    reaction_resync_interval_ticks: int = 3
 
 
 class SchedulerConfig(BaseModel):

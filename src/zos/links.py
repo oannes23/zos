@@ -197,6 +197,25 @@ class LinkAnalyzer:
             link_rate_limiter = RateLimiter(calls_per_minute=5)
         self.link_rate_limiter = link_rate_limiter
 
+        # Persistent HTTP client for connection reuse
+        self._http_client: httpx.AsyncClient | None = None
+
+    def _get_http_client(self) -> httpx.AsyncClient:
+        """Get or create the shared HTTP client."""
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(
+                timeout=10.0,
+                follow_redirects=True,
+                headers={"User-Agent": USER_AGENT},
+            )
+        return self._http_client
+
+    async def close(self) -> None:
+        """Close the persistent HTTP client."""
+        if self._http_client is not None:
+            await self._http_client.aclose()
+            self._http_client = None
+
     async def process_links(self, message_id: str, content: str) -> int:
         """Process all links in a message.
 
@@ -418,37 +437,31 @@ class LinkAnalyzer:
                 log.debug("robots_blocked", url=url)
                 return None, None
 
-            async with httpx.AsyncClient(
-                timeout=10.0,
-                follow_redirects=True,
-            ) as client:
-                response = await client.get(
-                    url,
-                    headers={"User-Agent": USER_AGENT},
-                )
-                response.raise_for_status()
+            client = self._get_http_client()
+            response = await client.get(url)
+            response.raise_for_status()
 
-                # Check content type - only process HTML
-                content_type = response.headers.get("content-type", "")
-                if "text/html" not in content_type.lower():
-                    log.debug("non_html_content", url=url, content_type=content_type)
-                    return None, None
+            # Check content type - only process HTML
+            content_type = response.headers.get("content-type", "")
+            if "text/html" not in content_type.lower():
+                log.debug("non_html_content", url=url, content_type=content_type)
+                return None, None
 
-                # Parse HTML and extract text
-                soup = BeautifulSoup(response.text, "html.parser")
+            # Parse HTML and extract text
+            soup = BeautifulSoup(response.text, "html.parser")
 
-                # Extract title
-                title_tag = soup.find("title")
-                title = title_tag.get_text(strip=True) if title_tag else None
+            # Extract title
+            title_tag = soup.find("title")
+            title = title_tag.get_text(strip=True) if title_tag else None
 
-                # Remove script/style elements
-                for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
-                    tag.decompose()
+            # Remove script/style elements
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                tag.decompose()
 
-                # Get text content
-                content = soup.get_text(separator="\n", strip=True)
+            # Get text content
+            content = soup.get_text(separator="\n", strip=True)
 
-                return content, title
+            return content, title
 
         except httpx.HTTPStatusError as e:
             log.debug("page_fetch_http_error", url=url, status=e.response.status_code)
@@ -473,35 +486,32 @@ class LinkAnalyzer:
             parsed = urlparse(url)
             robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(
-                    robots_url,
-                    headers={"User-Agent": USER_AGENT},
-                )
+            client = self._get_http_client()
+            response = await client.get(robots_url)
 
-                if response.status_code != 200:
-                    # No robots.txt or error - assume allowed
-                    return True
+            if response.status_code != 200:
+                # No robots.txt or error - assume allowed
+                return True
 
-                # Simple parsing - look for Disallow rules
-                path = parsed.path or "/"
-                current_agent = None
-                disallow_all = False
+            # Simple parsing - look for Disallow rules
+            path = parsed.path or "/"
+            current_agent = None
+            disallow_all = False
 
-                for line in response.text.splitlines():
-                    line = line.strip().lower()
+            for line in response.text.splitlines():
+                line = line.strip().lower()
 
-                    if line.startswith("user-agent:"):
-                        agent = line.split(":", 1)[1].strip()
-                        current_agent = agent
+                if line.startswith("user-agent:"):
+                    agent = line.split(":", 1)[1].strip()
+                    current_agent = agent
 
-                    elif line.startswith("disallow:"):
-                        if current_agent in ("*", "zos"):
-                            disallowed = line.split(":", 1)[1].strip()
-                            if disallowed == "/" or path.startswith(disallowed):
-                                disallow_all = True
+                elif line.startswith("disallow:"):
+                    if current_agent in ("*", "zos"):
+                        disallowed = line.split(":", 1)[1].strip()
+                        if disallowed == "/" or path.startswith(disallowed):
+                            disallow_all = True
 
-                return not disallow_all
+            return not disallow_all
 
         except Exception:
             # If we can't check robots.txt, assume allowed
@@ -554,39 +564,39 @@ class LinkAnalyzer:
                 f"?url=https://www.youtube.com/watch?v={video_id}&format=json"
             )
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(oembed_url)
-                response.raise_for_status()
-                data = response.json()
+            client = self._get_http_client()
+            response = await client.get(oembed_url)
+            response.raise_for_status()
+            data = response.json()
 
-                title = data.get("title", "Unknown")
+            title = data.get("title", "Unknown")
 
-                # oEmbed doesn't provide duration, so we try to get it from
-                # the transcript API metadata or default to 0
-                duration_seconds = 0
+            # oEmbed doesn't provide duration, so we try to get it from
+            # the transcript API metadata or default to 0
+            duration_seconds = 0
 
-                # Try to get duration from youtube_transcript_api
-                try:
-                    from youtube_transcript_api import YouTubeTranscriptApi
+            # Try to get duration from youtube_transcript_api
+            try:
+                from youtube_transcript_api import YouTubeTranscriptApi
 
-                    loop = asyncio.get_event_loop()
-                    ytt = YouTubeTranscriptApi()
-                    transcript = await loop.run_in_executor(
-                        None, lambda: ytt.fetch(video_id)
+                loop = asyncio.get_event_loop()
+                ytt = YouTubeTranscriptApi()
+                transcript = await loop.run_in_executor(
+                    None, lambda: ytt.fetch(video_id)
+                )
+                if transcript.snippets:
+                    # Duration is approximately the end time of the last snippet
+                    last_snippet = transcript.snippets[-1]
+                    duration_seconds = int(
+                        last_snippet.start + last_snippet.duration
                     )
-                    if transcript.snippets:
-                        # Duration is approximately the end time of the last snippet
-                        last_snippet = transcript.snippets[-1]
-                        duration_seconds = int(
-                            last_snippet.start + last_snippet.duration
-                        )
-                except Exception:
-                    pass
+            except Exception:
+                pass
 
-                return {
-                    "title": title,
-                    "duration_seconds": duration_seconds,
-                }
+            return {
+                "title": title,
+                "duration_seconds": duration_seconds,
+            }
 
         except Exception as e:
             log.debug("metadata_fetch_failed", video_id=video_id, error=str(e))
